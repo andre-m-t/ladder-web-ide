@@ -1,0 +1,47 @@
+# Arquivos locais e gerados — não versionados.
+# A documentação do método de desenvolvimento fica em docs/ e É versionada.
+# A exclusão de material não-autoral do pacote de depósito é feita por
+# scripts/build-deposito.sh, não aqui.
+
+# Ambiente e segredos
+.env
+.env.*
+!.env.example
+
+# Dependências
+node_modules
+.venv
+venv
+__pycache__
+*.pyc
+
+# Build e distribuição
+dist/
+build/
+frontend/dist/
+*.egg-info/
+
+# Caches de ferramentas
+.pytest_cache/
+.ruff_cache/
+.vite/
+
+# Toolchains e binários de compilação (baixados ou gerados localmente)
+**/toolchain/
+**/vendor/
+*.bin
+*.elf
+*.hex
+*.o
+*.a
+
+# Configuração local de ferramentas
+.claude/settings.local.json
+.claude/*.local.json
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

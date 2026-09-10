@@ -1,0 +1,52 @@
+# Orquestração de desenvolvimento do LadderFlow.
+#
+# As variáveis abaixo vêm do arquivo .env na raiz (copie de .env.example).
+# Todas têm valor padrão, então `docker compose up` funciona mesmo sem .env.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: ladderflow-backend:dev
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Bind mount para recarga automática durante o desenvolvimento.
+      - ./backend:/app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+    image: ladderflow-frontend:dev
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      # Volume anônimo preserva os node_modules da imagem por baixo do bind mount.
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy

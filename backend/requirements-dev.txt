@@ -1,0 +1,6 @@
+# Dependências de desenvolvimento e teste.
+-r requirements.txt
+pytest>=8.0
+# Cliente HTTP usado pelo TestClient do Starlette/FastAPI.
+httpx2>=2.12
+ruff>=0.6

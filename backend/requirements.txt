@@ -1,0 +1,5 @@
+# Dependências de execução do serviço de compilação.
+# Pisos mínimos; as versões efetivas ficam registradas na imagem do contêiner.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic-settings>=2.4
