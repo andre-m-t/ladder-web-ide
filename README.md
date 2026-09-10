@@ -76,7 +76,7 @@ flowchart LR
 ## Tecnologias
 
 **Front-end** — React, Vite, Tailwind CSS, esptool-js, Web Serial API
-**Back-end** — FastAPI (Python), MATIEC (`iec2c`), toolchain de compilação ESP32
+**Back-end** — FastAPI (Python), MATIEC (`iec2c`), ESP-IDF (toolchain de compilação ESP32)
 **Infraestrutura** — Docker, Docker Compose
 **Norma de referência** — IEC 61131-3 (Ladder e Structured Text)
 
@@ -104,12 +104,15 @@ docker compose up --build
 | API | `http://localhost:8000` |
 | Documentação da API | `http://localhost:8000/docs` |
 
-Nenhuma instalação manual de toolchain é necessária: o compilador MATIEC é construído a partir do fonte e provisionado no contêiner do serviço de compilação. O ambiente de build do ESP32 será incorporado ao mesmo contêiner junto com a etapa de geração de firmware.
+Nenhuma instalação manual de toolchain é necessária: o contêiner do serviço de compilação traz as duas etapas prontas — o MATIEC construído a partir do fonte e o ESP-IDF, vindo da imagem oficial da Espressif. A primeira construção da imagem baixa alguns gigabytes e demora; as seguintes usam o cache do Docker.
 
-**Testes do back-end** — incluem a compilação real de um programa Structured Text pelo MATIEC:
+O diretório de build do ESP-IDF vive em um volume nomeado (`esp-build-cache`), de modo que as compilações sejam incrementais entre execuções: em máquina de desenvolvimento, a primeira compilação leva cerca de 66 s e as seguintes 11–13 s. `docker compose down -v` descarta o volume e o build seguinte volta a ser frio.
+
+**Testes do back-end** — incluem a compilação real de um programa Structured Text pelo MATIEC e a geração do firmware pelo ESP-IDF:
 
 ```bash
-docker compose run --rm backend pytest -v
+docker compose run --rm backend pytest -v            # tudo (o primeiro build leva minutos)
+docker compose run --rm backend pytest -v -m "not slow"   # sem a geração de firmware
 ```
 
 ## Estrutura do repositório
@@ -117,7 +120,8 @@ docker compose run --rm backend pytest -v
 ```
 .
 ├── frontend/          Aplicação web — editor, simulador e gravação
-├── backend/           Serviço de compilação — API e integração com MATIEC
+├── backend/           Serviço de compilação — API e integração com as toolchains
+│   └── firmware/      Projeto ESP-IDF — ciclo de varredura e mapeamento de I/O
 ├── docs/              Método de desenvolvimento, documentação técnica e validação
 ├── scripts/           Utilitários do projeto (ex.: empacotamento para depósito)
 ├── docker-compose.yml
@@ -130,7 +134,7 @@ O desenvolvimento segue o método de *Spec-Driven Development* descrito em
 
 ## Roadmap
 
-- [ ] Ambiente de build containerizado com MATIEC e toolchain ESP32
+- [x] Ambiente de build containerizado com MATIEC e toolchain ESP32
 - [ ] Pipeline completo de compilação e gravação (fatia vertical mínima)
 - [ ] Editor visual Ladder — contatos, bobinas e serialização para ST
 - [ ] Simulador de ciclo de varredura
@@ -157,12 +161,13 @@ Os termos de licenciamento serão definidos posteriormente, em conjunto com o N�
 | Componente | Licença |
 |---|---|
 | MATIEC | GPL-3.0 |
+| ESP-IDF (Espressif) | Apache-2.0 |
 | esptool-js (Espressif) | Apache-2.0 |
 | React, Vite, Tailwind CSS, FastAPI | MIT / permissivas |
 
 A relação completa, com a forma de uso de cada componente, está em [`THIRD_PARTY.md`](THIRD_PARTY.md).
 
-O MATIEC é invocado como processo independente, não incorporado ao código-fonte deste projeto. Eventuais obrigações de conformidade decorrentes da redistribuição de componentes sob GPL devem ser observadas na distribuição de imagens de contêiner.
+O MATIEC e o ESP-IDF são invocados como processos independentes, não incorporados ao código-fonte deste projeto. Eventuais obrigações de conformidade decorrentes da redistribuição de componentes sob GPL devem ser observadas na distribuição de imagens de contêiner.
 
 ## Créditos e referências
 

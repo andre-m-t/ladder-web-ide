@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { fetchHealth } from './lib/api'
-import type { Health } from './lib/api'
+import type { Health, ToolInfo } from './lib/api'
 
 type State =
   | { kind: 'carregando' }
@@ -12,8 +12,8 @@ type State =
  * Página placeholder do boilerplate.
  *
  * Serve como verificação de ponta a ponta do ambiente: se o status aparece
- * aqui, então o front-end, o CORS, a rede do Docker Compose, a API e o
- * compilador MATIEC estão todos operacionais. O editor Ladder, o simulador e a
+ * aqui, então o front-end, o CORS, a rede do Docker Compose, a API e as duas
+ * etapas de compilação (MATIEC e toolchain ESP32) estão todos operacionais. O editor Ladder, o simulador e a
  * gravação virão nas specs seguintes.
  */
 export default function App() {
@@ -60,28 +60,43 @@ export default function App() {
           )}
 
           {state.kind === 'ok' && (
-            <dl className="space-y-3 text-sm">
+            <dl className="space-y-6 text-sm">
               <Linha rotulo="Backend" valor={state.health.status} ok={state.health.status === 'ok'} />
-              <Linha
-                rotulo="Compilador MATIEC (iec2c)"
-                valor={state.health.iec2c.available ? 'disponível' : 'indisponível'}
-                ok={state.health.iec2c.available}
+              <Ferramenta
+                rotulo="Structured Text → C (MATIEC)"
+                info={state.health.iec2c}
               />
-              <div>
-                <dt className="text-slate-500">Caminho do binário</dt>
-                <dd className="font-mono text-xs break-all">{state.health.iec2c.path}</dd>
-              </div>
-              {state.health.iec2c.version && (
-                <div>
-                  <dt className="text-slate-500">Identificação</dt>
-                  <dd className="font-mono text-xs break-all">{state.health.iec2c.version}</dd>
-                </div>
-              )}
+              <Ferramenta
+                rotulo="C → firmware (toolchain ESP32)"
+                info={state.health.esp_idf}
+              />
             </dl>
           )}
         </section>
       </div>
     </main>
+  )
+}
+
+function Ferramenta({ rotulo, info }: { rotulo: string; info: ToolInfo }) {
+  return (
+    <div className="space-y-3">
+      <Linha
+        rotulo={rotulo}
+        valor={info.available ? 'disponível' : 'indisponível'}
+        ok={info.available}
+      />
+      <div>
+        <dt className="text-slate-500">Caminho</dt>
+        <dd className="font-mono text-xs break-all">{info.path}</dd>
+      </div>
+      {info.version && (
+        <div>
+          <dt className="text-slate-500">Identificação</dt>
+          <dd className="font-mono text-xs break-all">{info.version}</dd>
+        </div>
+      )}
+    </div>
   )
 }
 

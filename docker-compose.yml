@@ -16,6 +16,10 @@ services:
     volumes:
       # Bind mount para recarga automática durante o desenvolvimento.
       - ./backend:/app
+      # Cache do build do ESP-IDF: mantém a compilação incremental entre
+      # requisições e entre `docker compose up`. Sem ele, todo firmware sai de
+      # um build frio (minutos em vez de segundos).
+      - esp-build-cache:/var/cache/ladderflow/esp-build
     command:
       - uvicorn
       - app.main:app
@@ -33,7 +37,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
-      start_period: 15s
+      # A imagem do ESP-IDF sobe mais devagar que a python:slim anterior.
+      start_period: 45s
 
   frontend:
     build:
@@ -50,3 +55,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  esp-build-cache:

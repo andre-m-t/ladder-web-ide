@@ -29,11 +29,20 @@ Cliente HTTP da API em `frontend/src/lib/api.ts`; base configurada por
 | Framework | FastAPI | API em `http://localhost:8000`, docs em `/docs` |
 | Dependências | `requirements.txt` + `requirements-dev.txt`, instaladas com `pip` | `pyproject.toml` só configura `pytest` e `ruff` |
 | Compilador ST→C | MATIEC (`iec2c`), GPL-3.0 | **processo externo**, nunca importado como código (cf. §10) |
-| Toolchain ESP32 | ainda não provisionada | entra como novo estágio no `backend/Dockerfile` junto com a etapa C → firmware |
+| Toolchain ESP32 | ESP-IDF v5.4.1 (imagem `espressif/idf:v5.4.1`) | **processo externo** (`idf.py build`), base do estágio `runtime` do `backend/Dockerfile` |
+| Projeto de firmware | `backend/firmware/esp32-template` (ESP-IDF + CMake) | código autoral: `app_main.c` (ciclo de varredura), `plc_glue.c` (variáveis localizadas ↔ GPIO), `plc_io_map.h` (pinagem fixa, Q-5) |
 
-A fronteira com o `iec2c` é **`backend/app/services/matiec.py`** — o único
-módulo que chama `subprocess`. Invocação:
-`iec2c -f -I <lib_dir> -T <out_dir> <arquivo.st>`.
+As duas etapas externas de compilação têm **um módulo adaptador cada**, e são os
+únicos lugares do backend que chamam `subprocess`:
+
+| Etapa | Módulo | Invocação |
+|---|---|---|
+| ST → C ANSI | `backend/app/services/matiec.py` | `iec2c -f -I <lib_dir> -T <out_dir> <arquivo.st>` |
+| C ANSI → firmware | `backend/app/services/esp32.py` | `idf.py -C <work_dir> -B <work_dir>/build build` |
+
+O diretório de trabalho do ESP-IDF é reaproveitado entre compilações (volume
+`esp-build-cache` no compose): é o build incremental que sustenta a decisão de
+compilação síncrona (Q-6 da spec 001).
 
 ## Infraestrutura
 
@@ -42,6 +51,10 @@ módulo que chama `subprocess`. Invocação:
 - O MATIEC é **compilado a partir do fonte** no estágio `matiec-builder` do
   `backend/Dockerfile`, a partir de `beremiz/matiec` pinado por commit; só o
   binário `iec2c` e o diretório `lib/` entram na imagem final.
+- O estágio `runtime` parte de `espressif/idf:v5.4.1`: as dependências Python do
+  backend são instaladas no venv do próprio ESP-IDF, e o entrypoint da imagem
+  carrega `export.sh` antes do comando, de modo que o `uvicorn` e os
+  subprocessos `idf.py` herdam `IDF_PATH` e `PATH`. A imagem final tem ~2–3 GB.
 - Configuração via `.env` (a partir de `.env.example`). `.env` não é versionado.
 
 ## Norma de referência

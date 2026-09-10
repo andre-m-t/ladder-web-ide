@@ -5,6 +5,9 @@
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
+markers = [
+    "slow: exige a toolchain do ESP32 e leva minutos no primeiro build",
+]
 
 [tool.ruff]
 line-length = 100

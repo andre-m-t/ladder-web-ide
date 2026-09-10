@@ -50,7 +50,9 @@ O servidor é **sem estado**: não persiste projetos, não conhece o editor.
 ## Componentes previstos (a materializar via specs)
 
 - `frontend/` — aplicação web: editor, serializador, simulador, gravação.
-- `backend/` — API de compilação e integração com MATIEC.
+- `backend/` — API de compilação e integração com MATIEC e com a toolchain ESP32.
+- `backend/firmware/esp32-template/` — projeto ESP-IDF autoral: a *glue* entre o
+  C gerado pelo MATIEC e os GPIOs do ESP32 (ciclo de varredura e pinagem fixa).
 - `docs/` — método de desenvolvimento, documentação técnica e resultados de validação.
 - `scripts/` — utilitários do projeto (ex.: `build-deposito.sh`).
 - `docker-compose.yml`, `.env.example` — orquestração local.
@@ -60,4 +62,5 @@ O servidor é **sem estado**: não persiste projetos, não conhece o editor.
 - Navegador: Chrome ou Edge 89+ (Web Serial API).
 - Contexto: HTTPS ou `localhost`.
 - Hardware alvo: ESP32 clássico.
-- Ambiente de dev: Docker + Docker Compose (MATIEC e toolchain vêm no contêiner).
+- Ambiente de dev: Docker + Docker Compose (MATIEC e ESP-IDF vêm no contêiner do
+  backend, ambos executados como processos externos).

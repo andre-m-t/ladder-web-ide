@@ -126,10 +126,16 @@ decisão e justificativa; não apague o enunciado.
 ### Q-1 — ST de exemplo canônico para os testes
 - **Enunciado:** Qual ST de exemplo canônico usar para os testes (piscar LED em
   GPIO fixo? espelhar entrada→saída)? Definir o pino e o comportamento.
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-10
+- **Decisão:** `backend/tests/fixtures/blink.st` — pisca `%QX0.0` contando 25
+  ciclos de varredura de 20 ms (500 ms ligado / 500 ms desligado) e força o LED
+  aceso enquanto `%IX0.0` estiver acionada.
+- **Justificativa:** um único programa exercita as duas direções de I/O
+  (leitura de entrada e escrita de saída) e é observável a olho nu na bancada,
+  sem instrumento. A temporização vem da contagem de ciclos, não de um bloco
+  `TON`, para que o teste não dependa das funções de tempo da biblioteca do
+  MATIEC nesta primeira fatia. O pino sai de Q-5.
 
 ### Q-2 — Limite de tamanho da requisição de compilação
 - **Enunciado:** Limite de tamanho do corpo da requisição de compilação (RF-7): valor?
@@ -140,32 +146,94 @@ decisão e justificativa; não apague o enunciado.
 
 ### Q-3 — Formato da resposta de erro estruturada
 - **Enunciado:** Formato exato da resposta de erro estruturada (RF-8): campos, códigos.
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-10
+- **Decisão:** envelope estável com diagnósticos extraídos da saída do
+  compilador, sempre acompanhados da saída bruta íntegra:
+
+  ```json
+  {
+    "stage": "matiec" | "esp32",
+    "code": "compile_error" | "toolchain_error" | "timeout" | "payload_too_large",
+    "message": "mensagem curta em português",
+    "diagnostics": [
+      {"file": "plc.st", "line": 12, "column": 5, "severity": "error", "message": "..."}
+    ],
+    "raw": {"stdout": "...", "stderr": "..."}
+  }
+  ```
+
+  `stage` diz em qual das duas etapas externas o processo parou. `diagnostics`
+  é *best-effort*: linhas que o parser não reconhecer não somem, continuam em
+  `raw`.
+- **Justificativa:** o `iec2c` já é invocado com `-f` justamente para preservar
+  a localização do token, então `line`/`column` estão disponíveis sem custo
+  adicional — permitem marcar o erro no texto hoje e mapear de volta para o
+  rung quando o editor visual existir (specs 002+). Manter `raw` cumpre RF-8 ao
+  pé da letra e evita que a interface fique refém da qualidade do parsing. A
+  separação por `stage` importa porque um erro do ESP-IDF quase sempre indica
+  defeito do LadderFlow (a *glue* do firmware), não do programa do usuário.
 
 ### Q-4 — Meta de tempo de compilação
 - **Enunciado:** Meta de tempo de compilação aceitável para a fatia mínima.
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-10
+- **Decisão:** meta de **≤ 30 s** para a compilação de um programa curto com o
+  ambiente já aquecido, e **≤ 120 s** para a primeira compilação após subir o
+  ambiente (build frio). Acima disso, a decisão de Q-6 (síncrona) deve ser
+  reaberta.
+- **Justificativa:** números medidos em 2026-09-10, em máquina de
+  desenvolvimento, com o `blink.st` de Q-1 (as duas etapas, `iec2c` +
+  `idf.py build`): **build frio 66 s**, **build incremental 11–13 s** — este
+  último é o caso comum, já que entre duas compilações só mudam os arquivos
+  gerados pelo `iec2c`. As metas ficam com folga sobre o medido para absorver
+  máquinas mais modestas sem invalidar o contrato síncrono.
 
 ### Q-5 — Alvo fixo (placa/pinagem)
 - **Enunciado:** O alvo fixo (placa/pinagem) desta fatia: qual configuração assumir?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-10
+- **Decisão:** ESP32 clássico, placa DevKit v1 (módulo WROOM-32), com o mapa
+  fixo declarado em `backend/firmware/esp32-template/main/plc_io_map.h`:
+
+  | Endereço IEC | GPIO | Observação |
+  |---|---|---|
+  | `%IX0.0` | 0 | botão BOOT da placa, ativo em nível baixo, pull-up interno |
+  | `%IX0.1` | 5 | entrada livre, pull-up interno |
+  | `%QX0.0` | 2 | LED embarcado da DevKit v1 |
+  | `%QX0.1` | 4 | saída livre |
+
+  Endereço localizado sem pino no mapa é ignorado com aviso no log serial do
+  dispositivo; pino do mapa não usado pelo programa simplesmente não é
+  configurado.
+- **Justificativa:** os quatro pinos cobrem entrada e saída em duplicata sem
+  exigir nenhum componente externo para o teste mínimo (botão e LED já estão na
+  placa). O mapa é um cabeçalho próprio, e não uma constante espalhada pela
+  *glue*, porque trocar um pino é mudança de contrato com quem escreve o
+  Ladder. Seleção de placa ou pinagem pela interface continua fora de escopo
+  (§7).
 
 ### Q-6 — Compilação síncrona ou assíncrona
 - **Enunciado:** A compilação é síncrona (uma requisição bloqueia até o binário)
   ou assíncrona (poll/stream de progresso)? Impacta o contrato de API.
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-10
+- **Decisão:** **síncrona** — uma requisição bloqueia até o firmware ou o erro,
+  com tempo limite por etapa. O servidor não guarda estado de compilação entre
+  requisições.
+- **Justificativa:** §2 pede a fatia mais fina que atravesse todas as camadas, e
+  §6 pede servidor sem estado — uma fila de *jobs* introduziria identidade de
+  requisição, ciclo de vida e limpeza de artefatos, tudo antes de o caminho
+  fim-a-fim estar provado. É viável porque a compilação é incremental: o
+  projeto ESP-IDF fica em um diretório de trabalho persistente e só os arquivos
+  gerados pelo `iec2c` mudam entre compilações, de modo que apenas eles são
+  recompilados e religados.
+  **Consequências registradas:** (a) o diretório de trabalho é compartilhado,
+  então duas compilações simultâneas se atropelariam — serializar o acesso é
+  responsabilidade do endpoint; (b) o primeiro build após subir o ambiente é
+  frio e leva minutos, o que a interface precisa comunicar; (c) migrar para
+  `202 + job_id` mais tarde é **aditivo** e vira spec própria, sem invalidar
+  este contrato.
 
 ## 10. Conformidade com a Constituição
 

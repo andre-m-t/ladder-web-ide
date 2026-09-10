@@ -14,6 +14,8 @@ como processo separado.
 | Componente | Licença | Forma de uso |
 |---|---|---|
 | MATIEC (`iec2c`) | GPL-3.0 | Binário executado como **processo separado** pelo serviço de compilação. Compilado a partir do fonte durante a construção da imagem; não vinculado ao código autoral. |
+| MATIEC — biblioteca C (`lib/C`, cabeçalhos `iec_std_lib.h` e afins) | LGPL-2.1 ou posterior | Cabeçalhos de terceiros **incluídos na compilação do firmware**, a partir da imagem do contêiner. Não são copiados para o repositório nem para o pacote de depósito. |
+| ESP-IDF (toolchain do ESP32, `idf.py`) | Apache-2.0 | Ferramenta executada como **processo separado** pelo serviço de compilação; provida pela imagem oficial da Espressif. |
 | esptool-js | Apache-2.0 | Dependência de pacote (front-end). |
 | React | MIT | Dependência de pacote (front-end). |
 | Vite | MIT | Dependência de pacote (ferramenta de build do front-end). |
@@ -24,8 +26,15 @@ como processo separado.
 | Pydantic / pydantic-settings | MIT | Dependência de pacote (back-end). |
 
 Imagens base de contêiner utilizadas na construção do ambiente:
-`debian:bookworm-slim`, `python:3.12-slim` e `node:22-bookworm-slim`, com as
+`debian:bookworm-slim`, `espressif/idf` e `node:22-bookworm-slim`, com as
 licenças das respectivas distribuições.
+
+O firmware gerado é um trabalho combinado: o código autoral do LadderFlow (o
+projeto ESP-IDF em `backend/firmware/`), o C produzido pelo MATIEC a partir do
+programa do usuário, os cabeçalhos LGPL da biblioteca do MATIEC e componentes
+do ESP-IDF. Isso diz respeito ao **artefato compilado**, não ao código autoral
+depositado, e deve ser observado ao distribuir firmware ou imagens de
+contêiner.
 
 As dependências transitivas de cada ecossistema são declaradas em
 `frontend/package.json` e `backend/requirements.txt` (mais

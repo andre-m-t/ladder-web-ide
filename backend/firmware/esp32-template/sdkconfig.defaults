@@ -1,0 +1,17 @@
+# Configuracao minima do alvo desta fatia: ESP32 classico (WROOM-32, DevKit v1).
+CONFIG_IDF_TARGET="esp32"
+
+# Tick de 1 ms no FreeRTOS: o ciclo de varredura do PLC e definido em ns pelo
+# MATIEC (common_ticktime__, tipicamente 20 ms) e precisa de resolucao melhor
+# que os 10 ms do tick padrao.
+CONFIG_FREERTOS_HZ=1000
+
+# Sem watchdog de tarefa ociosa: o laco de varredura tem prioridade propria e
+# nao alimenta o watchdog de aplicacao nesta prova de conceito.
+CONFIG_ESP_TASK_WDT_INIT=n
+
+# Log em nivel de informacao pela UART padrao (util na bancada).
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Firmware pequeno: uma unica particao de aplicacao no layout padrao.
+CONFIG_PARTITION_TABLE_SINGLE_APP=y

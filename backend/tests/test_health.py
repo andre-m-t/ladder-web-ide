@@ -9,3 +9,5 @@ def test_health_responde_ok(client: TestClient) -> None:
     assert body["status"] == "ok"
     assert "available" in body["iec2c"]
     assert "path" in body["iec2c"]
+    assert "available" in body["esp_idf"]
+    assert "path" in body["esp_idf"]

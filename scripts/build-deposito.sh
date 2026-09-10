@@ -25,6 +25,8 @@ ZIP_PATH="$OUT_DIR/ladderflow-fonte-$STAMP.zip"
 INCLUDE_DIRS=(
   "frontend/src"
   "backend/app"
+  # Projeto ESP-IDF autoral (glue entre o C gerado e os GPIOs do ESP32).
+  "backend/firmware"
 )
 
 INCLUDE_FILES=(
