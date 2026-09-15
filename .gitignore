@@ -35,6 +35,17 @@ frontend/dist/
 *.o
 *.a
 
+# ESP-IDF: o build normal roda fora do repo (volume esp-build-cache — ver
+# backend/app/config.py), mas alguém pode rodar `idf.py` direto no template
+# em backend/firmware/esp32-template/. "sdkconfig" é o gerado a partir de
+# sdkconfig.defaults (que É versionado — não confundir os dois).
+sdkconfig
+sdkconfig.old
+**/managed_components/
+**/main/generated/
+dependencies.lock
+*.map
+
 # Configuração local de ferramentas
 .claude/settings.local.json
 .claude/*.local.json
