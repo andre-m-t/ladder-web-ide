@@ -30,7 +30,12 @@ static const plc_io_pin_t plc_io_pins[] = {
     /* Entradas -------------------------------------------------------- */
     /* Botao BOOT da placa: fecha para GND, portanto ativo em nivel baixo. */
     {"__IX0_0", 0, PLC_IO_INPUT, true, true},
-    {"__IX0_1", 5, PLC_IO_INPUT, false, true},
+    /* Entrada livre. GPIO18, nao GPIO5 (revisao Q-5, 2026-09-15): GPIO5 e
+     * strapping pin e precisa estar em nivel alto no reset; como entrada
+     * ligada a circuito externo, nivel baixo no boot impede a inicializacao
+     * da placa -- falha que so apareceria na bancada. GPIO18 nao tem papel
+     * no boot, tem pull-up interno e esta exposto no header da DevKit v1. */
+    {"__IX0_1", 18, PLC_IO_INPUT, false, true},
 
     /* Saidas ---------------------------------------------------------- */
     /* LED embarcado da DevKit v1. */

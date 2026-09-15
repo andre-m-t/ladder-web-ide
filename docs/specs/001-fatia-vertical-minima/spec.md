@@ -213,6 +213,30 @@ decisão e justificativa; não apague o enunciado.
   Ladder. Seleção de placa ou pinagem pela interface continua fora de escopo
   (§7).
 
+- **Revisão (2026-09-15):** `%IX0.1` passa de **GPIO5 para GPIO18**.
+  - **Motivo técnico:** GPIO5 é *strapping pin* do ESP32 e precisa estar em
+    nível alto no reset. Como entrada acionada por circuito externo, um nível
+    baixo no momento do boot impede a inicialização da placa — falha que se
+    manifestaria só na bancada e seria lida como defeito de hardware.
+  - **Decisão substituta:** GPIO18 — sem papel no boot, com pull-up interno,
+    exposto no header da DevKit v1. GPIO19 fica como equivalente; GPIO21/22
+    foram preservados para o par I²C padrão.
+  - **`%IX0.0` mantido em GPIO0** deliberadamente: também é strapping, mas é o
+    botão BOOT onboard, o que permite validar leitura de entrada sem componente
+    externo. Ressalva de contrato: circuito externo em GPIO0 deve garantir
+    nível alto no reset.
+  - **`%QX0.0` mantido em GPIO2:** strapping, porém saída e LED onboard — o uso
+    é consagrado na plataforma e não há conflito no reset.
+
+  Tabela consolidada, em vigor após esta revisão:
+
+  | Endereço IEC | GPIO | Observação |
+  |---|---|---|
+  | `%IX0.0` | 0 | botão BOOT da placa, ativo em nível baixo, pull-up interno; strapping pin — circuito externo deve garantir nível alto no reset |
+  | `%IX0.1` | 18 | entrada livre, pull-up interno; não é strapping pin |
+  | `%QX0.0` | 2 | LED embarcado da DevKit v1; strapping pin, uso consagrado como saída |
+  | `%QX0.1` | 4 | saída livre |
+
 ### Q-6 — Compilação síncrona ou assíncrona
 - **Enunciado:** A compilação é síncrona (uma requisição bloqueia até o binário)
   ou assíncrona (poll/stream de progresso)? Impacta o contrato de API.
