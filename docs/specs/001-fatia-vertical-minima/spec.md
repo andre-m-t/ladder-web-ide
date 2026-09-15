@@ -89,6 +89,12 @@ mensagens do compilador e nada é gravado.
   resposta do serviço contém as mensagens do `iec2c` em campo estruturado
   (não um erro 500 genérico).
 
+> **Nota de rastreabilidade (CA-4):** evidência de execução do procedimento de
+> bancada em `docs/validacao/ca-4-gravacao-esp32.md`. Ressalva: esse documento
+> valida o **firmware** por `esptool` diretamente no host — pré-requisito de
+> CA-4, não o critério em si, que exige a gravação **pelo navegador**
+> (RF-5/RF-6, Web Serial API), ainda não implementada.
+
 ## 6. Requisitos não-funcionais
 
 - Navegador: Chrome/Edge 89+; a gravação depende da Web Serial API.
