@@ -54,7 +54,21 @@ compilação síncrona (Q-6 da spec 001).
 - O estágio `runtime` parte de `espressif/idf:v5.4.1`: as dependências Python do
   backend são instaladas no venv do próprio ESP-IDF, e o entrypoint da imagem
   carrega `export.sh` antes do comando, de modo que o `uvicorn` e os
-  subprocessos `idf.py` herdam `IDF_PATH` e `PATH`. A imagem final tem ~2–3 GB.
+  subprocessos `idf.py` herdam `IDF_PATH` e `PATH`. **A imagem final mede
+  ~7,3 GB** (`docker image ls ladderflow-backend:dev` → `7.33GB`, medido em
+  2026-09-15; a base `espressif/idf:v5.4.1` sozinha já soma ~7,26 GB), bem
+  acima da estimativa anterior de "~2–3 GB", que datava da base
+  `python:3.12-slim` (~216 MB) anterior à migração para a imagem oficial da
+  Espressif.
+
+  O peso foi **concentrado no servidor de propósito**: é o preço de manter a
+  promessa de "sem instalação" no cliente (cf. "Visão" em
+  `docs/context/architecture.md`) — a própria métrica de acessibilidade que
+  este trabalho se propõe a medir. É custo consciente de infraestrutura de
+  desenvolvimento (a imagem só existe no ambiente que compila; nada disso
+  chega ao navegador nem ao ESP32), não descuido. E é custo de **imagem**, não
+  de **tempo de compilação** — este último está medido em Q-4 da spec 001
+  (66 s a frio, 11–13 s incremental) e segue dentro da meta.
 - Configuração via `.env` (a partir de `.env.example`). `.env` não é versionado.
 
 ## Norma de referência

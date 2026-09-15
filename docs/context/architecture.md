@@ -24,8 +24,41 @@ Navegador (sem instalação)                    Serviço de compilação
 └──────────────┬─────────────────┘            └───────────────────────────┘
                │ Web Serial
                ▼
-            ESP32 (clássico)
+┌────────────────────────────────┐
+│ ESP32 (clássico)               │
+│ Runtime hospedeiro — software  │
+│ autoral embarcado (ciclo de    │
+│ varredura + glue de I/O)       │
+└────────────────────────────────┘
 ```
+
+## As três camadas
+
+O diagrama acima tem duas colunas lado a lado e uma seta descendo para o
+ESP32, o que convida a ler "duas camadas e um destino". Na verdade são
+**três camadas**, e a terceira executa software autoral tanto quanto as
+outras duas:
+
+1. **Cliente** (navegador) — editor visual Ladder, serializador Ladder → ST,
+   simulador de ciclo de varredura, gravação via Web Serial API. Sem
+   instalação.
+2. **Serviço de compilação** (servidor) — API FastAPI, MATIEC/`iec2c` e
+   toolchain ESP-IDF, os dois últimos invocados como processos externos (cf.
+   §6 e §10 da constituição). Sem estado: não persiste projetos, não conhece
+   o editor.
+3. **Runtime hospedeiro** (ESP32) — `backend/firmware/esp32-template`: o
+   programa que de fato executa no dispositivo, com código autoral próprio —
+   ciclo de varredura em `app_main.c`, ligação entre variáveis localizadas e
+   GPIO em `plc_glue.c`, pinagem fixa em `plc_io_map.h`. É o destino do
+   binário produzido pelo serviço de compilação, mas seu código-fonte é
+   independente do back-end: embarca e roda no ESP32, não no servidor.
+
+A pasta desse runtime hospedeiro fica sob `backend/firmware/` por **decisão de
+build** — contexto de build do Docker, regras do `.dockerignore`, bind mount
+de hot-reload (`./backend:/app` no `docker-compose.yml`) — **não** por decisão
+de arquitetura. A localização em disco não deve ser lida como se o runtime
+hospedeiro fosse parte do back-end: o back-end roda no servidor; o runtime
+hospedeiro roda no ESP32.
 
 ## Fluxo de execução
 
@@ -51,8 +84,9 @@ O servidor é **sem estado**: não persiste projetos, não conhece o editor.
 
 - `frontend/` — aplicação web: editor, serializador, simulador, gravação.
 - `backend/` — API de compilação e integração com MATIEC e com a toolchain ESP32.
-- `backend/firmware/esp32-template/` — projeto ESP-IDF autoral: a *glue* entre o
-  C gerado pelo MATIEC e os GPIOs do ESP32 (ciclo de varredura e pinagem fixa).
+- `backend/firmware/esp32-template/` — **runtime hospedeiro**: projeto ESP-IDF
+  autoral que executa no ESP32, ligando o C gerado pelo MATIEC aos GPIOs
+  (ciclo de varredura e pinagem fixa). Ver "As três camadas" acima.
 - `docs/` — método de desenvolvimento, documentação técnica e resultados de validação.
 - `scripts/` — utilitários do projeto (ex.: `build-deposito.sh`).
 - `docker-compose.yml`, `.env.example` — orquestração local.
