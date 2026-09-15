@@ -14,6 +14,7 @@ Alvo: **$ARGUMENTS**
    Se não estiver aprovado, **pare** e peça para fechar a Fase 3.
 
 2. **Leia:**
+   - `.claude/state.md` — onde o projeto está: features, status, pendências.
    - `docs/specs/NNN-*/tasks.md`, `plan.md` e `spec.md`.
    - `docs/constitution.md`
    - `docs/checklists/definition-of-done.md`
@@ -30,6 +31,11 @@ Alvo: **$ARGUMENTS**
 4. Ao fim de cada **fatia**, verifique a Definition of Done (por feature) na
    parte aplicável e rode os testes da fatia.
 
+5. **Atualize `.claude/state.md`** — obrigatório, no mesmo commit da mudança.
+   Status das features tocadas, "Última atualização", "Histórico de rodadas",
+   "Próximos passos" e "Decisões em aberto". O topo do arquivo lista o que
+   revisar. Não pergunte se deve fazer: faz parte da tarefa.
+
 ## Regras
 
 - **Não improvise mudança de escopo.** Se encontrar uma decisão não coberta
@@ -41,10 +47,13 @@ Alvo: **$ARGUMENTS**
   como processo externo, isolado num adaptador).
 - Cada commit referencia `spec NNN` e `tarefa #N` (§8). Só faça commit/push se
   o usuário pedir; se estiver na branch `main`, crie uma branch antes.
+- `.claude/state.md` nunca fica para depois: um estado desatualizado é lido como
+  verdade e quebra a rastreabilidade que sustenta o TCC.
 - Sem segredos ou caminhos absolutos de máquina no diff.
 
 ## Ao terminar
 
+- Confirme que `.claude/state.md` reflete o estado real pós-rodada.
 - Resuma o que foi implementado, tarefas marcadas, testes rodados (com
   resultado real — se algo falhou, diga).
 - Liste o que ficou pendente e por quê.

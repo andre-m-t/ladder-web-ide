@@ -71,6 +71,8 @@ libera a Fase 3.
 4. Para cada tarefa: implementação + testes + verificação da Definition of Done.
 5. Para e pede orientação se encontrar uma decisão não coberta pela spec/plano
    (não improvisa mudança de escopo).
+6. **Atualiza `.claude/state.md`** ao fim da rodada, no mesmo commit da mudança
+   (ver "Painel de estado", abaixo).
 
 **Portão:** revisão de código / PR. Todo commit referencia `spec NNN` e o número
 da tarefa (ver princípio de rastreabilidade na `constitution.md`).
@@ -118,8 +120,34 @@ Responda a **uma** pergunta:
 2. Para correção de bug: um **teste de regressão** (§4 continua valendo).
 3. Se a mudança toca comportamento já descrito em uma spec ou em `context/`,
    **atualize o documento correspondente no mesmo commit**.
-4. Não é necessário criar `spec.md` / `plan.md` / `tasks.md`.
+4. **Atualize `.claude/state.md` no mesmo commit** — o caminho curto dispensa
+   specs, não dispensa o painel de estado.
+5. Não é necessário criar `spec.md` / `plan.md` / `tasks.md`.
 
 Não há portão de aprovação por fases no caminho curto — a revisão acontece no
 PR/commit. O commit ainda referencia o contexto (issue, bug, ou a spec cujo
 comportamento estava sendo restaurado), conforme §8.
+
+## Painel de estado — `.claude/state.md`
+
+`.claude/state.md` é a fotografia em tempo real do projeto: features e seus
+status, o que falta em cada uma, decisões em aberto, próximos passos em ordem e
+histórico de rodadas. É o primeiro arquivo a ler ao retomar o trabalho e o
+último a escrever ao encerrá-lo.
+
+**É obrigatório atualizá-lo em toda rodada, no mesmo commit da mudança** — nas
+quatro fases e também no caminho curto. Não há rodada pequena demais: se algo
+mudou de estado, o painel muda junto.
+
+O que revisar, ao fim de cada rodada:
+
+1. Status (✅/🟡/⬜/🔒) das features tocadas, e o conteúdo de "Concluído"/"Falta"
+2. "Última atualização" e "Branch ativa"
+3. "Histórico de rodadas" — uma linha por rodada
+4. "Próximos passos" — remover o que foi feito, repriorizar o resto
+5. "Decisões em aberto" — Q-n decidida sai da tabela e reflete na feature afetada
+
+A razão é a mesma que sustenta todo este método: o conjunto de documentos precisa
+permanecer a descrição fiel do que foi construído, porque é ele que dá
+rastreabilidade ao projeto e serve de base para a documentação do TCC. Um painel
+desatualizado é pior que nenhum — é lido como verdade.

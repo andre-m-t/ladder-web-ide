@@ -48,3 +48,10 @@ Descrição da feature dada pelo usuário: **$ARGUMENTS**
 - Liste as questões (Q-n) do **Registro de decisões** que precisam da decisão do usuário.
 - Lembre: rode a checklist `docs/checklists/spec-review.md` e só depois de
   "spec aprovada" siga para `/planejar NNN`.
+
+## Painel de estado
+
+Uma spec nova quase sempre corresponde a uma feature nova em `.claude/state.md`.
+Ao fim desta fase, acrescente a linha no Panorama (status ⬜ ou 🔒) e registre as
+questões Q-n em aberto na tabela "Decisões em aberto". Ver "Painel de estado" em
+`docs/workflow.md`.

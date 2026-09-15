@@ -89,6 +89,9 @@ O servidor é **sem estado**: não persiste projetos, não conhece o editor.
   (ciclo de varredura e pinagem fixa). Ver "As três camadas" acima.
 - `docs/` — método de desenvolvimento, documentação técnica e resultados de validação.
 - `scripts/` — utilitários do projeto (ex.: `build-deposito.sh`).
+- `.claude/` — instrumentos do método: `state.md` (painel de estado do projeto)
+  e `commands/` (as quatro fases do SDD). `CLAUDE.md`, na raiz, carrega as
+  regras operacionais lidas por agentes de IA.
 - `docker-compose.yml`, `.env.example` — orquestração local.
 
 ## Restrições de execução

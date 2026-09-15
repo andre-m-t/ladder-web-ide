@@ -1,0 +1,271 @@
+# LadderFlow — Estado do projeto
+
+**Este é o `state.md` do projeto: a fotografia em tempo real do que existe, do que falta e do que está bloqueado.** É o primeiro arquivo a ler para saber onde o projeto está, e o último a escrever ao fim de qualquer rodada.
+
+**Atualização é obrigatória, não opcional.** Toda implementação — ciclo completo ou caminho curto — atualiza este arquivo **no mesmo commit** que a muda. A regra está registrada em `CLAUDE.md`, em `docs/workflow.md` e em `.claude/commands/implementar.md`; se você é um agente de IA lendo isto, ela vale para você.
+
+O que atualizar, ao fim de cada rodada:
+1. Status (✅/🟡/⬜/🔒) das features tocadas, e o conteúdo de "Concluído"/"Falta" dentro delas
+2. "Última atualização" e "Branch ativa", logo abaixo
+3. A tabela **Histórico de rodadas**, ao fim do arquivo — uma linha por rodada
+4. **Próximos passos** — remover o que foi feito, repriorizar o resto
+5. **Decisões em aberto** — quando uma Q-n for decidida, tirar da tabela e refletir na feature afetada
+
+Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
+
+**Última atualização:** 2026-09-15 · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+
+## Legenda
+
+| Símbolo | Significado |
+|---|---|
+| ✅ | Concluída e verificada |
+| 🟡 | Parcial — existe, mas falta validação ou complemento |
+| ⬜ | Não iniciada |
+| 🔒 | Bloqueada por dependência |
+
+**Camada:** onde o código executa — servidor, navegador ou dispositivo.
+**Autoral:** se o código entra no depósito do INPI como criação própria.
+
+---
+
+## Panorama
+
+| # | Feature | Camada | Status |
+|---|---|---|---|
+| F1 | Ambiente containerizado | servidor | ✅ |
+| F2 | Adaptador MATIEC (ST → C) | servidor | ✅ |
+| F3 | Toolchain ESP32 + runtime hospedeiro | servidor + dispositivo | 🟡 |
+| F4 | Endpoint de compilação | servidor | ⬜ |
+| F5 | Gravação via navegador | navegador | ⬜ |
+| F6 | Tela mínima (fatia vertical) | navegador | 🔒 |
+| F7 | Editor Ladder visual | navegador | ⬜ |
+| F8 | Serializador Ladder → ST | navegador | 🔒 |
+| F9 | Simulador de ciclo de varredura | navegador | ⬜ |
+| F10 | Coleta de métricas e validação | — | 🟡 |
+| FT | Conformidade para depósito (transversal) | — | 🟡 |
+
+**Leitura rápida:** a metade servidor está pronta e a metade navegador não existe. O projeto compila firmware, mas ainda não tem interface nem nunca gravou um dispositivo físico.
+
+---
+
+## F1 — Ambiente containerizado ✅
+
+**Camada:** servidor · **Autoral:** parcial (Dockerfile e compose são autorais)
+
+Ambiente único em contêiner com FastAPI, MATIEC e ESP-IDF, mais o frontend em Vite.
+
+**Ferramentas:** Docker, Docker Compose, base `espressif/idf:v5.4.1`
+
+**Concluído**
+- Dockerfile multi-estágio: `matiec-builder` compila o `iec2c`; `runtime` sobre a base da Espressif
+- `docker compose up` sobe backend e frontend com dependência ordenada
+- `/health` reporta `iec2c` e `esp_idf` com versão
+- Volume nomeado para cache de build incremental
+- Suíte de testes, `ruff` e `tsc --noEmit` limpos
+
+**Custo registrado:** imagem de 7,33 GB (medido). Concentração deliberada de peso no servidor para que o cliente não instale nada.
+
+---
+
+## F2 — Adaptador MATIEC (ST → C) ✅
+
+**Camada:** servidor · **Autoral:** sim (`matiec.py`)
+
+Fronteira de subprocesso que invoca o `iec2c` e devolve os arquivos C gerados.
+
+**Ferramentas:** MATIEC (`iec2c`), pinado por commit — GPL-3.0, invocado como processo separado
+
+**Concluído**
+- `backend/app/services/matiec.py` com dataclasses `frozen` e hierarquia de erros
+- Invocação com `-f` para preservar localização de token (linha/coluna)
+- Saída canônica verificada: `POUS.c/h`, `Config0.c/h`, `Res0.c`, `GLOBALS.h`, `LOCATED_VARIABLES.h`
+- Testes em `test_matiec.py`
+
+---
+
+## F3 — Toolchain ESP32 + runtime hospedeiro 🟡
+
+**Camada:** servidor (compilação) + dispositivo (execução) · **Autoral:** sim — é o núcleo autoral mais forte do projeto
+
+Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `iec2c` não gera: laço de varredura, temporização e mapeamento de variáveis localizadas para GPIO.
+
+**Ferramentas:** ESP-IDF v5.4.1 (Apache-2.0); headers do MATIEC linkados no firmware (LGPL-3.0-or-later)
+
+**Concluído**
+- `backend/app/services/esp32.py` — segunda fronteira de subprocesso
+- `backend/firmware/esp32-template/` — projeto IDF autoral (`app_main.c`, `plc_glue.c/h`)
+- Build real em teste automatizado: `blink.st` → `iec2c` → `idf.py build` → `.bin` de 183 KB
+- Build incremental sobre volume persistente
+- Pinagem revisada (ver Q-5): `%IX0.1` migrado de GPIO5 para GPIO18 por conflito com strapping pin
+- `test_plc_io_map.py` falha se header e spec divergirem
+- `-Werror=all` rebaixado seletivamente, por aviso nomeado, apenas para código gerado e headers de terceiros
+
+**Falta**
+- 🔴 **Gravação em ESP32 físico.** O firmware compila, mas nunca rodou em hardware. Enquanto isso não acontecer, não é possível afirmar que o laço de varredura funciona nem que a pinagem está correta.
+- Procedimento documentado em `docs/validacao/ca-4-gravacao-esp32.md`, com offsets `0x1000`/`0x8000`/`0x10000` conferidos contra o `flasher_args.json` gerado — **pendente de execução**
+
+> **Nota:** a validação por `esptool` de linha de comando confirma o firmware, mas **não fecha CA-4**, que exige gravação pelo navegador (depende de F5).
+
+---
+
+## F4 — Endpoint de compilação ⬜
+
+**Camada:** servidor · **Autoral:** sim
+
+`POST /compile` recebe texto ST e devolve o binário ou erro estruturado. É a porta de entrada para o motor que já funciona — **próxima feature a implementar**.
+
+**Ferramentas:** FastAPI (já instalado). Nenhuma dependência nova.
+
+**Decisões já tomadas**
+- **Q-6** — compilação **síncrona**. Bloqueia até binário ou erro, com timeout por etapa. Viável porque o build incremental leva 11–13 s (build frio: 66 s). Migração para `202 + job_id` fica aditiva se a medição piorar.
+- **Q-3** — envelope de erro estável com `stage`, `code`, `message`, `diagnostics[]` e `raw`. O `diagnostics` é *best-effort*; `raw` sempre carrega a saída bruta íntegra.
+
+**Falta**
+- Implementar o endpoint encadeando `matiec.py` → `esp32.py`
+- Parser de diagnóstico do `iec2c` (linha/coluna/severidade)
+- Testes de contrato
+- 🟡 **Q-2 em aberto:** limite de tamanho do corpo da requisição. Decidir em `/planejar 001`.
+
+---
+
+## F5 — Gravação via navegador ⬜
+
+**Camada:** navegador · **Autoral:** integração
+
+Transfere o `.bin` ao ESP32 pela porta serial, sem driver nem instalação.
+
+**Ferramentas:** esptool-js (Apache-2.0) + Web Serial API
+
+**Requisitos de ambiente:** Chrome/Edge 89+, contexto HTTPS ou `localhost`
+
+**Falta:** tudo. Wrapper sobre o esptool-js, seleção de porta, offsets de gravação, tratamento de erro e progresso.
+
+> **Observação:** o `esptool.py` no servidor vem embutido no ESP-IDF e gera o `.bin` a partir do ELF — não é decisão a tomar, é dependência do toolchain.
+
+---
+
+## F6 — Tela mínima (fatia vertical) 🔒
+
+**Camada:** navegador · **Autoral:** sim · **Bloqueada por:** F4, F5
+
+Interface deliberadamente crua: caixa de texto para colar ST, botão compilar, botão gravar. Não é o produto — é o instrumento que fecha a fatia vertical da spec 001.
+
+**Ferramentas:** React, Tailwind (já instalados)
+
+**Por que importa:** é o marco a partir do qual se pode afirmar viabilidade técnica. ST digitado no navegador acendendo um LED prova os quatro elos da cadeia de uma só vez.
+
+---
+
+## F7 — Editor Ladder visual ⬜
+
+**Camada:** navegador · **Autoral:** sim · **Maior feature do projeto**
+
+Construção de diagramas de contatos e bobinas em grade.
+
+**Ferramenta:** decisão em aberto — exige *spike* antes de escolher
+
+| Opção | A favor | Contra |
+|---|---|---|
+| SVG puro + modelo de grade próprio | Modelo de dados limpo, casa com a serialização | Mais código inicial |
+| Konva | Controle fino de canvas, ajuda no arrastar/soltar | A grade continua sendo responsabilidade nossa |
+| React Flow | Início mais rápido | Feito para grafos de posicionamento livre; Ladder é grade rígida — atrito crescente |
+
+**Restrição de PI:** não reaproveitar código de `cdilga/ladder-logic-editor`, `hiperiondev/*` ou correlatos. Referência conceitual é legítima; cópia de arquivos transformaria o projeto em obra derivada e esvaziaria a originalidade do depósito.
+
+**Falta:** *spike* de biblioteca, modelo de dados da grade, renderização, edição, validação de posições.
+
+---
+
+## F8 — Serializador Ladder → ST 🔒
+
+**Camada:** navegador · **Autoral:** sim · **Bloqueada por:** F7 (depende do modelo de dados da grade)
+
+Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, central em importância — é a tradução que dá sentido à arquitetura inteira.
+
+**Ferramentas:** nenhuma. TypeScript puro.
+
+---
+
+## F9 — Simulador de ciclo de varredura ⬜
+
+**Camada:** navegador · **Autoral:** sim
+
+Executa a lógica no navegador antes da gravação, seguindo a semântica da norma: lê entradas → resolve todos os rungs → escreve saídas → repete.
+
+**Ferramentas:** nenhuma. TypeScript puro.
+
+**Ponto de atenção:** é implementação independente do runtime em C do F3. A divergência entre os dois é **métrica do TCC**, não bug a esconder — deve ser medida e reportada.
+
+**Escopo inicial:** contatos NA/NF e bobinas. Temporizadores e contadores (TON/TOF/CTU/CTD) em iteração posterior.
+
+---
+
+## F10 — Coleta de métricas e validação 🟡
+
+**Camada:** transversal · Sustenta a conclusão científica do trabalho
+
+| Métrica | Status |
+|---|---|
+| Tempo de compilação | ✅ frio 66 s · incremental 11–13 s (Q-4) |
+| Corretude do ciclo (tabela-verdade) | ⬜ depende de F3 em hardware |
+| Divergência simulação ↔ hardware | 🔒 depende de F9 |
+| Taxa de sucesso de gravação em N tentativas | 🔒 depende de F5 |
+| Tempo de ciclo de varredura no dispositivo | ⬜ |
+| Tempo total edição → dispositivo operante | 🔒 depende de F6 |
+| Cobertura de elementos IEC 61131-3 | ⬜ |
+| Acessibilidade: pré-requisitos vs. fluxo desktop | ⬜ comparação com OpenPLC |
+
+**Alerta metodológico:** "o firmware compila" é evidência de que um componente funciona, não de que a integração é viável. A conclusão do trabalho precisa estar ancorada nestes números, não em demonstração pontual.
+
+---
+
+## FT — Conformidade para depósito (transversal) 🟡
+
+**Concluído**
+- `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (7 fontes de firmware + adaptadores + `api.ts`) e listas de artefatos proibidos
+- Modo `--verificar` para CI
+- `verificar_origem` inspeciona a **árvore de origem**, não o staging — evita que os `EXCLUDES` do rsync limpem contaminação em silêncio e produzam pacote verde indevidamente
+- Quatro testes em `test_deposito.py`, incluindo dois negativos que provam que o guarda morde
+- `THIRD_PARTY.md` corrigido: headers do MATIEC são **LGPL-3.0-or-later** (não LGPL-2.1) — `iec_types_all.h` declara LGPL-3+ e `iec_std_lib.h` declara LGPL-2+; como o build reúne ambos pelo mesmo `-I`, prevalece a mais restritiva
+- Distinção registrada entre processo separado (sem obra derivada) e linkagem real no firmware (implicação sobre o binário do usuário final, não sobre a plataforma)
+- ESP-IDF registrado como Apache-2.0
+- Rodada de 2026-09-15 commitada em cinco commits rastreáveis e integrada à `main` (`ba92980..09534f7`, fast-forward), com push para `origin`
+- Painel de estado (`.claude/state.md`) instituído com atualização obrigatória por rodada — sustenta a rastreabilidade da autoria exigida pelo depósito
+
+**Falta**
+- Confirmação formal de titularidade e coautoria com o NIT do IFTM
+- Decisão de licença (manter sem `LICENSE` até o depósito — posição reversível)
+- Alinhamento com o NIT sobre uso de assistentes de IA no desenvolvimento
+
+---
+
+## Decisões em aberto
+
+| ID | Questão | Impacto | Quando decidir |
+|---|---|---|---|
+| Q-2 | Limite de tamanho do corpo em `POST /compile` | Contrato da API | `/planejar 001` |
+| — | Biblioteca de canvas do editor Ladder | F7 inteira | *Spike* antes do Sprint do editor |
+| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar |
+
+---
+
+## Próximos passos, em ordem
+
+1. **Gravar o `.bin` em ESP32 físico** — executa `docs/validacao/ca-4-gravacao-esp32.md`; fecha o último risco técnico não endereçado
+2. Decidir **Q-2** e rodar `/planejar 001`
+3. Implementar **F4** (`POST /compile`)
+4. Implementar **F5 + F6** — fecha a fatia vertical e habilita a afirmação de viabilidade
+5. *Spike* de biblioteca de canvas → **F7** → **F8**
+6. **F9** e início da coleta sistemática de métricas (**F10**)
+
+---
+
+## Histórico de rodadas
+
+| Data | Rodada | Resultado |
+|---|---|---|
+| — | Sprint 0 | Ambiente containerizado, MATIEC operacional, `/health` |
+| 2026-09-10 | Toolchain ESP32 | Firmware compila (183 KB); Q-1, Q-3, Q-4, Q-5, Q-6 registradas |
+| 2026-09-15 | Conformidade e pinagem | Auditoria de depósito com abort; `%IX0.1` → GPIO18; licenças corrigidas (LGPL-3.0-or-later); CA-4 documentado; integrado à `main` |
+| 2026-09-15 | Painel de estado | Este documento criado como `state.md`; atualização tornada obrigatória em `CLAUDE.md`, `docs/workflow.md` e nos comandos do SDD |

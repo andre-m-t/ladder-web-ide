@@ -87,5 +87,8 @@ IEC 61131-3 — linguagens Ladder (LD) e Structured Text (ST). O projeto cobre u
   único módulo adaptador.
 - Testes junto da feature; um bug corrigido ganha teste de regressão (cf. §4).
 
-> Quando este projeto tiver um `CLAUDE.md` na raiz, ele passa a ser a fonte
-> canônica de convenções e este arquivo apenas o complementa.
+> O `CLAUDE.md` da raiz existe desde 2026-09-15, mas carrega apenas as **regras
+> operacionais** do projeto (painel de estado, portões do SDD, rastreabilidade,
+> propriedade intelectual, ambiente). As convenções de código e de stack
+> permanecem canônicas **neste arquivo**; o `CLAUDE.md` aponta para cá em vez de
+> duplicá-las.

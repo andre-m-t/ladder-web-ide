@@ -45,3 +45,9 @@ Spec alvo: **$ARGUMENTS**
 - Mostre o caminho do `plan.md` e um resumo das decisões e riscos.
 - Rode mentalmente a `plan-review.md` e reporte itens que ainda não fecham.
 - Lembre: após "plano aprovado", siga para `/tarefas NNN`.
+
+## Painel de estado
+
+Toda questão Q-n decidida nesta fase sai da tabela "Decisões em aberto" de
+`.claude/state.md` e passa a constar na feature afetada. Atualize o painel ao
+fim da fase. Ver "Painel de estado" em `docs/workflow.md`.
