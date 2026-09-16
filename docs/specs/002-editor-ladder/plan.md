@@ -1,6 +1,6 @@
 # Plano 002 — Editor Ladder visual
 
-> **Status:** em revisão
+> **Status:** aprovado (2026-09-16), com três ressalvas incorporadas na §10
 > **Spec de origem:** [`spec.md`](./spec.md) — aprovada em 2026-09-16, Q-1 a Q-7 decididas
 > **Autor:** André · **Data:** 2026-09-16
 > **Insumos:** [`spike-canvas.md`](./spike-canvas.md) (tecnologia de renderização e modelo),
@@ -351,3 +351,56 @@ independente do front-end.
   pede.
 - **Tensão registrada:** D-8 aceita, até a F8, um elo verificado à mão
   (diagrama → ST). É a única parte do CA-3 não automatizada ponta a ponta.
+
+## 10. Revisão aditiva — ressalvas da aprovação (2026-09-16)
+
+O autor aprovou o plano com três ressalvas. Elas **complementam** as decisões
+acima; nada foi apagado.
+
+### R-1 (D-8): o elo manual do CA-3 fica declarado no código, não só aqui
+`blink_ladder.st` escrito à mão prova que **aquele ST** equivale ao `blink.st`,
+não que o **diagrama** `BLINK` equivale. Se a F8 gerar ST diferente, o CA-3
+estaria validando outra coisa. Por isso:
+- `test_blink_ladder.py` e o cabeçalho de `blink_ladder.st` levam um
+  comentário explícito, no mesmo espírito do aviso sobre a invariante de
+  `plc_glue_scan`: **a equivalência diagrama ↔ ST é assumida, não testada;
+  este teste prova só ST ↔ `blink.st`; a F8 deve substituir o ST à mão pelo
+  serializado a partir de `ladder/fixtures.ts` `BLINK`, e só então o CA-3 fica
+  verificado de ponta a ponta.**
+- O mesmo aviso, curto, acompanha `BLINK` em `ladder/fixtures.ts`, apontando
+  para o teste.
+- Risco da §7 mantido; a tarefa correspondente só fecha com os dois comentários.
+
+### R-2 (D-4): seleção sem arrastar é decisão de design, não corte de escopo
+A justificativa principal de D-4 passa a ser a **correção do modelo de
+interação**: arrastar comunica posicionamento livre, e a grade Ladder não tem
+posição livre — só células válidas, explícitas (RF-1). Seleção de ferramenta +
+célula de destino expõe exatamente esse espaço discreto, e toda posição
+oferecida é uma posição que existe. Simplicidade (§11) e acessibilidade por
+teclado são consequências, não o motivo. O registro vale como decisão de
+design para o capítulo de Desenvolvimento.
+
+### R-3 (D-9): acoplamento com `plc_io_map.h` travado por teste que falha
+Hoje **não existe** teste ligando o front-end ao header — o previsto em §6
+(`enderecos.test.ts` lendo o header) nem rodaria no contêiner do front-end,
+que não tem `backend/`. Substituição: o teste vai para
+`backend/tests/test_plc_io_map.py` (roda em `-m "not slow"`, com o repositório
+inteiro montado), extraindo os endereços de `plc_io_map.h` e de
+`frontend/src/ladder/enderecos.ts` e exigindo **igualdade dos conjuntos, nos
+dois sentidos**, com mensagem que nomeia o endereço sobrando ou faltando. Um
+teste negativo prova que o comparador morde (conjunto com pino a mais falha).
+Assim, acrescentar um pino no firmware sem atualizar o editor quebra a suíte
+em vez de deixar o editor desatualizado em silêncio. A linha de CA/§6 que
+citava `enderecos.test.ts` fica substituída por este teste.
+
+### Nota para as frentes paralelas da implementação
+`frontend/src/ladder/` é onde tudo converge e é o ponto natural de conflito.
+Regra para `tasks.md`: **cada arquivo tem uma única frente dona por fatia**;
+frentes de desenho (`components/ladder/`) consomem o núcleo por contrato
+(§5) e não o editam; mudanças no contrato do núcleo são feitas pela frente
+núcleo **antes** de as frentes de desenho começarem a fatia.
+
+### Limitação declarada (Q-6)
+A recusa de bobina simples duplicada entra, no TCC, como **limitação
+declarada**, ao lado da cobertura parcial da IEC 61131-3: desvio consciente
+da prática de mercado ("vale a última escrita"), por motivo didático.
