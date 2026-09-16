@@ -1,0 +1,3 @@
+/in/syntax_error.st:3-5..4-9: error: unknown error in variable(s) declaration.
+
+1 error(s) found. Bailing out!

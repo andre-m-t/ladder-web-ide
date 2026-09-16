@@ -136,6 +136,8 @@ REQUIRED_FILES=(
   "backend/firmware/esp32-template/host/Makefile"
   "backend/app/services/matiec.py"
   "backend/app/services/esp32.py"
+  "backend/app/services/pipeline.py"
+  "backend/app/api/compile.py"
   "backend/app/main.py"
   "frontend/src/lib/api.ts"
 )

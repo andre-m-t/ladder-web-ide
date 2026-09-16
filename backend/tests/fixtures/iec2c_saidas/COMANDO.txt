@@ -1,0 +1,23 @@
+Fixtures de saida real do iec2c para ST invalido, capturadas antes de escrever
+o parser (spec 001, S1), conforme exigido pelo plano de implementacao.
+
+Comando usado para cada caso (rodado dentro da imagem do backend):
+
+  docker run --rm -v "$(pwd)/tests/fixtures/iec2c_saidas/entrada:/in" \
+             -v "/tmp/iec2c_out:/out" ladderflow-backend:dev sh -c \
+    'iec2c -f -I /usr/local/share/matiec/lib -T /out/<caso> /in/<caso>.st \
+       >/out/<caso>/stdout.txt 2>/out/<caso>/stderr.txt; echo $? > /out/<caso>/rc.txt'
+
+Em todos os tres casos capturados, o iec2c escreve exclusivamente em stderr
+(stdout fica vazio) e devolve rc=1. O formato observado da mensagem de erro e:
+
+  <arquivo>:<linha_ini>-<col_ini>..<linha_fim>-<col_fim>: error: <mensagem>
+
+seguido, em geral, de uma linha em branco e "N error(s) found. Bailing out!" —
+linha que o parser ignora por nao casar com o formato acima (comportamento
+best-effort: nao reconhecida, nao quebra, permanece em `raw`).
+
+Casos capturados:
+- erro_sintaxe: VAR sem ';' apos o tipo (erro de sintaxe pura).
+- variavel_nao_declarada: atribuicao a variavel nunca declarada no bloco VAR.
+- tipo_incompativel: atribuicao BOOL := INT (incompatibilidade de tipos).

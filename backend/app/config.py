@@ -26,6 +26,19 @@ class Settings(BaseSettings):
     esp_project_template: str = "/app/firmware/esp32-template"
     esp_build_root: str = "/var/cache/ladderflow/esp-build"
 
+    # Contrato de POST /compile (spec 001, Q-2, Q-3 e Q-6).
+    # Q-2 (decidida 2026-09-16): 256 KiB. ST é texto; um programa dentro do
+    # escopo da PoC gera poucos KB — duas ordens de grandeza de folga. O
+    # envelope de erro (Q-3) já prevê `payload_too_large` para quem passar
+    # disso, então o valor também funciona como limite de abuso, não só de uso
+    # normal.
+    compile_max_body_bytes: int = 262_144
+    # Timeouts por etapa (Q-6): iec2c é rápido; idf.py build pode ser lento no
+    # build frio (Q-4 mediu até 66 s) — 300 s dá folga generosa sem deixar uma
+    # etapa travada seguindo para sempre.
+    compile_timeout_matiec_s: float = 30.0
+    compile_timeout_esp32_s: float = 300.0
+
     log_level: str = "info"
 
     @property

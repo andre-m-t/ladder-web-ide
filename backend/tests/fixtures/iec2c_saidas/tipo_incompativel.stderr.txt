@@ -1,0 +1,2 @@
+/in/type_mismatch.st:6-3..6-8: error: Incompatible data types for ':=' operation.
+1 error(s) found. Bailing out!

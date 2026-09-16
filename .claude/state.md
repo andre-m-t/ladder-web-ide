@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (S1 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -36,7 +36,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F1 | Ambiente containerizado | servidor | ✅ |
 | F2 | Adaptador MATIEC (ST → C) | servidor | ✅ |
 | F3 | Toolchain ESP32 + runtime hospedeiro | servidor + dispositivo | 🟡 |
-| F4 | Endpoint de compilação | servidor | ⬜ |
+| F4 | Endpoint de compilação | servidor | ✅ |
 | F5 | Gravação via navegador | navegador | ⬜ |
 | F6 | Tela mínima (fatia vertical) | navegador | 🔒 |
 | F7 | Editor Ladder visual | navegador | ⬜ |
@@ -45,7 +45,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
 
-**Leitura rápida:** a metade servidor está pronta e a metade navegador não existe. O projeto compila firmware, mas ainda não tem interface nem nunca gravou um dispositivo físico.
+**Leitura rápida:** a metade servidor tem agora uma porta HTTP — `POST /compile` compila ST até `.bin` de ponta a ponta — mas a metade navegador ainda não existe. O projeto compila firmware por API, mas ainda não tem interface nem nunca gravou um dispositivo físico.
 
 ---
 
@@ -117,23 +117,32 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 
 ---
 
-## F4 — Endpoint de compilação ⬜
+## F4 — Endpoint de compilação ✅
 
 **Camada:** servidor · **Autoral:** sim
 
-`POST /compile` recebe texto ST e devolve o binário ou erro estruturado. É a porta de entrada para o motor que já funciona — **próxima feature a implementar**.
+`POST /compile` recebe texto ST e devolve o binário ou erro estruturado. É a porta de entrada para o motor que já funciona.
 
 **Ferramentas:** FastAPI (já instalado). Nenhuma dependência nova.
 
 **Decisões já tomadas**
 - **Q-6** — compilação **síncrona**. Bloqueia até binário ou erro, com timeout por etapa. Viável porque o build incremental leva 11–13 s (build frio: 66 s). Migração para `202 + job_id` fica aditiva se a medição piorar.
-- **Q-3** — envelope de erro estável com `stage`, `code`, `message`, `diagnostics[]` e `raw`. O `diagnostics` é *best-effort*; `raw` sempre carrega a saída bruta íntegra.
+- **Q-3** — envelope de erro estável com `stage`, `code`, `message`, `diagnostics[]` e `raw`. O `diagnostics` é *best-effort*; `raw` sempre carrega a saída bruta íntegra. Revisão aditiva de 2026-09-16: `stage` ganha o valor `"request"`, usado só com `code: "payload_too_large"`, porque esse erro acontece antes de qualquer etapa de compilação.
+- **Q-2** (decidida 2026-09-16) — limite do corpo de `POST /compile`: **256 KiB (262 144 bytes)**, conferido por `Content-Length` e pelo corpo lido, antes de compilar. Justificativa: ST é texto, um programa da PoC gera poucos KB, o envelope Q-3 já previa `payload_too_large`, e o valor dá duas ordens de grandeza de folga funcionando também como limite de abuso.
+
+**Concluído (S1 da spec 001, 2026-09-16)**
+- `backend/app/services/matiec.py`: `parse_diagnostics(stdout, stderr) -> list[Diagnostic]`, best-effort sobre o formato real do `iec2c` (`arquivo:linha-col..linha-col: severidade: mensagem`), capturado em `backend/tests/fixtures/iec2c_saidas/` **antes** de escrever a regex
+- `backend/app/services/pipeline.py` (novo): `compilar(source) -> ResultadoCompilacao | FalhaCompilacao`, encadeia matiec → esp32 com timeout por etapa (config), `threading.Lock` de módulo serializando o diretório de trabalho compartilhado, mapeia toda exceção dos dois adaptadores para o envelope Q-3, devolve `build_dir` para a S2 usar
+- `backend/app/api/compile.py` (novo): `POST /compile`, validação de tamanho (`checar_tamanho_corpo`) e mapeamento de erro (`mapear_falha`) desenhados como peças reutilizáveis pela S2 (`POST /compile/pacote`); registrado em `main.py` com *exception handler* dedicado para o envelope não virar `{"detail": ...}`
+- `backend/tests/test_compile_api.py` (novo, 15 testes): contrato rápido com `monkeypatch` nos adaptadores, teste real do `iec2c` com ST inválido, teste `slow` ponta a ponta com `blink.st`, testes do parser sobre as fixtures
+- Suíte completa (50 testes, incluindo `slow`) verde na imagem; `ruff check`/`ruff format --check` limpos nos arquivos tocados
+- Curl de aceitação contra o stack em `BACKEND_PORT=18000`: `blink.st` → `.bin` de 197 088 bytes; ST inválido → `422` com `stage:"matiec"` e `diagnostics` não vazio; corpo de 300 KB → `413` com `stage:"request"`
+- `scripts/build-deposito.sh --verificar`: `backend/app/api/compile.py` e `backend/app/services/pipeline.py` no manifesto, exit 0
+- `docs/specs/001-fatia-vertical-minima/plan.md` e `tasks.md` preenchidos (Fatia 1 = S1 concluída; Fatias 2 e 3 = S2/S3, ainda não iniciadas)
 
 **Falta**
-- Implementar o endpoint encadeando `matiec.py` → `esp32.py`
-- Parser de diagnóstico do `iec2c` (linha/coluna/severidade)
-- Testes de contrato
-- 🟡 **Q-2 em aberto:** limite de tamanho do corpo da requisição. Decidir em `/planejar 001`.
+- `POST /compile/pacote` (JSON com as 3 imagens de flash + offsets) — S2
+- 🟡 **Pré-requisito para VPS, ainda fora de escopo (ver §7 da spec 001):** autenticação, *rate limiting*, fila de compilação se houver concorrência real (hoje só há exclusão mútua via `threading.Lock`, suficiente para um usuário por vez), e HTTPS na borda — nenhum implementado, todos necessários antes de expor o serviço fora de `localhost`.
 
 ---
 
@@ -257,7 +266,6 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 | ID | Questão | Impacto | Quando decidir |
 |---|---|---|---|
-| Q-2 | Limite de tamanho do corpo em `POST /compile` | Contrato da API | `/planejar 001` |
 | — | Biblioteca de canvas do editor Ladder | F7 inteira | *Spike* antes do Sprint do editor |
 | — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar |
 
@@ -265,11 +273,11 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. Decidir **Q-2** e rodar `/planejar 001`
-2. Implementar **F4** (`POST /compile`)
-3. Implementar **F5 + F6** — a parte de navegador; a afirmação de viabilidade só fecha com o hardware (ver abaixo)
-4. *Spike* de biblioteca de canvas → **F7** → **F8**
-5. **F9** e início da coleta sistemática de métricas (**F10**)
+1. **S2** (servidor) e **S3** (navegador) da spec 001, em paralelo, sobre o contrato fixado em `docs/specs/001-fatia-vertical-minima/plan.md`:
+   - S2: `esp32.flash_manifest`, `POST /compile/pacote`, validação de gravação real via `esptool`/QEMU por socket
+   - S3: `gravador.ts` sobre `esptool-js`, tela mínima (F5 + F6) — a afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
+2. *Spike* de biblioteca de canvas → **F7** → **F8**
+3. **F9** e início da coleta sistemática de métricas (**F10**)
 
 ## Bloqueado aguardando hardware
 
@@ -293,3 +301,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-15 | Painel de estado | Este documento criado como `state.md`; atualização tornada obrigatória em `CLAUDE.md`, `docs/workflow.md` e nos comandos do SDD |
 | 2026-09-15 | Validação sem hardware | Runtime autoral passa a **executar**: camada de abstração de I/O com stub, runtime no host, boot verificado em QEMU e arcabouço de teste diferencial pronto para F9. Nada do que exige ESP32 físico foi fechado — ver `docs/validacao/limites-da-validacao-sem-hardware.md` |
 | 2026-09-16 | Correção do painel e pendências de revisão | Gravação física saiu de "Próximos passos" para "Bloqueado aguardando hardware" (não há ESP32); `rsync`/`zip` na imagem — `test_deposito.py` deixa de pular (4 passed); aviso de imagem velha na Regra 5 do `CLAUDE.md`; critério "o programa, não o projeto" no cabeçalho do `build-deposito.sh`; invariante não testada de `plc_glue_scan` comentada |
+| 2026-09-16 | S1 da spec 001 — `POST /compile` | F4 fechada: parser de diagnóstico do `iec2c` (fixtures reais capturadas antes do parser), `pipeline.py` encadeando matiec→esp32 com lock e timeouts, endpoint com envelope Q-3 e limite de corpo (Q-2 decidida, 256 KiB); 50 testes verdes (com `slow`), curl de aceitação confirmado (`.bin` de 197 088 bytes, erro 422 com diagnostics, 413 por tamanho); `plan.md`/`tasks.md` da spec 001 preenchidos; manifesto do depósito atualizado |

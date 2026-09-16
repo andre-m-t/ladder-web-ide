@@ -145,10 +145,36 @@ decisão e justificativa; não apague o enunciado.
 
 ### Q-2 — Limite de tamanho da requisição de compilação
 - **Enunciado:** Limite de tamanho do corpo da requisição de compilação (RF-7): valor?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-16
+- **Decisão:** **256 KiB (262 144 bytes)**, conferido pelo cabeçalho
+  `Content-Length` e também pelo tamanho efetivo do corpo lido, antes de
+  qualquer chamada ao `iec2c`. Acima do limite, `POST /compile` responde
+  `413` com o envelope de erro (ver revisão de Q-3 abaixo, `stage: "request"`).
+- **Justificativa:** código ST é texto puro, e um programa dentro do escopo
+  desta PoC — a fatia mínima, sem o editor visual — gera poucos KB (`blink.st`,
+  o ST canônico de Q-1, tem menos de 1 KB). O envelope de erro estável de Q-3
+  já prevê `payload_too_large`, então rejeitar cedo não exige contrato novo.
+  256 KiB dá duas ordens de grandeza de folga sobre o uso esperado e ainda
+  funciona como limite de abuso — grande o bastante para não incomodar um
+  programa legítimo, pequeno o bastante para não deixar o servidor gastar
+  ciclos de CPU compilando lixo enviado de propósito.
+
+### Q-3 — Revisão aditiva (2026-09-16): `stage: "request"`
+- **Contexto:** implementada Q-2 (limite de 256 KiB), ficou claro que
+  `payload_too_large` acontece **antes** de qualquer etapa externa (`matiec`
+  ou `esp32`) ser sequer iniciada — o corpo nem chega a ser compilado.
+- **Decisão:** o envelope Q-3 ganha um terceiro valor possível para `stage`:
+  `"request"`, usado exclusivamente quando `code = "payload_too_large"`. Os
+  valores `"matiec"` e `"esp32"` continuam reservados às duas etapas externas
+  de compilação, sem mudança de sentido.
+- **Justificativa:** manter `stage` só com `"matiec"`/`"esp32"` forçaria a
+  escolher um dos dois arbitrariamente para um erro que não aconteceu em
+  nenhuma etapa de compilação — o que confundiria quem lê a resposta tentando
+  decidir se o problema foi no ST ou na toolchain. `"request"` nomeia
+  corretamente a camada onde o erro de fato ocorreu: a validação da própria
+  requisição. Esta é uma revisão aditiva e datada — o enunciado e a decisão
+  original de Q-3 (2026-09-10) permanecem acima, inalterados.
 
 ### Q-3 — Formato da resposta de erro estruturada
 - **Enunciado:** Formato exato da resposta de erro estruturada (RF-8): campos, códigos.

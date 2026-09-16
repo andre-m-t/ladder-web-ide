@@ -15,6 +15,7 @@ spec 001 vier a definir.
 """
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,20 @@ ST_FILENAME = "plc.st"
 
 # Extensões geradas pelo iec2c que interessam ao chamador.
 GENERATED_SUFFIXES = (".c", ".h")
+
+# Formato observado da mensagem de erro do iec2c com `-f` (localização
+# completa do token), capturado em `backend/tests/fixtures/iec2c_saidas/`:
+#
+#   <arquivo>:<linha_ini>-<col_ini>..<linha_fim>-<col_fim>: <severidade>: <mensagem>
+#
+# Ex.: "/in/plc.st:5-3..5-3: error: invalid variable before ':=' ...". O
+# `file` é não-guloso porque a mensagem pode conter ':' (ex.: "':='"); só a
+# âncora numérica fixa o fim do nome do arquivo. Linha e coluna reportadas são
+# as de início do token — o fim não tem campo próprio no envelope Q-3.
+_DIAG_RE = re.compile(
+    r"^(?P<file>.+?):(?P<line>\d+)-(?P<column>\d+)\.\.\d+-\d+:\s*"
+    r"(?P<severity>error|warning)\s*:\s*(?P<message>.+)$"
+)
 
 
 class MatiecError(RuntimeError):
@@ -49,6 +64,21 @@ class Iec2cStatus:
     lib_dir: str
     # Saída de `iec2c -v`, ex.: "matiec version 0.1".
     version: str | None
+
+
+@dataclass(frozen=True)
+class Diagnostic:
+    """Um diagnóstico extraído da saída do `iec2c` (envelope Q-3 da spec 001).
+
+    `line`/`column` podem ser `None` quando a mensagem não casa com o formato
+    reconhecido — o diagnóstico ainda assim é reportado, só sem localização.
+    """
+
+    file: str
+    line: int | None
+    column: int | None
+    severity: str
+    message: str
 
 
 @dataclass(frozen=True)
@@ -149,6 +179,35 @@ def compile_st_to_c(source: str, *, out_dir: Path, timeout: float = 30.0) -> Com
         output_dir=out_dir,
         files=_generated_files(out_dir),
     )
+
+
+def parse_diagnostics(stdout: str, stderr: str) -> list[Diagnostic]:
+    """Extrai diagnósticos estruturados da saída do `iec2c` (best-effort).
+
+    Best-effort quer dizer: nunca levanta exceção e uma lista vazia é um
+    resultado aceitável. O `iec2c` escreve os erros em `stderr` (confirmado
+    nas fixtures de `backend/tests/fixtures/iec2c_saidas/`), mas `stdout`
+    também é varrido pelo mesmo motivo — não custa e não depende de premissa
+    sobre qual descritor a ferramenta usa em toda versão. Linha que não casa
+    com o formato reconhecido é ignorada; o texto integral continua disponível
+    em `raw`, então nada se perde.
+    """
+    diagnostics: list[Diagnostic] = []
+    for stream in (stdout, stderr):
+        for line in stream.splitlines():
+            match = _DIAG_RE.match(line.strip())
+            if match is None:
+                continue
+            diagnostics.append(
+                Diagnostic(
+                    file=match.group("file"),
+                    line=int(match.group("line")),
+                    column=int(match.group("column")),
+                    severity=match.group("severity"),
+                    message=match.group("message").strip(),
+                )
+            )
+    return diagnostics
 
 
 def _generated_files(out_dir: Path) -> list[str]:
