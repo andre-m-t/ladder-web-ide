@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (S3 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 em rascunho + spike S4 concluído) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -213,19 +213,31 @@ Interface deliberadamente crua: caixa de texto para colar ST, botão compilar, b
 
 **Camada:** navegador · **Autoral:** sim · **Maior feature do projeto**
 
-Construção de diagramas de contatos e bobinas em grade.
+**Spec em rascunho:** [`docs/specs/002-editor-ladder/spec.md`](../docs/specs/002-editor-ladder/spec.md)
+(Fase 1 do SDD concluída em 2026-09-16, aguardando aprovação do autor;
+`plan.md`/`tasks.md` são placeholders). Status desta feature continua ⬜ — nada
+foi implementado ainda.
 
-**Ferramenta:** decisão em aberto — exige *spike* antes de escolher
+Construção de diagramas de contatos e bobinas em grade. A spec 002 cobre
+contato NA, contato NF, bobina simples, bobina SET/RESET, ramo paralelo (OU) e
+contador crescente — escopo motivado pelas três fixtures de referência do
+projeto (`blink.st`, `io_espelho.st`, `minimal.st`); Q-1, Q-2, Q-4 e Q-6 decididas em 2026-09-16; Q-3 e Q-5
+ficam para o plano.
 
-| Opção | A favor | Contra |
+**Ferramenta (decidida no spike S4, 2026-09-16):** **SVG puro renderizado pelo React**, sem dependência nova. Konva prototipado e medido; React Flow descartado por argumento (grafo de posicionamento livre × grade rígida). Registro com medições em `docs/specs/002-editor-ladder/spike-canvas.md`; protótipos em `spikes/` (fora do depósito).
+
+| Critério | SVG puro | Konva |
 |---|---|---|
-| SVG puro + modelo de grade próprio | Modelo de dados limpo, casa com a serialização | Mais código inicial |
-| Konva | Controle fino de canvas, ajuda no arrastar/soltar | A grade continua sendo responsabilidade nossa |
-| React Flow | Início mais rápido | Feito para grafos de posicionamento livre; Ladder é grade rígida — atrito crescente |
+| Linhas autorais | 213 | 325 |
+| Teste de UI em jsdom | sem mock | só com `canvas` nativo |
+| Teclado / leitor de tela | por célula, 12 linhas | cursor lógico único; células invisíveis |
+| Bundle gzip | 71 kB | 174 kB |
+
+**Modelo de dados (spike S4):** grade `(linha, coluna)` por rung, ramos como intervalo de colunas, elementos em união discriminada, variável com endereço opcional; validação em funções puras com seis códigos de problema; as três fixtures passam (19 testes em `spikes/modelo/`). **Achado medido:** blink em Ladder com CTU não é equivalente ciclo a ciclo a `blink.st` (CTU conta borda; 1 divergência em 50 ciclos) — aceito na Q-4 da spec 002.
 
 **Restrição de PI:** não reaproveitar código de `cdilga/ladder-logic-editor`, `hiperiondev/*` ou correlatos. Referência conceitual é legítima; cópia de arquivos transformaria o projeto em obra derivada e esvaziaria a originalidade do depósito.
 
-**Falta:** *spike* de biblioteca, modelo de dados da grade, renderização, edição, validação de posições.
+**Falta:** decidir Q-3 e Q-5 (no plano), aprovação da spec 002, `plan.md`/`tasks.md`, migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
 
 ---
 
@@ -301,15 +313,16 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 | ID | Questão | Impacto | Quando decidir |
 |---|---|---|---|
-| — | Biblioteca de canvas do editor Ladder | F7 inteira | *Spike* antes do Sprint do editor |
-| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar |
+| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora; escopo de F8/F9 continua em aberto |
+| Q-3 (spec 002) | Há limite de colunas por degrau e de degraus por diagrama? Quais valores? | F7 — modelo de dados da grade | Plano da spec 002 |
+| Q-5 (spec 002) | O contador crescente tem entrada de reset explícita no diagrama? O valor/estado de contagem fica disponível para outras condições? | F7 — elemento contador | Plano da spec 002 |
 
 ---
 
 ## Próximos passos, em ordem
 
 1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-2. *Spike* de biblioteca de canvas → **F7** → **F8**
+2. Aprovar a spec 002 → `/planejar 002` (Q-3, Q-5; modelo e SVG puro já decididos pelo spike S4) → **F7** → **F8**
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
 ## Bloqueado aguardando hardware
@@ -337,3 +350,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | S1 da spec 001 — `POST /compile` | F4 fechada: parser de diagnóstico do `iec2c` (fixtures reais capturadas antes do parser), `pipeline.py` encadeando matiec→esp32 com lock e timeouts, endpoint com envelope Q-3 e limite de corpo (Q-2 decidida, 256 KiB); 50 testes verdes (com `slow`), curl de aceitação confirmado (`.bin` de 197 088 bytes, erro 422 com diagnostics, 413 por tamanho); `plan.md`/`tasks.md` da spec 001 preenchidos; manifesto do depósito atualizado |
 | 2026-09-16 | S2 da spec 001 — gravação, camada servidor | `esp32.flash_manifest` com offsets lidos do `flasher_args.json`; `POST /compile/pacote`; leitura do binário e do manifesto dentro da trava do pipeline; pacote da API gravado por `esptool` sobre socket no QEMU, reiniciado e com o laço progredindo (sem plano B); 63 testes verdes (com `slow`); Web Serial passa a ser a única camada da gravação sem cobertura |
 | 2026-09-16 | S3 da spec 001 — gravação no navegador e tela mínima | F6 fechada e F5 com a camada navegador pronta: `gravador.ts` sobre esptool-js com erros classificados, tela crua com painel do envelope Q-3; 10 testes vitest; verificação em Chromium headless (compilar, ST inválido, Gravar sem dispositivo); caminho do diretório temporário deixa de vazar em `diagnostics[].file`; testes do front-end excluídos do depósito; Vitest/jsdom/Testing Library em `THIRD_PARTY.md` |
+| 2026-09-16 | Fase 1 (Especificar) da spec 002 — Editor Ladder | `docs/specs/002-editor-ladder/spec.md` criado: subconjunto IEC 61131-3 do editor (NA, NF, bobina simples, SET/RESET, ramo paralelo, contador crescente), motivado pelas três fixtures de referência (`blink.st`, `io_espelho.st`, `minimal.st`); seis questões em aberto (Q-1 a Q-6); `plan.md`/`tasks.md` como placeholders. Nenhum código escrito — F7 continua ⬜, aguardando aprovação do autor para liberar a Fase 2 |
+| 2026-09-16 | Spike S4 da spec 002 — canvas e modelo de dados | Protótipos SVG puro e Konva sobre o mesmo contrato de modelo, medidos pelos mesmos critérios: **SVG puro venceu** em todos (213 × 325 linhas, jsdom sem mock, teclado por célula, 71 × 174 kB gzip, nenhuma dependência nova); React Flow descartado por argumento. Modelo de grade validado nas três fixtures (19 testes). Blink em Ladder com CTU medido no `plc_host_runner`: 1 divergência em 50 ciclos, por construção. Q-1, Q-2, Q-4, Q-6 da spec 002 decididas. Registro em `spike-canvas.md`; protótipos em `spikes/`, fora do depósito (`--verificar` ok) |
