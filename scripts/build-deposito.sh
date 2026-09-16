@@ -12,6 +12,33 @@
 # projeto evoluir. Os EXCLUDES servem apenas como defesa em profundidade — quem
 # de fato barra material indevido é a auditoria (REQUIRED_FILES/FORBIDDEN_*).
 #
+# O que entra, e por quê
+# -----------------------
+# O depósito é do PROGRAMA DE COMPUTADOR, não do projeto. Entram o código-fonte
+# autoral que compõe o software executável (frontend/src, backend/app, e o
+# firmware/runtime em backend/firmware — inclusive host/Makefile, que compila o
+# MESMO runtime para rodar no host em vez do ESP32: é outro alvo de build do
+# mesmo programa, não teste) e os arquivos de build/configuração necessários
+# para reproduzi-lo (os *.json/*.toml/Dockerfile/docker-compose.yml listados em
+# INCLUDE_FILES). README.md e THIRD_PARTY.md também entram, mas não como código:
+# o primeiro documenta como reproduzir o executável a partir do pacote, e o
+# segundo é a identificação de componentes de terceiro exigida pelo INPI —
+# ambos acompanham o programa por norma do próprio depósito, não por serem
+# software.
+#
+# Não entram specs, documentação de método, testes automatizados, scripts de
+# apoio (como este), código gerado (saída do iec2c/MATIEC, sdkconfig e demais
+# artefatos de build do ESP-IDF) nem código de terceiros — este só é
+# identificado em THIRD_PARTY.md, nunca copiado para dentro do pacote.
+#
+# Regra para arquivo novo: "faz parte do software entregue e foi escrito por
+# nós?" Se sim, entra na allowlist (INCLUDE_DIRS/INCLUDE_FILES) e, se for
+# crítico para o programa compilar/rodar, também em REQUIRED_FILES. Se não —
+# spec, doc, teste, script — fica de fora, mesmo que more dentro de um
+# INCLUDE_DIR. Hoje não há teste nem script dentro de backend/firmware; se um
+# dia entrar, precisa de EXCLUDE próprio ou mudar de lugar, porque a allowlist
+# atual o levaria junto por estar sob o mesmo diretório.
+#
 # Uso:
 #   build-deposito.sh                 # monta, audita e gera o .zip + .sha256
 #   build-deposito.sh --verificar     # monta, audita e sai sem gerar o .zip

@@ -66,4 +66,14 @@ docker run --rm -v "$(pwd):/repo" -w /repo/backend ladderflow-backend:dev \
   python -m pytest -m "not slow" -q
 ```
 
-O host não tem `python` nem `pytest` instalados — isso é proposital.
+Atenção: o bind mount em `/repo` **não sobrepõe** `/app`, e
+`ESP_PROJECT_TEMPLATE` aponta para o firmware copiado para dentro da imagem em
+tempo de build. Qualquer mudança em `backend/firmware/**` ou no
+`backend/Dockerfile` exige `docker build -t ladderflow-backend:dev backend/`
+antes de rodar os testes — senão `test_esp32.py` e `test_qemu.py` compilam o
+firmware velho embutido na imagem, sem acusar erro nenhum. Detalhe em
+`docs/validacao/limites-da-validacao-sem-hardware.md`, seção "Armadilha de
+reprodutibilidade".
+
+O host não tem `python` nem `pytest` instalados — isso é proposital; o build da
+imagem, esse sim, roda no host quando o firmware muda.

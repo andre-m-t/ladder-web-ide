@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-15 · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -92,7 +92,7 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 
 **Ferramentas:** ESP-IDF v5.4.1 (Apache-2.0); headers do MATIEC linkados no firmware (LGPL-3.0-or-later)
 
-> ⚠️ **Ao mexer em `backend/firmware/**`, reconstrua a imagem antes de testar:** `docker build -t ladderflow-backend:dev backend/`. O `ESP_PROJECT_TEMPLATE` aponta para a cópia dentro da imagem (`/app`), não para o *bind mount* (`/repo`) — sem o rebuild, `test_esp32.py` e `test_qemu.py` medem firmware antigo **sem acusar erro**. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`.
+> ⚠️ **Ao mexer em `backend/firmware/**` ou no `backend/Dockerfile`, reconstrua a imagem antes de testar:** `docker build -t ladderflow-backend:dev backend/`. O `ESP_PROJECT_TEMPLATE` aponta para a cópia dentro da imagem (`/app`), não para o *bind mount* (`/repo`) — sem o rebuild, `test_esp32.py` e `test_qemu.py` medem firmware antigo **sem acusar erro**. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`. O aviso também está na Regra 5 do `CLAUDE.md`, onde se lê antes de rodar testes.
 
 **Concluído**
 - `backend/app/services/esp32.py` — segunda fronteira de subprocesso
@@ -104,10 +104,11 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 - `-Werror=all` rebaixado seletivamente, por aviso nomeado, apenas para código gerado e headers de terceiros
 - **Camada de abstração de I/O** (`plc_hal.h`) com duas implementações atrás da mesma interface — ESP32 (`plc_hal_esp32.c`) e stub em memória (`plc_hal_stub.c`), escolhidas em tempo de compilação, sem `#ifdef` na lógica
 - **Runtime executável no host**: `plc_host_runner` religa o C do `iec2c` ao runtime autoral a cada execução; `test_plc_runtime_host.py` verifica a ordem lê → resolve → escreve, a alternância do `blink.st` e o mapeamento localizado ↔ `plc_io_pins`
+- Invariante de imagem de processo (uma leitura de pino por ciclo, só em `read_inputs()`; `write_outputs()` nunca consulta entrada) registrada em comentário sobre `plc_glue_scan`, marcada como propriedade estrutural **sem teste que a derrube por inteiro**
 - **Boot verificado em QEMU** (`test_qemu.py`, `slow`): sem *panic*, sem *bootloop*, e heartbeat `scan ciclo=<N>` crescente — a primeira evidência de que o firmware **executa**
 
 **Falta**
-- 🔴 **Gravação em ESP32 físico.** Continua pendente, e com ela tudo o que exige o dispositivo: gravação via Web Serial ponta a ponta, tempo de ciclo real e comportamento dos *strapping pins* no boot. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`.
+- 🔴 **Gravação em ESP32 físico — bloqueada: não há ESP32 disponível.** Ver "Bloqueado aguardando hardware". Pendente, e com ela tudo o que exige o dispositivo: gravação via Web Serial ponta a ponta, tempo de ciclo real e comportamento dos *strapping pins* no boot. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`.
 - Procedimento documentado em `docs/validacao/ca-4-gravacao-esp32.md`, com offsets `0x1000`/`0x8000`/`0x10000` conferidos contra o `flasher_args.json` gerado — **pendente de execução**
 
 > **Mudança de status (2026-09-15).** Até esta rodada, "o laço de varredura funciona" não tinha nenhuma evidência: o firmware compilava e nunca havia executado. Agora tem, por dois caminhos independentes e sem hardware — o runtime roda no host com I/O em memória, e o firmware real dá boot em QEMU com o laço progredindo. O que **não** mudou é o risco de integração com o dispositivo físico, que segue inteiro.
@@ -235,7 +236,8 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 - `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (14 fontes de firmware + adaptadores + `api.ts`) e listas de artefatos proibidos
 - Modo `--verificar` para CI
 - `verificar_origem` inspeciona a **árvore de origem**, não o staging — evita que os `EXCLUDES` do rsync limpem contaminação em silêncio e produzam pacote verde indevidamente
-- Quatro testes em `test_deposito.py`, incluindo dois negativos que provam que o guarda morde
+- Quatro testes em `test_deposito.py`, incluindo dois negativos que provam que o guarda morde. **Desde 2026-09-16 eles rodam na imagem**: `rsync` e `zip` passaram a ser instalados no `Dockerfile` (camada de 3,04 MB); antes, pulavam em silêncio pelo `skipif`
+- Critério escrito do que entra no depósito — **o programa, não o projeto** — no cabeçalho de `scripts/build-deposito.sh`, com a regra para arquivo novo
 - `THIRD_PARTY.md` corrigido: headers do MATIEC são **LGPL-3.0-or-later** (não LGPL-2.1) — `iec_types_all.h` declara LGPL-3+ e `iec_std_lib.h` declara LGPL-2+; como o build reúne ambos pelo mesmo `-I`, prevalece a mais restritiva
 - Distinção registrada entre processo separado (sem obra derivada) e linkagem real no firmware (implicação sobre o binário do usuário final, não sobre a plataforma)
 - ESP-IDF registrado como Apache-2.0
@@ -263,12 +265,21 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. **Gravar o `.bin` em ESP32 físico** — executa `docs/validacao/ca-4-gravacao-esp32.md`. Continua sendo o próximo passo, mas o risco que restava é agora o de **integração com o dispositivo**, não o de corretude da lógica (ver F3 e `docs/validacao/limites-da-validacao-sem-hardware.md`)
-2. Decidir **Q-2** e rodar `/planejar 001`
-3. Implementar **F4** (`POST /compile`)
-4. Implementar **F5 + F6** — fecha a fatia vertical e habilita a afirmação de viabilidade
-5. *Spike* de biblioteca de canvas → **F7** → **F8**
-6. **F9** e início da coleta sistemática de métricas (**F10**)
+1. Decidir **Q-2** e rodar `/planejar 001`
+2. Implementar **F4** (`POST /compile`)
+3. Implementar **F5 + F6** — a parte de navegador; a afirmação de viabilidade só fecha com o hardware (ver abaixo)
+4. *Spike* de biblioteca de canvas → **F7** → **F8**
+5. **F9** e início da coleta sistemática de métricas (**F10**)
+
+## Bloqueado aguardando hardware
+
+Não há ESP32 físico disponível. Nada abaixo é executável até haver um; não trate estes itens como próximo passo.
+
+- **Gravar o `.bin` em ESP32 físico** — procedimento pronto em `docs/validacao/ca-4-gravacao-esp32.md`. O risco que resta é o de **integração com o dispositivo**, não o de corretude da lógica (ver F3 e `docs/validacao/limites-da-validacao-sem-hardware.md`)
+- Tempo de ciclo de varredura medido no dispositivo (F10)
+- Comportamento dos *strapping pins* no boot
+- **CA-4** pelo navegador — depende também de F5
+- Taxa de sucesso de gravação em N tentativas e tempo edição → dispositivo operante (F10)
 
 ---
 
@@ -281,3 +292,4 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 | 2026-09-15 | Conformidade e pinagem | Auditoria de depósito com abort; `%IX0.1` → GPIO18; licenças corrigidas (LGPL-3.0-or-later); CA-4 documentado; integrado à `main` |
 | 2026-09-15 | Painel de estado | Este documento criado como `state.md`; atualização tornada obrigatória em `CLAUDE.md`, `docs/workflow.md` e nos comandos do SDD |
 | 2026-09-15 | Validação sem hardware | Runtime autoral passa a **executar**: camada de abstração de I/O com stub, runtime no host, boot verificado em QEMU e arcabouço de teste diferencial pronto para F9. Nada do que exige ESP32 físico foi fechado — ver `docs/validacao/limites-da-validacao-sem-hardware.md` |
+| 2026-09-16 | Correção do painel e pendências de revisão | Gravação física saiu de "Próximos passos" para "Bloqueado aguardando hardware" (não há ESP32); `rsync`/`zip` na imagem — `test_deposito.py` deixa de pular (4 passed); aviso de imagem velha na Regra 5 do `CLAUDE.md`; critério "o programa, não o projeto" no cabeçalho do `build-deposito.sh`; invariante não testada de `plc_glue_scan` comentada |

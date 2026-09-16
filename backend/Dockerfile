@@ -77,6 +77,13 @@ RUN mkdir -p "$ESP_BUILD_ROOT"
 RUN source /opt/esp/idf/export.sh > /dev/null \
     && python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
 
+# rsync e zip: dependencias de scripts/build-deposito.sh, a guarda do deposito
+# no INPI. Sem elas, backend/tests/test_deposito.py pula em silencio (skipif
+# ferramentas_disponiveis) e o controle mais sensivel do projeto fica sem
+# teste no ambiente onde a suite roda.
+RUN apt-get update && apt-get install -y --no-install-recommends rsync zip \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # As dependencias do backend vao para o venv do proprio ESP-IDF — e o

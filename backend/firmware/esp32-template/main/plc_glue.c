@@ -178,6 +178,19 @@ void plc_glue_init(void)
     write_outputs();
 }
 
+/* Invariante de imagem de processo (IEC 61131-3): read_inputs() e o UNICO
+ * ponto de leitura de pino do ciclo, e write_outputs() so le variaveis --
+ * nunca consulta um pino de entrada. Uma mudanca eletrica ocorrida entre as
+ * duas so pode aparecer no ciclo SEGUINTE, nunca no atual.
+ *
+ * Esta propriedade e estrutural (decorre de nao existir outro ponto de
+ * leitura no codigo) e e assumida aqui sem teste que a derrube por inteiro.
+ * backend/tests/test_plc_runtime_host.py conta leituras por ciclo (pega uma
+ * leitura extra ou perdida), mas a docstring por volta da linha 175 desse
+ * arquivo declara explicitamente que a janela entre read_inputs() e
+ * write_outputs() dentro do MESMO ciclo nao e coberta. Quem acrescentar
+ * leitura de pino fora de read_inputs(), ou fizer write_outputs consultar
+ * entrada, quebra esta semantica -- possivelmente sem nenhum teste acusar. */
 void plc_glue_scan(unsigned long tick)
 {
     update_current_time();
