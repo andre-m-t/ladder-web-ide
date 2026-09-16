@@ -82,6 +82,16 @@ vez de árvore série/paralelo em `spikes/modelo/NOTAS.md` §1.
   divergências. O ST derivado do Ladder compila no `iec2c`. Equivalência exata
   exigiria blocos de comparação/aritmética (ADD, GE), fora do modelo atual.
   Afeta a Q-4 da spec 002.
+  - **Revisão aditiva (2026-09-16): o item acima está errado.** A
+    investigação em `spikes/modelo/preset25/` mediu, em 200 ciclos e três
+    padrões de entrada contra o `blink.st` executado (não o gabarito esparso),
+    que a linha "por construção" não se sustenta: com PV=12, RESET do sinal
+    de contagem ao atingir o limite (quebra a grade de paridade das bordas) e
+    alternância do LED pelo limite atrasado 1 ciclo, o Ladder dá **0
+    divergências**. Os números "1 divergência em 50 ciclos" também
+    subestimavam o erro das variantes antigas, que em 200 ciclos chegam a
+    21–22. Nenhum bloco ADD/GE é necessário. Consequência para o modelo: o
+    CTU precisa de **entrada de reset** por caminho de contatos (Q-5).
 - **SET e RESET da mesma variável no mesmo scan se anulam** quando os dois rungs
   leem a variável ao vivo. Comportamento correto de varredura sequencial, não
   bug do runtime; contornado com um rung de "instantâneo". Um toggle com ramo
