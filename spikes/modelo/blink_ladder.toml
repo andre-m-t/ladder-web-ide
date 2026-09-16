@@ -1,0 +1,42 @@
+# Fixture diferencial TEMPORARIA do spike S4 (NAO faz parte do arcabouco
+# oficial em backend/tests/diferencial/fixtures/ -- fica aqui, fora daquele
+# diretorio, para nao contaminar o pacote de testes real do projeto com um
+# artefato de spike). Mesmo formato de backend/tests/diferencial/README.md.
+#
+# Reusa o MESMO gabarito de backend/tests/diferencial/fixtures/blink.toml:
+# a pergunta e "blink_ladder.st bate com os mesmos 5 pontos de verificacao
+# que blink.st bate?". Ver spikes/modelo/NOTAS.md, "Experimento BLINK", para
+# o resultado medido.
+
+st = "blink_ladder.st"
+descricao = """
+ST derivado a mao do Ladder BLINK alternativo (spikes/modelo/fixtures.ts),
+que usa CTU para contar ciclos de varredura. Roda contra o MESMO gabarito de
+blink.toml para medir se e ciclo-a-ciclo equivalente a blink.st.
+"""
+ciclos = 50
+
+[[entradas]]
+de = 1
+ate = 50
+valores = { "%IX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 24
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 25
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 26
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 49
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 50
+valores = { "%QX0.0" = false }
