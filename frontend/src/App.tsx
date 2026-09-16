@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+import EditorLadder from './components/ladder/EditorLadder'
 import EditorST from './components/EditorST'
 import PainelErro from './components/PainelErro'
 import PainelGravacao, { type EstadoGravacao } from './components/PainelGravacao'
@@ -32,7 +33,12 @@ type EstadoSaude =
 /**
  * Tela mínima da fatia vertical (RF-1 a RF-6 da spec 001): ST → compila no
  * servidor → grava no ESP32 pelo navegador via Web Serial. Deliberadamente
- * crua — o editor visual Ladder e o simulador vêm nas specs seguintes.
+ * crua — o simulador vem em specs seguintes.
+ *
+ * Ganhou também o editor visual Ladder (spec 002, tarefa #8): provisório,
+ * exibido acima do fluxo de ST na mesma tela, sem afetar compilação nem
+ * gravação. Os modos Ladder/ST (com alternância e persistência) chegam na
+ * tarefa #12 da spec 002.
  */
 export default function App() {
   const [fonte, setFonte] = useState(BLINK_ST)
@@ -109,6 +115,13 @@ export default function App() {
         <p className="mt-2 text-slate-600">
           Cole um Structured Text, compile no servidor e grave o resultado no ESP32 direto do navegador.
         </p>
+
+        <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold tracking-tight">Editor Ladder</h2>
+          <div className="mt-4">
+            <EditorLadder />
+          </div>
+        </section>
 
         <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <EditorST value={fonte} onChange={setFonte} disabled={compilando} />

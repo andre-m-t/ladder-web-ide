@@ -75,4 +75,11 @@ describe('App', () => {
     expect(screen.getByText(/matiec/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /gravar/i })).toBeDisabled()
   })
+
+  it('mostra o editor Ladder acima do fluxo de ST, na mesma tela (tarefa #8)', async () => {
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: /^Editor Ladder$/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /Degrau 1, coluna 1/ })).toBeInTheDocument()
+  })
 })

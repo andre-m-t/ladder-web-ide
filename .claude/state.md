@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (plano 002 aprovado; tarefas 002 em revisão) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 — Fatia 1 do editor Ladder concluída) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -39,7 +39,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F4 | Endpoint de compilação | servidor | ✅ |
 | F5 | Gravação via navegador | servidor + navegador | 🟡 |
 | F6 | Tela mínima (fatia vertical) | navegador | ✅ |
-| F7 | Editor Ladder visual | navegador | ⬜ |
+| F7 | Editor Ladder visual | navegador | 🟡 |
 | F8 | Serializador Ladder → ST | navegador | 🔒 |
 | F9 | Simulador de ciclo de varredura | navegador | ⬜ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
@@ -209,7 +209,7 @@ Interface deliberadamente crua: caixa de texto para colar ST, botão compilar, b
 
 ---
 
-## F7 — Editor Ladder visual ⬜
+## F7 — Editor Ladder visual 🟡
 
 **Camada:** navegador · **Autoral:** sim · **Maior feature do projeto**
 
@@ -243,9 +243,20 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 
 **Limitação declarada (TCC):** recusa de bobina simples duplicada (Q-6), desvio consciente da prática de mercado, ao lado da cobertura parcial da IEC 61131-3.
 
-**Tarefas (em revisão):** `docs/specs/002-editor-ladder/tasks.md` — 20 tarefas em 4 fatias, com frentes N (núcleo, dona de `ladder/`), D (desenho), T (tela) e B (back-end/depósito) e propriedade de arquivo por fatia.
+**Tarefas (aprovadas 2026-09-16):** `docs/specs/002-editor-ladder/tasks.md` — 20 tarefas em 4 fatias, com frentes N (núcleo, dona de `ladder/`), D (desenho), T (tela) e B (back-end/depósito) e propriedade de arquivo por fatia.
 
-**Falta:** aprovação das tarefas, migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
+**Concluído — Fatia 1 / S5a (tarefas #1–#8, 2026-09-16)**
+- Núcleo `frontend/src/ladder/`: `modelo.ts` (contrato sem CTU, 8 colunas, 2 linhas extras), `enderecos.ts` (4 endereços do `plc_io_map.h`), `fixtures.ts` (`IO_ESPELHO`, `MINIMAL`), `validacao.ts` (seis códigos com severidade; célula vazia na linha 0 conduz), `edicao.ts` (operações puras que recusam com motivo, ids `e<N>`)
+- Desenho `frontend/src/components/ladder/`: `GradeDegrau` (SVG, célula focável com `aria-label`), `Simbolos` (NA, NF, bobina), `Paleta`, `PainelVariaveis`, `EditorLadder` (seleção ferramenta → célula; Esc cancela; remover limpa seleção)
+- `App.tsx`: editor acima da caixa de ST (provisório até os modos da #12)
+- R-3 cumprida: `test_plc_io_map.py` falha se `plc_io_map.h` e `enderecos.ts` divergirem (com dois testes negativos)
+- CA-1, CA-2 e CA-5 verificados por teste de componente (espelho e mínimo construídos só pela UI, iguais às fixtures)
+- Verificação: `tsc` limpo, 69 testes vitest, `vite build` (JS 350 kB / 110 kB gzip), pytest `not slow` 60 passed, `ruff` limpo, `build-deposito.sh --verificar` ok
+- Implementado por frentes paralelas (N, D, T, B) no mesmo checkout, com dono único por arquivo; nenhum conflito
+
+**Pendente de revisão:** recusas de célula aparecem no alerta do painel de variáveis (longe da grade) — reavaliar na #13.
+
+**Falta:** Fatia 2 (#9–#10), Fatia 3 (#11–#14), Fatia 4 (#15–#20); migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
 
 ---
 
@@ -328,7 +339,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 ## Próximos passos, em ordem
 
 1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-2. Aprovar as tarefas 002 → `/implementar 002` (S5a: fatias 1–2; S5b: fatias 3–4) → **F7** → **F8**
+2. `/implementar 002` — Fatia 2 (#9 núcleo → #10 desenho), depois S5b (fatias 3–4) → **F7** → **F8**
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
 ## Bloqueado aguardando hardware
@@ -361,3 +372,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Fechamento do spike S4 e decisões da spec 002 | Rodada do spike commitada e worktrees de agente removidas. Auditoria independente confirmou o agente que caiu por limite de API (19 testes, números do diferencial idênticos). Hipótese do preset investigada com gabarito forte (`blink.st` executado, 200 ciclos, 3 padrões de entrada): o veredito "divergência intrínseca" do agente foi **refutado** — variante com PV=12, realinhamento do sinal de contagem e LED pelo limite atrasado fecha com 0 divergências; a linha anterior deste histórico ("por construção") estava errada. Q-4 revisada para equivalência exata; Q-3, Q-5 e Q-7 (CTU destacável) decididas; Q-6 registrada como desvio deliberado da prática corrente |
 | 2026-09-16 | Spec 002 aprovada e plano 002 | Checklist de revisão da spec percorrido: acrescentados CA-9 (bobina duplicada/aviso SET-RESET) e CA-10 (limites), corrigida contagem de elementos; spec aprovada. `plan.md` escrito com D-1 a D-10, contrato do modelo (CTU com `linhaReset`, `tipo` só `BOOL`, severidade), mapeamento CA → teste e quatro fatias; aguardando aprovação do autor |
 | 2026-09-16 | Plano 002 aprovado e tarefas 002 | Push de `main` (`ce93bce..d983635`). Ressalvas da aprovação registradas no plano como §10 (R-1 aviso no código do elo manual do CA-3; R-2 seleção como decisão de design; R-3 teste de acoplamento endereços ↔ `plc_io_map.h` movido para o pytest, que hoje não existia). `tasks.md`: 20 tarefas, 4 fatias, frentes com dono único de arquivo para evitar conflito em `frontend/src/ladder/`; aguardando aprovação |
+| 2026-09-16 | Fatia 1 da spec 002 (#1–#8) | Editor Ladder mínimo na tela: núcleo puro (modelo, endereços, validação, edição) + SVG (grade, símbolos, paleta, variáveis, editor). `IO_ESPELHO` e `MINIMAL` construíveis pela UI (CA-1, CA-2), recusa de posição inválida visível (CA-5); teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3). 69 testes vitest, 60 pytest, build e depósito verdes. Frentes paralelas sem conflito de arquivo |

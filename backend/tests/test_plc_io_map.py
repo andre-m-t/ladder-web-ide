@@ -6,6 +6,13 @@ de erro que motivou a revisao de 2026-09-15 (%IX0.1: GPIO5 -> GPIO18): pino de
 entrada em posicao perigosa do ESP32, e divergencia entre o cabecalho C e a
 tabela publicada na spec. Nao precisa de container: roda em
 `pytest -m "not slow"`.
+
+Contrato adicional (ressalva R-3 do plano da spec 002, `docs/specs/
+002-editor-ladder/plan.md` §10): este arquivo tambem trava o acoplamento
+entre `plc_io_map.h` e `frontend/src/ladder/enderecos.ts`, o espelho que o
+editor Ladder usa para so oferecer enderecos localizados que o firmware de
+fato mapeia. Ver o comentario junto de `_comparar_enderecos` mais abaixo para
+o motivo detalhado.
 """
 
 import re
@@ -15,6 +22,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HEADER_PATH = REPO_ROOT / "backend/firmware/esp32-template/main/plc_io_map.h"
 SPEC_PATH = REPO_ROOT / "docs/specs/001-fatia-vertical-minima/spec.md"
+FRONTEND_ENDERECOS_PATH = REPO_ROOT / "frontend/src/ladder/enderecos.ts"
 
 # Strapping pins cuja consequencia no reset e perigosa para uma entrada ligada
 # a circuito externo: precisam de um nivel especifico no boot, e um programa
@@ -100,8 +108,7 @@ def _parse_spec_consolidated_table() -> dict[str, int]:
     table_text = text[start:end]
 
     rows = {
-        m.group("address"): int(m.group("gpio"))
-        for m in _SPEC_TABLE_ROW_RE.finditer(table_text)
+        m.group("address"): int(m.group("gpio")) for m in _SPEC_TABLE_ROW_RE.finditer(table_text)
     }
     assert rows, "tabela consolidada da Q-5 nao encontrada ou vazia na spec"
     return rows
@@ -141,12 +148,115 @@ def test_entrada_com_pull_up_nao_esta_em_input_only() -> None:
 
 
 def test_mapa_do_header_bate_com_a_tabela_consolidada_da_spec() -> None:
-    header_map = {
-        _symbol_to_address(entry.variable): entry.gpio for entry in _parse_header()
-    }
+    header_map = {_symbol_to_address(entry.variable): entry.gpio for entry in _parse_header()}
     spec_map = _parse_spec_consolidated_table()
 
     assert header_map == spec_map, (
         "plc_io_map.h divergiu da tabela consolidada de Q-5 em "
         f"{SPEC_PATH}: header={header_map} spec={spec_map}"
     )
+
+
+# Casa as duas listas exportadas por enderecos.ts, capturando o conteudo
+# entre colchetes para depois extrair os literais de string dentro delas --
+# em vez de varrer o arquivo inteiro, o que pegaria qualquer '%IX...' perdido
+# num comentario.
+_TS_ENDERECOS_ARRAY_RE = re.compile(
+    r"export const (?:ENTRADAS_LOCALIZADAS|SAIDAS_LOCALIZADAS)\s*=\s*\[(?P<itens>[^\]]*)\]"
+)
+_TS_ENDERECO_LITERAL_RE = re.compile(r"'(%[IQ]X\d+\.\d+)'")
+
+
+def _parse_frontend_enderecos() -> frozenset[str]:
+    """Extrai os enderecos localizados de ENTRADAS_LOCALIZADAS e
+    SAIDAS_LOCALIZADAS em frontend/src/ladder/enderecos.ts (D-9)."""
+    text = FRONTEND_ENDERECOS_PATH.read_text(encoding="utf-8")
+    enderecos: set[str] = set()
+    for array in _TS_ENDERECOS_ARRAY_RE.finditer(text):
+        enderecos.update(_TS_ENDERECO_LITERAL_RE.findall(array.group("itens")))
+
+    # Nao deixar passar em silencio: se o parser nao achou nada, isso quase
+    # certo significa que o arquivo mudou de formato e o teste ficou cego, e
+    # um teste cego que passa vazio e pior do que nenhum teste (Regra 1 do
+    # CLAUDE.md do projeto vale tambem para os testes que sustentam o R-3).
+    assert enderecos, (
+        "nenhum endereco encontrado em ENTRADAS_LOCALIZADAS/SAIDAS_LOCALIZADAS "
+        f"de {FRONTEND_ENDERECOS_PATH}: o parser deste teste provavelmente "
+        "ficou incompativel com o formato do arquivo -- corrija o parser ou "
+        "confira se as listas nao ficaram vazias por engano"
+    )
+    return frozenset(enderecos)
+
+
+def _comparar_enderecos(
+    do_header: frozenset[str], do_editor: frozenset[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Compara dois conjuntos de enderecos localizados e devolve
+    `(sobrando_no_header, sobrando_no_editor)`: o que existe so de um lado.
+
+    Funcao pura -- nao le arquivo nenhum -- para que o teste negativo abaixo
+    possa provar que o comparador morde nos dois sentidos sem depender do
+    conteudo real do repositorio.
+    """
+    return do_header - do_editor, do_editor - do_header
+
+
+def _mensagem_divergencia(
+    sobrando_no_header: frozenset[str], sobrando_no_editor: frozenset[str]
+) -> str:
+    partes = []
+    if sobrando_no_header:
+        partes.append(
+            "no header (plc_io_map.h) mas ausente(s) de enderecos.ts -- "
+            "atualize ENTRADAS_LOCALIZADAS/SAIDAS_LOCALIZADAS: "
+            f"{sorted(sobrando_no_header)}"
+        )
+    if sobrando_no_editor:
+        partes.append(
+            "em enderecos.ts mas ausente(s) do header (plc_io_map.h) -- "
+            "atualize o firmware ou remova do editor: "
+            f"{sorted(sobrando_no_editor)}"
+        )
+    return "; ".join(partes)
+
+
+# Ressalva R-3 do plano (docs/specs/002-editor-ladder/plan.md §10): o editor
+# Ladder so pode oferecer, no PainelVariaveis, enderecos localizados que o
+# firmware de fato mapeia para um GPIO -- oferecer um endereco a mais aceita
+# um diagrama que so vai falhar na hora de compilar/gravar no ESP32, longe do
+# erro. O inverso tambem importa: um pino novo acrescentado ao firmware (por
+# exemplo, uma terceira entrada) nao pode ficar de fora do editor em silencio,
+# porque isso e regressao de funcionalidade sem nenhum teste acusando. Como
+# nao ha teste hoje ligando front-end e header (a spec 001 so cobre o
+# header x a tabela da propria spec, acima), este teste fecha essa lacuna
+# comparando os dois conjuntos nos dois sentidos.
+def test_enderecos_do_editor_batem_com_plc_io_map() -> None:
+    do_header = frozenset(_symbol_to_address(entry.variable) for entry in _parse_header())
+    do_editor = _parse_frontend_enderecos()
+
+    sobrando_no_header, sobrando_no_editor = _comparar_enderecos(do_header, do_editor)
+
+    assert not sobrando_no_header and not sobrando_no_editor, (
+        "frontend/src/ladder/enderecos.ts divergiu de plc_io_map.h: "
+        f"{_mensagem_divergencia(sobrando_no_header, sobrando_no_editor)}"
+    )
+
+
+def test_comparador_de_enderecos_morde_com_pino_a_mais_no_header() -> None:
+    do_header = frozenset({"%IX0.0", "%IX0.1", "%QX0.0", "%QX0.1", "%IX0.2"})
+    do_editor = frozenset({"%IX0.0", "%IX0.1", "%QX0.0", "%QX0.1"})
+
+    sobrando_no_header, sobrando_no_editor = _comparar_enderecos(do_header, do_editor)
+
+    assert sobrando_no_header == frozenset({"%IX0.2"})
+    assert sobrando_no_editor == frozenset()
+
+
+def test_comparador_de_enderecos_morde_com_pino_a_mais_no_editor() -> None:
+    do_header = frozenset({"%IX0.0", "%IX0.1", "%QX0.0", "%QX0.1"})
+    do_editor = frozenset({"%IX0.0", "%IX0.1", "%QX0.0", "%QX0.1", "%QX0.2"})
+
+    sobrando_no_header, sobrando_no_editor = _comparar_enderecos(do_header, do_editor)
+
+    assert sobrando_no_header == frozenset()
+    assert sobrando_no_editor == frozenset({"%QX0.2"})

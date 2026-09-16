@@ -1,6 +1,6 @@
 # Tarefas 002 — Editor Ladder visual
 
-> **Status:** em revisão
+> **Status:** aprovado (2026-09-16) — em execução (Fatia 1 concluída)
 > **Plano de origem:** [`plan.md`](./plan.md) (aprovado em 2026-09-16, com as ressalvas R-1 a R-3 da §10)
 
 Lista de execução. Cada tarefa é pequena, tem arquivos-alvo, dependências
@@ -27,7 +27,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 
 ## Fatia 1 — S5a: espelho construível
 
-- [ ] **#1 — [N] Modelo, endereços e fixtures sem CTU**
+- [x] **#1 — [N] Modelo, endereços e fixtures sem CTU**
   - Arquivos: `frontend/src/ladder/modelo.ts`, `enderecos.ts`, `fixtures.ts`
   - Depende de: —
   - Pronto quando: tipos do plano §5 **exceto** o membro `'ctu'` da união (entra
@@ -37,7 +37,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     `minimal.st`. Reescrito a partir de `spikes/modelo/`, sem copiar arquivo;
     `tsc --noEmit` limpo.
 
-- [ ] **#2 — [N] Validação migrada, com severidade e endereço restrito**
+- [x] **#2 — [N] Validação migrada, com severidade e endereço restrito**
   - Arquivos: `frontend/src/ladder/validacao.ts`, `validacao.test.ts`
   - Depende de: #1
   - Pronto quando: `posicaoValida` e `validarDiagrama` com `Problema` do plano
@@ -47,7 +47,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     um com caso negativo; `IO_ESPELHO` e `MINIMAL` sem problemas. Testes com
     imports explícitos de `vitest`.
 
-- [ ] **#3 — [N] Operações de edição da fatia 1**
+- [x] **#3 — [N] Operações de edição da fatia 1**
   - Arquivos: `frontend/src/ladder/edicao.ts`, `edicao.test.ts`
   - Depende de: #2
   - Pronto quando: `diagramaVazio()`, `inserirElemento`, `removerElemento`,
@@ -56,7 +56,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     posição inválida, célula ocupada, variável inexistente e endereço fora da
     lista; remover elemento não deixa vínculo pendente.
 
-- [ ] **#4 — [B] Teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3)**
+- [x] **#4 — [B] Teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3)**
   - Arquivos: `backend/tests/test_plc_io_map.py`
   - Depende de: #1
   - Pronto quando: teste novo extrai os endereços do header e de
@@ -65,7 +65,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     comparador falha com um pino a mais em qualquer lado; roda em
     `pytest -m "not slow"` na imagem.
 
-- [ ] **#5 — [D] Grade de um degrau e símbolos básicos**
+- [x] **#5 — [D] Grade de um degrau e símbolos básicos**
   - Arquivos: `frontend/src/components/ladder/GradeDegrau.tsx`, `Simbolos.tsx`,
     `GradeDegrau.test.tsx`
   - Depende de: #1
@@ -75,7 +75,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     desenhados com nome da variável; renderização é função pura das props;
     teste em jsdom sem mock.
 
-- [ ] **#6 — [D] Paleta e painel de variáveis**
+- [x] **#6 — [D] Paleta e painel de variáveis**
   - Arquivos: `frontend/src/components/ladder/Paleta.tsx`, `PainelVariaveis.tsx`,
     testes `.test.tsx`
   - Depende de: #1
@@ -85,7 +85,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     elemento selecionado; componentes controlados por props, sem estado de
     diagrama próprio.
 
-- [ ] **#7 — [D] `EditorLadder` da fatia 1**
+- [x] **#7 — [D] `EditorLadder` da fatia 1**
   - Arquivos: `frontend/src/components/ladder/EditorLadder.tsx`,
     `EditorLadder.test.tsx`
   - Depende de: #3, #5, #6
@@ -96,7 +96,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     **CA-2** (idem `MINIMAL`), **CA-5** (clique inválido não altera e mostra
     motivo), tudo também por teclado em pelo menos um caso.
 
-- [ ] **#8 — [T] Editor visível na tela (provisório)**
+- [x] **#8 — [T] Editor visível na tela (provisório)**
   - Arquivos: `frontend/src/App.tsx`, `App.test.tsx`
   - Depende de: #7
   - Pronto quando: `EditorLadder` renderizado acima do fluxo de ST existente,
