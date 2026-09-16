@@ -348,6 +348,19 @@ def test_compile_st_invalido_real_iec2c(client: TestClient) -> None:
     assert body["raw"]["stderr"] or body["raw"]["stdout"]
 
 
+@iec2c_disponivel
+def test_diagnostico_real_cita_so_o_nome_do_arquivo(client: TestClient) -> None:
+    """O caminho do diretório temporário do servidor não vaza em `diagnostics`."""
+    source = "PROGRAM p\nVAR x : BOOL; END_VAR\nx := ;\nEND_PROGRAM\n"
+    response = client.post("/compile", json={"source": source})
+
+    assert response.status_code == 422
+    diagnostics = response.json()["diagnostics"]
+    assert diagnostics, "iec2c deveria apontar a atribuição incompleta"
+    assert diagnostics[0]["file"] == "plc.st"
+    assert diagnostics[0]["line"] == 3
+
+
 # --- Ponta a ponta com blink.st (lento) --------------------------------------
 
 

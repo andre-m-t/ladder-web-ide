@@ -22,6 +22,8 @@ como processo separado.
 | Vite | MIT | Dependência de pacote (ferramenta de build do front-end). |
 | Tailwind CSS | MIT | Dependência de pacote (front-end). |
 | TypeScript | Apache-2.0 | Dependência de pacote (ferramenta de build do front-end). |
+| Vitest, jsdom, Testing Library (`@testing-library/react`, `jest-dom`, `user-event`) | MIT | Dependências de pacote usadas só nos testes do front-end; não entram no programa entregue. |
+| `@types/w3c-web-serial` | MIT | Declarações de tipo da Web Serial API (ferramenta de build do front-end). |
 | FastAPI | MIT | Dependência de pacote (back-end). |
 | Uvicorn | BSD-3-Clause | Dependência de pacote (servidor ASGI do back-end). |
 | Pydantic / pydantic-settings | MIT | Dependência de pacote (back-end). |

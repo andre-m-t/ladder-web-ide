@@ -107,6 +107,8 @@ EXCLUDES=(
   --exclude "generated"    --exclude "managed_components"
   --exclude "sdkconfig"    --exclude "sdkconfig.old"
   --exclude "dependencies.lock" --exclude "*.map"
+  # Testes co-localizados no front-end (vitest): teste não é o programa.
+  --exclude "*.test.ts" --exclude "*.test.tsx" --exclude "src/test/"
 )
 
 # --- Manifesto obrigatório: código autoral que TEM de estar no pacote --------
@@ -140,6 +142,8 @@ REQUIRED_FILES=(
   "backend/app/api/compile.py"
   "backend/app/main.py"
   "frontend/src/lib/api.ts"
+  "frontend/src/lib/gravador.ts"
+  "frontend/src/App.tsx"
 )
 
 # --- Proibidos: artefato de terceiro ou gerado que NÃO pode entrar -----------

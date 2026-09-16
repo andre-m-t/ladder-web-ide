@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (S2 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (S3 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -38,14 +38,14 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F3 | Toolchain ESP32 + runtime hospedeiro | servidor + dispositivo | 🟡 |
 | F4 | Endpoint de compilação | servidor | ✅ |
 | F5 | Gravação via navegador | servidor + navegador | 🟡 |
-| F6 | Tela mínima (fatia vertical) | navegador | 🔒 |
+| F6 | Tela mínima (fatia vertical) | navegador | ✅ |
 | F7 | Editor Ladder visual | navegador | ⬜ |
 | F8 | Serializador Ladder → ST | navegador | 🔒 |
 | F9 | Simulador de ciclo de varredura | navegador | ⬜ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
 
-**Leitura rápida:** a metade servidor está completa até a gravação: `POST /compile` devolve o `.bin`, `POST /compile/pacote` devolve imagens e offsets, e esse pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. A metade navegador ainda não existe, e nenhum dispositivo físico foi gravado.
+**Leitura rápida:** a fatia vertical está fechada até onde é possível sem ESP32. No navegador, cola-se ST, compila-se no servidor e o pacote (imagens + offsets) chega à tela. O botão Gravar vai até a tentativa de conexão Web Serial e falha de forma clara sem dispositivo. No servidor, o mesmo pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. Nenhum dispositivo físico foi gravado: o transporte Web Serial é a única camada sem cobertura.
 
 ---
 
@@ -168,21 +168,42 @@ Transfere o `.bin` ao ESP32 pela porta serial, sem driver nem instalação.
 - Offsets do pacote iguais aos do `flasher_args.json`, e sha256 igual ao dos arquivos do build — **conferidos por teste**, não por suposição.
 - Registro do que isso prova e do que não prova em `docs/validacao/gravacao-qemu-esptool.md`.
 
+**Concluído — camada navegador (S3, 2026-09-16)**
+- `frontend/src/lib/gravador.ts` sobre `esptool-js` 0.6.1:
+  - `webSerialDisponivel()`;
+  - `gravar(pacote)` monta o `fileArray` **a partir dos offsets do pacote**, com progresso agregado de 0 a 100, reset e `disconnect` no `finally`;
+  - erros classificados: `sem_web_serial`, `porta_nao_selecionada`, `falha_conexao`, `porta_desconectada`, `falha_gravacao`.
+- 10 testes `vitest`, com serial e loader injetados: navegador sem Web Serial, usuário cancela ou não há porta, falha de conexão, porta desconectada no meio, offsets repassados iguais aos do pacote, compilação falha na tela.
+- **Verificado em Chromium headless** (Playwright em contêiner, contra o stack via `docker compose`):
+  - compilar `blink.st` → "3 imagens prontas";
+  - ST inválido → painel com `3:4 — no expression defined…` e Gravar desabilitado;
+  - Gravar sem dispositivo → a tentativa chega ao `requestPort` e falha com "Nenhuma porta serial foi selecionada".
+
 **Falta**
-- Camada navegador: wrapper sobre o esptool-js, seleção de porta, progresso e tratamento de erro (S3).
 - **Transporte Web Serial:** depois da S2, é a única camada da gravação sem cobertura automatizada. É código da Espressif (esptool-js) e só fecha com ESP32 físico (CA-4).
 
 > **Observação:** o `esptool.py` no servidor vem embutido no ESP-IDF e gera o `.bin` a partir do ELF — não é decisão a tomar, é dependência do toolchain.
 
 ---
 
-## F6 — Tela mínima (fatia vertical) 🔒
+## F6 — Tela mínima (fatia vertical) ✅
 
-**Camada:** navegador · **Autoral:** sim · **Bloqueada por:** F4, F5
+**Camada:** navegador · **Autoral:** sim
 
 Interface deliberadamente crua: caixa de texto para colar ST, botão compilar, botão gravar. Não é o produto — é o instrumento que fecha a fatia vertical da spec 001.
 
 **Ferramentas:** React, Tailwind (já instalados)
+
+**Concluído (S3, 2026-09-16)**
+- `App.tsx` + `components/EditorST`, `PainelErro`, `PainelGravacao`:
+  - textarea com o `blink.st`;
+  - botão Compilar (`/compile/pacote`), com aviso de que o primeiro build é lento;
+  - botão Gravar, habilitado só com pacote válido e Web Serial;
+  - painel de erro renderizando o envelope Q-3 (stage, code, diagnostics linha:coluna, `raw` em `<details>`);
+  - progresso;
+  - rodapé com `/health`.
+- `tsc --noEmit`, `vitest run` e `npm run build` limpos.
+- **Marco:** a partir daqui existe algo demonstrável — não é o produto, mas é mostrável ao orientador.
 
 **Por que importa:** é o marco a partir do qual se pode afirmar viabilidade técnica. ST digitado no navegador acendendo um LED prova os quatro elos da cadeia de uma só vez.
 
@@ -287,7 +308,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. **S3** (navegador) da spec 001, sobre o contrato de `docs/specs/001-fatia-vertical-minima/plan.md`: `gravador.ts` sobre `esptool-js` e tela mínima (F5 + F6). A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
+1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
 2. *Spike* de biblioteca de canvas → **F7** → **F8**
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
@@ -315,3 +336,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Correção do painel e pendências de revisão | Gravação física saiu de "Próximos passos" para "Bloqueado aguardando hardware" (não há ESP32); `rsync`/`zip` na imagem — `test_deposito.py` deixa de pular (4 passed); aviso de imagem velha na Regra 5 do `CLAUDE.md`; critério "o programa, não o projeto" no cabeçalho do `build-deposito.sh`; invariante não testada de `plc_glue_scan` comentada |
 | 2026-09-16 | S1 da spec 001 — `POST /compile` | F4 fechada: parser de diagnóstico do `iec2c` (fixtures reais capturadas antes do parser), `pipeline.py` encadeando matiec→esp32 com lock e timeouts, endpoint com envelope Q-3 e limite de corpo (Q-2 decidida, 256 KiB); 50 testes verdes (com `slow`), curl de aceitação confirmado (`.bin` de 197 088 bytes, erro 422 com diagnostics, 413 por tamanho); `plan.md`/`tasks.md` da spec 001 preenchidos; manifesto do depósito atualizado |
 | 2026-09-16 | S2 da spec 001 — gravação, camada servidor | `esp32.flash_manifest` com offsets lidos do `flasher_args.json`; `POST /compile/pacote`; leitura do binário e do manifesto dentro da trava do pipeline; pacote da API gravado por `esptool` sobre socket no QEMU, reiniciado e com o laço progredindo (sem plano B); 63 testes verdes (com `slow`); Web Serial passa a ser a única camada da gravação sem cobertura |
+| 2026-09-16 | S3 da spec 001 — gravação no navegador e tela mínima | F6 fechada e F5 com a camada navegador pronta: `gravador.ts` sobre esptool-js com erros classificados, tela crua com painel do envelope Q-3; 10 testes vitest; verificação em Chromium headless (compilar, ST inválido, Gravar sem dispositivo); caminho do diretório temporário deixa de vazar em `diagnostics[].file`; testes do front-end excluídos do depósito; Vitest/jsdom/Testing Library em `THIRD_PARTY.md` |

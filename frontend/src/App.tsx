@@ -1,34 +1,55 @@
 import { useEffect, useState } from 'react'
 
-import { fetchHealth } from './lib/api'
-import type { Health, ToolInfo } from './lib/api'
+import EditorST from './components/EditorST'
+import PainelErro from './components/PainelErro'
+import PainelGravacao, { type EstadoGravacao } from './components/PainelGravacao'
+import {
+  compilarPacote,
+  ErroCompilacao,
+  ErroHttpCompilacao,
+  ErroRedeCompilacao,
+  fetchHealth,
+  type Health,
+  type Pacote,
+  type ToolInfo,
+} from './lib/api'
+import { BLINK_ST } from './lib/exemplos'
+import { ErroGravacao, gravar, webSerialDisponivel } from './lib/gravador'
 
-type State =
+type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
+
+type EstadoCompilacao =
+  | { fase: 'ocioso' }
+  | { fase: 'compilando' }
+  | { fase: 'sucesso'; pacote: Pacote }
+  | { fase: 'erro'; erro: ErroDeCompilacao }
+
+type EstadoSaude =
   | { kind: 'carregando' }
   | { kind: 'ok'; health: Health }
   | { kind: 'erro'; message: string }
 
 /**
- * Página placeholder do boilerplate.
- *
- * Serve como verificação de ponta a ponta do ambiente: se o status aparece
- * aqui, então o front-end, o CORS, a rede do Docker Compose, a API e as duas
- * etapas de compilação (MATIEC e toolchain ESP32) estão todos operacionais. O editor Ladder, o simulador e a
- * gravação virão nas specs seguintes.
+ * Tela mínima da fatia vertical (RF-1 a RF-6 da spec 001): ST → compila no
+ * servidor → grava no ESP32 pelo navegador via Web Serial. Deliberadamente
+ * crua — o editor visual Ladder e o simulador vêm nas specs seguintes.
  */
 export default function App() {
-  const [state, setState] = useState<State>({ kind: 'carregando' })
+  const [fonte, setFonte] = useState(BLINK_ST)
+  const [compilacao, setCompilacao] = useState<EstadoCompilacao>({ fase: 'ocioso' })
+  const [gravacao, setGravacao] = useState<EstadoGravacao>({ fase: 'ocioso' })
+  const [saude, setSaude] = useState<EstadoSaude>({ kind: 'carregando' })
 
   useEffect(() => {
     let cancelado = false
 
     fetchHealth()
       .then((health) => {
-        if (!cancelado) setState({ kind: 'ok', health })
+        if (!cancelado) setSaude({ kind: 'ok', health })
       })
       .catch((erro: unknown) => {
         if (!cancelado) {
-          setState({ kind: 'erro', message: erro instanceof Error ? erro.message : String(erro) })
+          setSaude({ kind: 'erro', message: erro instanceof Error ? erro.message : String(erro) })
         }
       })
 
@@ -37,82 +58,137 @@ export default function App() {
     }
   }, [])
 
+  const compilando = compilacao.fase === 'compilando'
+  const gravando = gravacao.fase === 'gravando'
+  const temPacoteValido = compilacao.fase === 'sucesso'
+  const web_serial_ok = webSerialDisponivel()
+
+  async function aoCompilar() {
+    setCompilacao({ fase: 'compilando' })
+    setGravacao({ fase: 'ocioso' })
+    try {
+      const pacote = await compilarPacote(fonte)
+      setCompilacao({ fase: 'sucesso', pacote })
+    } catch (erro) {
+      if (erro instanceof ErroCompilacao || erro instanceof ErroHttpCompilacao || erro instanceof ErroRedeCompilacao) {
+        setCompilacao({ fase: 'erro', erro })
+      } else {
+        setCompilacao({
+          fase: 'erro',
+          erro: new ErroRedeCompilacao(erro instanceof Error ? erro.message : String(erro)),
+        })
+      }
+    }
+  }
+
+  async function aoGravar() {
+    if (compilacao.fase !== 'sucesso') return
+
+    setGravacao({ fase: 'gravando', progresso: 0 })
+    try {
+      await gravar(compilacao.pacote, {
+        onProgresso: (progresso) => setGravacao({ fase: 'gravando', progresso }),
+      })
+      setGravacao({ fase: 'sucesso' })
+    } catch (erro) {
+      if (erro instanceof ErroGravacao) {
+        setGravacao({ fase: 'erro', erro })
+      } else {
+        setGravacao({
+          fase: 'erro',
+          erro: new ErroGravacao('falha_gravacao', erro),
+        })
+      }
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
-      <div className="mx-auto max-w-xl">
+    <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
+      <div className="mx-auto max-w-3xl">
         <h1 className="text-3xl font-semibold tracking-tight">LadderFlow</h1>
         <p className="mt-2 text-slate-600">
-          Ambiente de desenvolvimento — verificação do serviço de compilação.
+          Cole um Structured Text, compile no servidor e grave o resultado no ESP32 direto do navegador.
         </p>
 
         <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          {state.kind === 'carregando' && <p className="text-slate-500">Consultando a API…</p>}
+          <EditorST value={fonte} onChange={setFonte} disabled={compilando} />
 
-          {state.kind === 'erro' && (
-            <div>
-              <p className="font-medium text-red-700">Não foi possível falar com a API.</p>
-              <p className="mt-1 text-sm text-slate-600">{state.message}</p>
-              <p className="mt-3 text-sm text-slate-500">
-                Verifique se o serviço <code className="font-mono">backend</code> está de pé e se{' '}
-                <code className="font-mono">VITE_API_URL</code> aponta para ele.
-              </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={aoCompilar}
+              disabled={compilando}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {compilando ? 'Compilando…' : 'Compilar'}
+            </button>
+
+            <button
+              type="button"
+              onClick={aoGravar}
+              disabled={!temPacoteValido || !web_serial_ok || gravando}
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {gravando ? 'Gravando…' : 'Gravar no ESP32'}
+            </button>
+
+            {compilando && (
+              <span className="text-sm text-slate-500">o primeiro build pode levar minutos</span>
+            )}
+          </div>
+
+          {!web_serial_ok && (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Este navegador não tem suporte à Web Serial API — a gravação fica desabilitada. Use Chrome ou Edge
+              89+ em <code className="font-mono">localhost</code> ou por HTTPS.
+            </p>
+          )}
+
+          {compilacao.fase === 'sucesso' && (
+            <p className="mt-3 text-sm text-emerald-700">
+              Compilação concluída: {compilacao.pacote.images.length} imagens prontas para{' '}
+              {compilacao.pacote.chip}.
+            </p>
+          )}
+
+          {compilacao.fase === 'erro' && (
+            <div className="mt-4">
+              <PainelErro erro={compilacao.erro} />
             </div>
           )}
 
-          {state.kind === 'ok' && (
-            <dl className="space-y-6 text-sm">
-              <Linha rotulo="Backend" valor={state.health.status} ok={state.health.status === 'ok'} />
-              <Ferramenta
-                rotulo="Structured Text → C (MATIEC)"
-                info={state.health.iec2c}
-              />
-              <Ferramenta
-                rotulo="C → firmware (toolchain ESP32)"
-                info={state.health.esp_idf}
-              />
-            </dl>
-          )}
+          <PainelGravacao estado={gravacao} />
         </section>
+
+        <RodapeSaude saude={saude} />
       </div>
     </main>
   )
 }
 
-function Ferramenta({ rotulo, info }: { rotulo: string; info: ToolInfo }) {
+/** Status do `/health`, como rodapé compacto — não bloqueia o uso da tela. */
+function RodapeSaude({ saude }: { saude: EstadoSaude }) {
   return (
-    <div className="space-y-3">
-      <Linha
-        rotulo={rotulo}
-        valor={info.available ? 'disponível' : 'indisponível'}
-        ok={info.available}
-      />
-      <div>
-        <dt className="text-slate-500">Caminho</dt>
-        <dd className="font-mono text-xs break-all">{info.path}</dd>
-      </div>
-      {info.version && (
-        <div>
-          <dt className="text-slate-500">Identificação</dt>
-          <dd className="font-mono text-xs break-all">{info.version}</dd>
-        </div>
+    <footer className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-slate-500">
+      <span>Serviço de compilação:</span>
+      {saude.kind === 'carregando' && <span>consultando…</span>}
+      {saude.kind === 'erro' && <span className="text-red-600">indisponível ({saude.message})</span>}
+      {saude.kind === 'ok' && (
+        <>
+          <StatusFerramenta rotulo="backend" ok={saude.health.status === 'ok'} />
+          <StatusFerramenta rotulo="MATIEC" info={saude.health.iec2c} />
+          <StatusFerramenta rotulo="toolchain ESP32" info={saude.health.esp_idf} />
+        </>
       )}
-    </div>
+    </footer>
   )
 }
 
-function Linha({ rotulo, valor, ok }: { rotulo: string; valor: string; ok: boolean }) {
+function StatusFerramenta({ rotulo, ok, info }: { rotulo: string; ok?: boolean; info?: ToolInfo }) {
+  const disponivel = info ? info.available : Boolean(ok)
   return (
-    <div className="flex items-center justify-between gap-4">
-      <dt className="text-slate-500">{rotulo}</dt>
-      <dd
-        className={
-          ok
-            ? 'rounded-full bg-emerald-50 px-3 py-1 font-medium text-emerald-700'
-            : 'rounded-full bg-red-50 px-3 py-1 font-medium text-red-700'
-        }
-      >
-        {valor}
-      </dd>
-    </div>
+    <span className={disponivel ? 'text-emerald-700' : 'text-red-600'}>
+      {rotulo}: {disponivel ? 'ok' : 'indisponível'}
+    </span>
   )
 }

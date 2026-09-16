@@ -119,19 +119,19 @@ explícitas e um critério de pronto verificável. `[x]` marca concluída.
 
 ## Fatia 3 — S3: gravação no navegador + tela mínima (em paralelo com a Fatia 2)
 
-- [ ] **#14 — `frontend/src/lib/api.ts`**
+- [x] **#14 — `frontend/src/lib/api.ts`**
   - Arquivos: `frontend/src/lib/api.ts`
   - Depende de: #5 (S1 commitada; não depende de #11-#13)
   - Pronto quando: `compilarBinario(source)` e `compilarPacote(source)`
     tipados, com `ErroCompilacao` a partir do envelope Q-3.
 
-- [ ] **#15 — `frontend/src/lib/gravador.ts`**
+- [x] **#15 — `frontend/src/lib/gravador.ts`**
   - Arquivos: `frontend/src/lib/gravador.ts`
   - Depende de: #14
   - Pronto quando: `webSerialDisponivel()` e `gravar(pacote, opções)` sobre
     `esptool-js`, com erros classificados e testados via `vitest`.
 
-- [ ] **#16 — Tela mínima**
+- [x] **#16 — Tela mínima**
   - Arquivos: `frontend/src/App.tsx`, `frontend/src/components/*`
   - Depende de: #14, #15
   - Pronto quando: RF-1 a RF-6 cobertos na interface; `tsc --noEmit`,

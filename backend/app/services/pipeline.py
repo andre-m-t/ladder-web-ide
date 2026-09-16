@@ -27,7 +27,7 @@ nunca leem arquivo nenhum do `build_dir` compartilhado por conta própria.
 
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from app.config import get_settings
@@ -99,7 +99,13 @@ def compilar(source: str) -> ResultadoCompilacao | FalhaCompilacao:
                 return _falha("matiec", "toolchain_error", str(exc))
 
             if not matiec_result.ok:
-                diagnostics = matiec.parse_diagnostics(matiec_result.stdout, matiec_result.stderr)
+                # O iec2c cita o caminho absoluto do diretório temporário; o cliente
+                # só precisa do nome do arquivo (e o caminho interno não deve vazar).
+                # `raw` continua íntegro, com a saída original.
+                diagnostics = [
+                    replace(d, file=Path(d.file).name)
+                    for d in matiec.parse_diagnostics(matiec_result.stdout, matiec_result.stderr)
+                ]
                 return FalhaCompilacao(
                     stage="matiec",
                     code="compile_error",
