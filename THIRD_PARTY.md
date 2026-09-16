@@ -16,6 +16,7 @@ como processo separado.
 | MATIEC (`iec2c`) | GPL-3.0 | Binário executado como **processo separado** pelo serviço de compilação. Compilado a partir do fonte durante a construção da imagem; não vinculado ao código autoral. |
 | MATIEC — biblioteca C (`lib/C`, cabeçalhos `iec_std_lib.h` e afins) | LGPL-3.0-or-later (verificado — ver nota abaixo) | Cabeçalhos de terceiros **incluídos na compilação do firmware**, a partir da imagem do contêiner. Não são copiados para o repositório nem para o pacote de depósito. |
 | ESP-IDF (toolchain do ESP32, `idf.py`) | Apache-2.0 | Ferramenta executada como **processo separado** pelo serviço de compilação; provida pela imagem oficial da Espressif. |
+| QEMU (`qemu-system-xtensa`, alvo esp32) | GPL-2.0-only, com componentes sob licenças compatíveis | Emulador executado como **processo separado**, só em testes de validação (`pytest -m slow tests/test_qemu.py`, via `backend/scripts/run_qemu.py`). Vem embutido na imagem `espressif/idf:v5.4.1` (fork `esp_develop_9.0.0_20240606` distribuído pela Espressif). Nenhum fonte do QEMU é copiado para o repositório nem para o pacote de depósito. |
 | esptool-js | Apache-2.0 | Dependência de pacote (front-end). |
 | React | MIT | Dependência de pacote (front-end). |
 | Vite | MIT | Dependência de pacote (ferramenta de build do front-end). |

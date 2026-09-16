@@ -94,6 +94,19 @@ REQUIRED_FILES=(
   "backend/firmware/esp32-template/main/plc_glue.c"
   "backend/firmware/esp32-template/main/plc_glue.h"
   "backend/firmware/esp32-template/main/plc_io_map.h"
+  # Camada de abstracao de I/O: a interface e as duas implementacoes atras dela
+  # (ESP32 e stub em memoria). E o que permite o mesmo runtime autoral compilar
+  # para o dispositivo e para o host.
+  "backend/firmware/esp32-template/main/plc_hal.h"
+  "backend/firmware/esp32-template/main/plc_hal_stub.h"
+  "backend/firmware/esp32-template/main/plc_hal_esp32.c"
+  "backend/firmware/esp32-template/main/plc_hal_stub.c"
+  # Runtime executavel no host: o driver que religa o C do iec2c ao runtime a
+  # cada execucao, e o laco de ciclos que fala o contrato de
+  # docs/validacao/contrato-runtime-host.md.
+  "backend/firmware/esp32-template/main/plc_host_runner.c"
+  "backend/firmware/esp32-template/main/plc_host_cycle_runner.c"
+  "backend/firmware/esp32-template/host/Makefile"
   "backend/app/services/matiec.py"
   "backend/app/services/esp32.py"
   "backend/app/main.py"

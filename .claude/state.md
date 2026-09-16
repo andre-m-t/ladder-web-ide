@@ -92,6 +92,8 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 
 **Ferramentas:** ESP-IDF v5.4.1 (Apache-2.0); headers do MATIEC linkados no firmware (LGPL-3.0-or-later)
 
+> ⚠️ **Ao mexer em `backend/firmware/**`, reconstrua a imagem antes de testar:** `docker build -t ladderflow-backend:dev backend/`. O `ESP_PROJECT_TEMPLATE` aponta para a cópia dentro da imagem (`/app`), não para o *bind mount* (`/repo`) — sem o rebuild, `test_esp32.py` e `test_qemu.py` medem firmware antigo **sem acusar erro**. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`.
+
 **Concluído**
 - `backend/app/services/esp32.py` — segunda fronteira de subprocesso
 - `backend/firmware/esp32-template/` — projeto IDF autoral (`app_main.c`, `plc_glue.c/h`)
@@ -100,10 +102,15 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 - Pinagem revisada (ver Q-5): `%IX0.1` migrado de GPIO5 para GPIO18 por conflito com strapping pin
 - `test_plc_io_map.py` falha se header e spec divergirem
 - `-Werror=all` rebaixado seletivamente, por aviso nomeado, apenas para código gerado e headers de terceiros
+- **Camada de abstração de I/O** (`plc_hal.h`) com duas implementações atrás da mesma interface — ESP32 (`plc_hal_esp32.c`) e stub em memória (`plc_hal_stub.c`), escolhidas em tempo de compilação, sem `#ifdef` na lógica
+- **Runtime executável no host**: `plc_host_runner` religa o C do `iec2c` ao runtime autoral a cada execução; `test_plc_runtime_host.py` verifica a ordem lê → resolve → escreve, a alternância do `blink.st` e o mapeamento localizado ↔ `plc_io_pins`
+- **Boot verificado em QEMU** (`test_qemu.py`, `slow`): sem *panic*, sem *bootloop*, e heartbeat `scan ciclo=<N>` crescente — a primeira evidência de que o firmware **executa**
 
 **Falta**
-- 🔴 **Gravação em ESP32 físico.** O firmware compila, mas nunca rodou em hardware. Enquanto isso não acontecer, não é possível afirmar que o laço de varredura funciona nem que a pinagem está correta.
+- 🔴 **Gravação em ESP32 físico.** Continua pendente, e com ela tudo o que exige o dispositivo: gravação via Web Serial ponta a ponta, tempo de ciclo real e comportamento dos *strapping pins* no boot. Ver `docs/validacao/limites-da-validacao-sem-hardware.md`.
 - Procedimento documentado em `docs/validacao/ca-4-gravacao-esp32.md`, com offsets `0x1000`/`0x8000`/`0x10000` conferidos contra o `flasher_args.json` gerado — **pendente de execução**
+
+> **Mudança de status (2026-09-15).** Até esta rodada, "o laço de varredura funciona" não tinha nenhuma evidência: o firmware compilava e nunca havia executado. Agora tem, por dois caminhos independentes e sem hardware — o runtime roda no host com I/O em memória, e o firmware real dá boot em QEMU com o laço progredindo. O que **não** mudou é o risco de integração com o dispositivo físico, que segue inteiro.
 
 > **Nota:** a validação por `esptool` de linha de comando confirma o firmware, mas **não fecha CA-4**, que exige gravação pelo navegador (depende de F5).
 
@@ -208,28 +215,32 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 | Métrica | Status |
 |---|---|
 | Tempo de compilação | ✅ frio 66 s · incremental 11–13 s (Q-4) |
-| Corretude do ciclo (tabela-verdade) | ⬜ depende de F3 em hardware |
-| Divergência simulação ↔ hardware | 🔒 depende de F9 |
+| Corretude do ciclo (tabela-verdade) | 🟡 verificada no runtime hospedeiro (host + QEMU); falta confirmar em hardware |
+| Divergência simulação ↔ hardware | 🟡 instrumento pronto (`backend/tests/diferencial/`), aguardando F9 |
 | Taxa de sucesso de gravação em N tentativas | 🔒 depende de F5 |
 | Tempo de ciclo de varredura no dispositivo | ⬜ |
 | Tempo total edição → dispositivo operante | 🔒 depende de F6 |
 | Cobertura de elementos IEC 61131-3 | ⬜ |
 | Acessibilidade: pré-requisitos vs. fluxo desktop | ⬜ comparação com OpenPLC |
 
-**Alerta metodológico:** "o firmware compila" é evidência de que um componente funciona, não de que a integração é viável. A conclusão do trabalho precisa estar ancorada nestes números, não em demonstração pontual.
+**Arcabouço de teste diferencial (2026-09-15).** `backend/tests/diferencial/` está pronto: fixture declarativa em TOML (código ST, entradas por ciclo, saídas esperadas por ciclo), `HostRunnerExecutor` falando o contrato de `docs/validacao/contrato-runtime-host.md`, e um comparador que reporta ciclo, ponto e esperado/obtido. A abstração `Executor` e a função `comparar_execucoes` já existem para receber o simulador de F9 sem reescrita — falta só o segundo executor.
+
+**Alerta metodológico:** "o firmware compila" é evidência de que um componente funciona, não de que a integração é viável. A isso se acrescenta, desde 2026-09-15: **"o firmware roda no emulador" é evidência de que o código executa, não de que o dispositivo funciona.** A conclusão do trabalho precisa estar ancorada nestes números, não em demonstração pontual.
 
 ---
 
 ## FT — Conformidade para depósito (transversal) 🟡
 
 **Concluído**
-- `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (7 fontes de firmware + adaptadores + `api.ts`) e listas de artefatos proibidos
+- `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (14 fontes de firmware + adaptadores + `api.ts`) e listas de artefatos proibidos
 - Modo `--verificar` para CI
 - `verificar_origem` inspeciona a **árvore de origem**, não o staging — evita que os `EXCLUDES` do rsync limpem contaminação em silêncio e produzam pacote verde indevidamente
 - Quatro testes em `test_deposito.py`, incluindo dois negativos que provam que o guarda morde
 - `THIRD_PARTY.md` corrigido: headers do MATIEC são **LGPL-3.0-or-later** (não LGPL-2.1) — `iec_types_all.h` declara LGPL-3+ e `iec_std_lib.h` declara LGPL-2+; como o build reúne ambos pelo mesmo `-I`, prevalece a mais restritiva
 - Distinção registrada entre processo separado (sem obra derivada) e linkagem real no firmware (implicação sobre o binário do usuário final, não sobre a plataforma)
 - ESP-IDF registrado como Apache-2.0
+- QEMU registrado em `THIRD_PARTY.md` (GPL-2.0-only, com componentes sob licenças compatíveis) como ferramenta externa em processo separado, usada só em teste; nenhum fonte copiado para a árvore autoral
+- Imagem de eFuse do QEMU **descrita**, não transcrita do ESP-IDF, com teste que confere byte a byte contra o valor da toolchain — evita pôr blob de terceiro na árvore autoral sem abrir mão da fidelidade
 - Rodada de 2026-09-15 commitada em cinco commits rastreáveis e integrada à `main` (`ba92980..09534f7`, fast-forward), com push para `origin`
 - Painel de estado (`.claude/state.md`) instituído com atualização obrigatória por rodada — sustenta a rastreabilidade da autoria exigida pelo depósito
 
@@ -252,7 +263,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. **Gravar o `.bin` em ESP32 físico** — executa `docs/validacao/ca-4-gravacao-esp32.md`; fecha o último risco técnico não endereçado
+1. **Gravar o `.bin` em ESP32 físico** — executa `docs/validacao/ca-4-gravacao-esp32.md`. Continua sendo o próximo passo, mas o risco que restava é agora o de **integração com o dispositivo**, não o de corretude da lógica (ver F3 e `docs/validacao/limites-da-validacao-sem-hardware.md`)
 2. Decidir **Q-2** e rodar `/planejar 001`
 3. Implementar **F4** (`POST /compile`)
 4. Implementar **F5 + F6** — fecha a fatia vertical e habilita a afirmação de viabilidade
@@ -269,3 +280,4 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 | 2026-09-10 | Toolchain ESP32 | Firmware compila (183 KB); Q-1, Q-3, Q-4, Q-5, Q-6 registradas |
 | 2026-09-15 | Conformidade e pinagem | Auditoria de depósito com abort; `%IX0.1` → GPIO18; licenças corrigidas (LGPL-3.0-or-later); CA-4 documentado; integrado à `main` |
 | 2026-09-15 | Painel de estado | Este documento criado como `state.md`; atualização tornada obrigatória em `CLAUDE.md`, `docs/workflow.md` e nos comandos do SDD |
+| 2026-09-15 | Validação sem hardware | Runtime autoral passa a **executar**: camada de abstração de I/O com stub, runtime no host, boot verificado em QEMU e arcabouço de teste diferencial pronto para F9. Nada do que exige ESP32 físico foi fechado — ver `docs/validacao/limites-da-validacao-sem-hardware.md` |
