@@ -60,6 +60,23 @@ ENV MATIEC_IEC2C_PATH=/usr/local/bin/iec2c \
 # para que o build do ESP-IDF seja incremental entre requisicoes (ver Q-6).
 RUN mkdir -p "$ESP_BUILD_ROOT"
 
+# QEMU da Espressif (target xtensa/esp32), para dar boot no firmware sem
+# hardware (validacao sem ESP32 fisico — ver docs/validacao/). Ferramenta
+# externa, mesmo espirito do idf.py: processo separado, nunca importada como
+# codigo (constitution §10). Chamada por `backend/scripts/run_qemu.py`.
+#
+# A imagem `espressif/idf:v5.4.1` ja traz `qemu-xtensa` pre-instalado em
+# /opt/esp/tools (verificado); este passo fica explicito mesmo assim, para que
+# a dependencia conste do Dockerfile e sobreviva a uma futura troca de imagem
+# base que nao inclua a ferramenta. Por isso e idempotente e nao mede
+# crescimento perceptivel da imagem (registrado em `docs/validacao/`).
+#
+# `qemu-system-xtensa` tambem precisa de libsdl2 em tempo de link, mesmo
+# rodando headless (`-nographic`); a base da Espressif ja a traz instalada
+# (verificado com `ldd`), entao nenhum pacote apt adicional entra aqui.
+RUN source /opt/esp/idf/export.sh > /dev/null \
+    && python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
+
 WORKDIR /app
 
 # As dependencias do backend vao para o venv do proprio ESP-IDF — e o
