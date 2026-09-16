@@ -1,0 +1,30 @@
+# Fixture diferencial de minimal.st -- caso de borda.
+# Ver backend/tests/diferencial/README.md para o formato.
+#
+# minimal.st nao declara NENHUMA variavel localizada (nem AT %IX, nem AT
+# %QX): "entrada"/"saida" sao locais ao programa, invisiveis de fora. O
+# contrato diz que a saida traz "o valor logico de TODAS as saidas" --
+# aqui esse conjunto e vazio. `saida_exata = true` torna isso uma afirmacao
+# de verdade (nao um teste vazio por vacuidade): se o runner inventar
+# qualquer endereco na saida, ou travar, a fixture reprova.
+
+st = "minimal.st"
+descricao = """
+Caso de borda: programa sem variavel localizada nenhuma. Prova que o runner
+nao quebra e nao inventa endereco de saida quando nao ha IX/QX no ST.
+"""
+ciclos = 2
+saida_exata = true
+
+[[entradas]]
+de = 1
+ate = 2
+valores = {}
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = {}
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = {}

@@ -1,0 +1,42 @@
+# Fixture diferencial de blink.st (spec 001, Q-1).
+# Ver backend/tests/diferencial/README.md para o formato, e
+# docs/validacao/contrato-runtime-host.md para o modo de execucao.
+#
+# Gabarito: %IX0.0 (botao) parado em 0 pelos 50 ciclos. %QX0.0 (led) e a
+# saida unica de blink.st -- alterna a cada 25 ciclos de varredura. Os cinco
+# pontos abaixo sao a semantica ja verificada manualmente a partir do ST
+# (contador incrementa a cada ciclo, reseta e inverte o led ao chegar em 25):
+# 0 no ciclo 24, 1 no 25, 1 no 26, 1 no 49, 0 no 50.
+
+st = "blink.st"
+descricao = """
+Pisca %QX0.0 a cada 25 ciclos de varredura, com %IX0.0 mantida em 0 (sem
+forcar o led ligado). Cobre o comportamento COM ESTADO (contador interno),
+o oposto do combinacional de io_espelho.toml.
+"""
+ciclos = 50
+
+[[entradas]]
+de = 1
+ate = 50
+valores = { "%IX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 24
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 25
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 26
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 49
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 50
+valores = { "%QX0.0" = false }
