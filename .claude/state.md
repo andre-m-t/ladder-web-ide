@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (spike S4 fechado; spec 002 com Q-1 a Q-7 decididas) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 aprovada; plano 002 em revisão) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -237,7 +237,9 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 
 **Restrição de PI:** não reaproveitar código de `cdilga/ladder-logic-editor`, `hiperiondev/*` ou correlatos. Referência conceitual é legítima; cópia de arquivos transformaria o projeto em obra derivada e esvaziaria a originalidade do depósito.
 
-**Falta:** aprovação da spec 002, `plan.md`/`tasks.md`, migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
+**Plano (em revisão, 2026-09-16):** `docs/specs/002-editor-ladder/plan.md` — núcleo puro em `frontend/src/ladder/` + SVG em `components/ladder/`; interação por seleção (sem arrastar); CTU terminal com linha de reset e isolado em `ladder/ctu.ts` (Q-7); `localStorage` versionado (Q-1); modos Ladder/ST (Q-2); 8 colunas e 2 linhas extras (Q-3); endereços restritos a `plc_io_map.h`; blink exato verificado por `blink_ladder.st` × `blink.st` até a F8 existir. Fatias: S5a = 1–2, S5b = 3–4.
+
+**Falta:** aprovação do plano, `tasks.md`, migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
 
 ---
 
@@ -320,7 +322,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 ## Próximos passos, em ordem
 
 1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-2. Aprovar a spec 002 → `/planejar 002` (Q-3, Q-5; modelo e SVG puro já decididos pelo spike S4) → **F7** → **F8**
+2. Aprovar o plano 002 → `/tarefas 002` → implementação S5a/S5b (**F7**) → **F8**
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
 ## Bloqueado aguardando hardware
@@ -351,3 +353,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Fase 1 (Especificar) da spec 002 — Editor Ladder | `docs/specs/002-editor-ladder/spec.md` criado: subconjunto IEC 61131-3 do editor (NA, NF, bobina simples, SET/RESET, ramo paralelo, contador crescente), motivado pelas três fixtures de referência (`blink.st`, `io_espelho.st`, `minimal.st`); seis questões em aberto (Q-1 a Q-6); `plan.md`/`tasks.md` como placeholders. Nenhum código escrito — F7 continua ⬜, aguardando aprovação do autor para liberar a Fase 2 |
 | 2026-09-16 | Spike S4 da spec 002 — canvas e modelo de dados | Protótipos SVG puro e Konva sobre o mesmo contrato de modelo, medidos pelos mesmos critérios: **SVG puro venceu** em todos (213 × 325 linhas, jsdom sem mock, teclado por célula, 71 × 174 kB gzip, nenhuma dependência nova); React Flow descartado por argumento. Modelo de grade validado nas três fixtures (19 testes). Blink em Ladder com CTU medido no `plc_host_runner`: 1 divergência em 50 ciclos, por construção. Q-1, Q-2, Q-4, Q-6 da spec 002 decididas. Registro em `spike-canvas.md`; protótipos em `spikes/`, fora do depósito (`--verificar` ok) |
 | 2026-09-16 | Fechamento do spike S4 e decisões da spec 002 | Rodada do spike commitada e worktrees de agente removidas. Auditoria independente confirmou o agente que caiu por limite de API (19 testes, números do diferencial idênticos). Hipótese do preset investigada com gabarito forte (`blink.st` executado, 200 ciclos, 3 padrões de entrada): o veredito "divergência intrínseca" do agente foi **refutado** — variante com PV=12, realinhamento do sinal de contagem e LED pelo limite atrasado fecha com 0 divergências; a linha anterior deste histórico ("por construção") estava errada. Q-4 revisada para equivalência exata; Q-3, Q-5 e Q-7 (CTU destacável) decididas; Q-6 registrada como desvio deliberado da prática corrente |
+| 2026-09-16 | Spec 002 aprovada e plano 002 | Checklist de revisão da spec percorrido: acrescentados CA-9 (bobina duplicada/aviso SET-RESET) e CA-10 (limites), corrigida contagem de elementos; spec aprovada. `plan.md` escrito com D-1 a D-10, contrato do modelo (CTU com `linhaReset`, `tipo` só `BOOL`, severidade), mapeamento CA → teste e quatro fatias; aguardando aprovação do autor |

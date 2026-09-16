@@ -1,6 +1,7 @@
 # Spec 002 — Editor Ladder visual
 
-> **Status:** rascunho
+> **Status:** aprovada (2026-09-16) — Q-1 a Q-7 decididas; aprovação do autor
+> registrada em `/home/andre/.claude/plans/agora-precisamos-trabalhar-em-cozy-dragon.md`
 > **Autor:** André  ·  **Data:** 2026-09-16
 > **Princípios aplicáveis:** §2, §3, §5, §6, §10, §11
 
@@ -108,7 +109,7 @@ padrão de comparação):
 contato normalmente fechado, bobina simples, bobina SET, bobina RESET, ramo
 paralelo (estrutura "ou" dentro de um degrau) e contador crescente. Nenhum
 outro elemento gráfico é reconhecido nesta fase (ver §7, Fora de escopo). Os
-dois elementos além do trio básico contato/contato/bobina — bobina SET/RESET,
+elementos além do trio básico contato/contato/bobina — bobina SET/RESET,
 ramo paralelo e contador crescente — entram porque os três programas de
 referência do §2 não são construíveis sem eles: o contador e a alternância
 condicional aparecem no cenário de pisca-pisca, e a bobina SET é a tradução
@@ -190,6 +191,15 @@ desligar com atraso) continuam fora** — ver §7.
   dentro dos limites da mesma sessão do navegador (Q-1: inclusive após fechar
   a aba ou o navegador), então o diagrama
   construído continua presente ao voltar a ver a tela.
+- **CA-9 (RF-11/RF-12, Q-6).** Dado um diagrama com uma bobina simples
+  vinculada a uma variável, quando a pessoa insere, em outro degrau, outra
+  bobina simples vinculada à mesma variável, então o editor sinaliza erro
+  estrutural; quando, em vez disso, insere uma bobina SET e uma RESET da mesma
+  variável acionadas por condição que depende dessa variável, então o editor
+  mostra um aviso, distinguível do erro, e a estrutura é aceita.
+- **CA-10 (RF-1/RF-12, Q-3).** Dado um degrau com todas as colunas ou todas
+  as linhas de ramo ocupadas até o limite, quando a pessoa tenta inserir além
+  dele, então a ação é impedida e uma mensagem explica o limite.
 
 ## 6. Requisitos não-funcionais
 
