@@ -21,8 +21,13 @@ endif()
 # container, nunca do repositorio. Ver THIRD_PARTY.md.
 set(MATIEC_LIB_C_DIR "$ENV{MATIEC_LIB_DIR}/C")
 
+# plc_hal_esp32.c e a implementacao da HAL (plc_hal.h) para este alvo, sobre
+# driver/gpio.h e esp_timer.h. plc_hal_stub.c, plc_host_runner.c e
+# plc_host_cycle_runner.c (implementacao para o alvo host, ver
+# firmware/esp32-template/host/) ficam no mesmo diretorio mas de fora desta
+# lista, de proposito: nunca sao compilados para o ESP32.
 idf_component_register(
-    SRCS "app_main.c" "plc_glue.c" ${PLC_GENERATED_SOURCES}
+    SRCS "app_main.c" "plc_glue.c" "plc_hal_esp32.c" ${PLC_GENERATED_SOURCES}
     INCLUDE_DIRS "." "generated" "${MATIEC_LIB_C_DIR}"
     REQUIRES driver esp_timer
 )

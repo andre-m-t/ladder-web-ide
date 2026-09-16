@@ -1,17 +1,13 @@
 #include "plc_glue.h"
 
+#include <stdio.h>
 #include <string.h>
-
-#include "driver/gpio.h"
-#include "esp_log.h"
-#include "esp_timer.h"
 
 /* Cabecalhos do MATIEC (LGPL-2.1+), vindos da imagem do container. */
 #include "iec_std_lib.h"
 
+#include "plc_hal.h"
 #include "plc_io_map.h"
-
-static const char *TAG = "plc";
 
 /* ------------------------------------------------------------------------ */
 /* Simbolos que o codigo gerado espera encontrar no runtime                  */
@@ -103,33 +99,34 @@ static void bind_io(void)
             continue;
         }
         if (var->size != sizeof(uint8_t)) {
-            ESP_LOGW(TAG, "%s nao e booleano (%u bytes); pino GPIO%d ignorado",
-                     pin->variable, (unsigned)var->size, pin->gpio);
+            plc_hal_log_warn("%s nao e booleano (%u bytes); pino GPIO%d ignorado",
+                              pin->variable, (unsigned)var->size, pin->gpio);
             continue;
         }
 
-        gpio_config_t cfg = {
-            .pin_bit_mask = 1ULL << pin->gpio,
-            .mode = (pin->direction == PLC_IO_OUTPUT) ? GPIO_MODE_OUTPUT : GPIO_MODE_INPUT,
-            .pull_up_en = pin->pull_up ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
-            .pull_down_en = GPIO_PULLDOWN_DISABLE,
-            .intr_type = GPIO_INTR_DISABLE,
-        };
-        ESP_ERROR_CHECK(gpio_config(&cfg));
+        /* plc_hal_pin_init devolve erro em vez de abortar (ver o comentario
+         * dela em plc_hal.h) -- o antigo ESP_ERROR_CHECK direto no gpio_config
+         * derrubava a placa por um pino mal descrito no mapa; agora e um
+         * aviso e o pino simplesmente fica de fora do scan. */
+        if (plc_hal_pin_init(pin) != 0) {
+            plc_hal_log_warn("%s: GPIO%d nao pode ser configurado; pino ignorado",
+                              pin->variable, pin->gpio);
+            continue;
+        }
 
         plc_bindings[plc_binding_count].pin = pin;
         plc_bindings[plc_binding_count].value = var->value;
         plc_binding_count++;
 
-        ESP_LOGI(TAG, "%s <-> GPIO%d (%s%s)", pin->variable, pin->gpio,
-                 pin->direction == PLC_IO_OUTPUT ? "saida" : "entrada",
-                 pin->active_low ? ", ativo em nivel baixo" : "");
+        plc_hal_log_info("%s <-> GPIO%d (%s%s)", pin->variable, pin->gpio,
+                          pin->direction == PLC_IO_OUTPUT ? "saida" : "entrada",
+                          pin->active_low ? ", ativo em nivel baixo" : "");
     }
 
     for (size_t i = 0; i < PLC_LOCATED_VAR_COUNT; i++) {
         if (!pin_is_mapped(plc_located_vars[i].name)) {
-            ESP_LOGW(TAG, "%s nao tem pino no mapa desta placa; sera ignorado",
-                     plc_located_vars[i].name);
+            plc_hal_log_warn("%s nao tem pino no mapa desta placa; sera ignorado",
+                              plc_located_vars[i].name);
         }
     }
 }
@@ -140,11 +137,14 @@ static void bind_io(void)
 
 static void update_current_time(void)
 {
-    int64_t now_us = esp_timer_get_time();
+    int64_t now_us = plc_hal_time_us();
     __CURRENT_TIME.tv_sec = now_us / 1000000;
     __CURRENT_TIME.tv_nsec = (now_us % 1000000) * 1000;
 }
 
+/* Nivel ELETRICO do pino -> valor LOGICO da variavel: e aqui, e so aqui, que
+ * active_low e invertido (ver o comentario no topo de plc_hal.h). A HAL so
+ * devolve 0/1 brutos. */
 static void read_inputs(void)
 {
     for (size_t i = 0; i < plc_binding_count; i++) {
@@ -152,7 +152,7 @@ static void read_inputs(void)
         if (pin->direction != PLC_IO_INPUT) {
             continue;
         }
-        int level = gpio_get_level(pin->gpio);
+        int level = plc_hal_pin_read(pin);
         *plc_bindings[i].value = (pin->active_low ? (level == 0) : (level != 0)) ? 1 : 0;
     }
 }
@@ -165,12 +165,13 @@ static void write_outputs(void)
             continue;
         }
         bool on = (*plc_bindings[i].value != 0);
-        gpio_set_level(pin->gpio, (pin->active_low ? !on : on) ? 1 : 0);
+        plc_hal_pin_write(pin, (pin->active_low ? !on : on) ? 1 : 0);
     }
 }
 
 void plc_glue_init(void)
 {
+    plc_hal_init();
     update_current_time();
     bind_io();
     config_init__();
@@ -185,8 +186,71 @@ void plc_glue_scan(unsigned long tick)
     write_outputs();
 }
 
+void plc_glue_step_logic(unsigned long tick)
+{
+    update_current_time();
+    config_run__(tick);
+}
+
 uint64_t plc_glue_cycle_time_us(void)
 {
     uint64_t period_us = common_ticktime__ / 1000ULL;
     return period_us > 0 ? period_us : 1000ULL;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Acesso por endereco IEC, sem passar pelo mapa de pinos                    */
+/* ------------------------------------------------------------------------ */
+/* Usado por plc_host_runner (modo padrao do contrato em
+ * docs/validacao/contrato-runtime-host.md): o simulador de F9 conhece
+ * %QX0.0, nao GPIO2, entao o executor padrao tambem nao pode depender do
+ * mapa de pinos -- so dele, plc_glue_step_logic mais estas quatro funcoes dao
+ * conta de rodar a logica e ler/escrever variaveis localizadas sem tocar a
+ * HAL. Cobrem so BOOL: e a unica classe de variavel localizada que este
+ * projeto usa (ver o comentario no topo de plc_io_map.h). */
+
+/* "__IX0_0" -> "%IX0.0" (mesma correspondencia descrita no topo de
+ * plc_io_map.h e verificada por backend/tests/test_plc_io_map.py). */
+static void symbol_to_address(const char *symbol, char *buf, size_t buf_len)
+{
+    const char *body = symbol + 2; /* remove o "__" */
+    char kind = body[0];
+    char x = body[1];
+    const char *rest = body + 2; /* "0_0" */
+    const char *underscore = strchr(rest, '_');
+    int word_len = underscore ? (int)(underscore - rest) : 0;
+    const char *bit = underscore ? underscore + 1 : "";
+    snprintf(buf, buf_len, "%%%c%c%.*s.%s", kind, x, word_len, rest, bit);
+}
+
+size_t plc_glue_var_count(void)
+{
+    return PLC_LOCATED_VAR_COUNT;
+}
+
+void plc_glue_var_address(size_t index, char *buf, size_t buf_len)
+{
+    if (index >= PLC_LOCATED_VAR_COUNT) {
+        if (buf_len > 0) {
+            buf[0] = '\0';
+        }
+        return;
+    }
+    symbol_to_address(plc_located_vars[index].name, buf, buf_len);
+}
+
+int plc_glue_var_get(size_t index)
+{
+    if (index >= PLC_LOCATED_VAR_COUNT) {
+        return 0;
+    }
+    return *plc_located_vars[index].value != 0 ? 1 : 0;
+}
+
+void plc_glue_var_set(size_t index, int value)
+{
+    if (index >= PLC_LOCATED_VAR_COUNT) {
+        return;
+    }
+    *plc_located_vars[index].value = value != 0 ? 1 : 0;
 }

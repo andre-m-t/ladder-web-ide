@@ -13,6 +13,29 @@
 
 static const char *TAG = "ladderflow";
 
+/* Cada quantos ciclos de varredura o heartbeat de log e emitido: prova de
+ * vida no monitor serial sem inundar o log a cada ciclo (que roda a cada
+ * poucos milissegundos). Formato e tag sao CONTRATO com quem le o log fora
+ * deste firmware (validacao de bancada sem editor de C): a linha final tem
+ * de casar com a regex `ladderflow: scan ciclo=(\d+)` -- nao mude a tag, o
+ * texto "scan ciclo=" nem o formato de `%lu` sem avisar quem depende disso. */
+#define PLC_HEARTBEAT_CICLOS 50
+
+/* O laco de varredura em si, separado de app_main para que a configuracao
+ * (plc_glue_init, calculo do periodo) fique fora do que roda para sempre. */
+static void scan_loop(TickType_t period_ticks)
+{
+    unsigned long tick = 0;
+    TickType_t last_wake = xTaskGetTickCount();
+    for (;;) {
+        plc_glue_scan(tick++);
+        if (tick % PLC_HEARTBEAT_CICLOS == 0) {
+            ESP_LOGI(TAG, "scan ciclo=%lu", tick);
+        }
+        xTaskDelayUntil(&last_wake, period_ticks);
+    }
+}
+
 void app_main(void)
 {
     plc_glue_init();
@@ -26,10 +49,5 @@ void app_main(void)
     ESP_LOGI(TAG, "ciclo de varredura: %llu us (%u ticks)",
              (unsigned long long)period_us, (unsigned)period_ticks);
 
-    unsigned long tick = 0;
-    TickType_t last_wake = xTaskGetTickCount();
-    for (;;) {
-        plc_glue_scan(tick++);
-        xTaskDelayUntil(&last_wake, period_ticks);
-    }
+    scan_loop(period_ticks);
 }
