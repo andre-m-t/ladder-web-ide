@@ -129,6 +129,8 @@ desligar com atraso) continuam fora** — ver §7.
 - **RF-4.** O sistema deve permitir criar, dentro de um degrau, um ramo
   paralelo que combine duas ou mais condições em "ou".
 - **RF-5.** O sistema deve permitir inserir um elemento de contador crescente.
+  Requisito **destacável** (Q-7): nenhum outro RF depende dele; retirá-lo
+  remove apenas o CA-3 da aceitação.
 - **RF-6.** O sistema deve permitir mover um elemento já inserido para outra
   posição válida da grade.
 - **RF-7.** O sistema deve permitir remover um elemento já inserido.
@@ -140,15 +142,17 @@ desligar com atraso) continuam fora** — ver §7.
   **interna**, sem endereço do controlador.
 - **RF-11.** O sistema deve validar a estrutura do diagrama e identificar, no
   mínimo: degrau incompleto, variável não vinculada a um elemento que a
-  exige, e elemento em posição inválida da grade.
+  exige, e elemento em posição inválida da grade. Também identifica duas
+  bobinas simples vinculadas à mesma variável (erro) e SET/RESET da mesma
+  variável acionados por condição que depende dela própria (aviso) — ver Q-6.
 - **RF-12.** Quando a validação de RF-11 encontrar um problema, o sistema deve
   sinalizar visualmente o erro, de forma distinguível do estado válido, e
   **nunca** aceitar a estrutura inválida em silêncio (cf. §3 da Constituição)
   — impedindo a ação que a causaria ou marcando-a como inválida até ser
   corrigida.
 - **RF-13.** O sistema deve manter o diagrama em edição presente na sessão do
-  navegador, sem envolver o servidor (cf. §6 da Constituição) — o escopo
-  exato do termo "sessão" é a Questão Q-1, em aberto.
+  navegador, sem envolver o servidor (cf. §6 da Constituição), sobrevivendo
+  ao fechamento da aba e do navegador (Q-1, decidida).
 
 ## 5. Critérios de aceitação
 
@@ -164,9 +168,9 @@ desligar com atraso) continuam fora** — ver §7.
   contador crescente, uma estrutura que alterna o estado de uma saída, um
   ramo paralelo e uma bobina SET vinculados às variáveis do cenário de
   "pisca-pisca com contagem e forçamento" do §2, então consegue montar uma
-  estrutura Ladder que representa esse comportamento — o grau de exigência
-  dessa equivalência (exata ciclo a ciclo ou apenas estrutural) é a Questão
-  Q-4, em aberto.
+  estrutura Ladder que representa esse comportamento, com o grau de
+  equivalência definido na Q-4 (decidida). Este CA depende só do RF-5
+  destacável (Q-7).
 - **CA-4 (RF-11/RF-12).** Dado um degrau incompleto (por exemplo, um contato
   sem bobina ao final, ou um ramo paralelo aberto) ou um elemento com
   variável não vinculada, quando a pessoa tenta deixar essa condição sem
@@ -183,7 +187,8 @@ desligar com atraso) continuam fora** — ver §7.
   a nova posição ou a ausência do elemento, sem deixar vínculos ou posições
   inconsistentes.
 - **CA-8 (RF-13).** Dado um diagrama em edição, quando a pessoa permanece
-  dentro dos limites da mesma sessão do navegador (Q-1), então o diagrama
+  dentro dos limites da mesma sessão do navegador (Q-1: inclusive após fechar
+  a aba ou o navegador), então o diagrama
   construído continua presente ao voltar a ver a tela.
 
 ## 6. Requisitos não-funcionais
@@ -195,7 +200,7 @@ desligar com atraso) continuam fora** — ver §7.
   variável, endereços IEC) permanecem como o usuário os digitar.
 - O diagrama deve suportar múltiplos degraus e múltiplos elementos por degrau
   sem exigir que a pessoa perceba degradação de resposta ao editar — números
-  exatos de limite (se houver) são a Questão Q-3, em aberto.
+  de limite de colunas e ramos na Q-3 (decidida); degraus sem limite.
 - Navegador: mesma faixa de compatibilidade já assumida pelo projeto
   (Chrome/Edge 89+, cf. `docs/context/constraints.md`); esta feature não usa
   Web Serial, mas herda a base de compatibilidade do restante da aplicação.
@@ -272,10 +277,10 @@ data, decisão e justificativa; não apague o enunciado.
 - **Enunciado:** há um limite máximo de colunas por degrau e de degraus por
   diagrama? Se sim, quais valores, e o que acontece ao tentar ultrapassá-los
   (a ação é impedida, ou apenas desencorajada)?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-16
+- **Decisão:** Cada degrau tem **número fixo de colunas** (valor definido no plano, da ordem de 8) e ramos paralelos de **até duas linhas** além do trilho principal; o **número de degraus é livre**. Tentar ultrapassar o limite de colunas ou de linhas de ramo é **impedido com mensagem** (RF-12).
+- **Justificativa:** Largura fixa mantém as posições válidas explícitas (RF-1) e cobre com folga os três cenários de referência; limitar degraus não traz ganho didático. O desempenho com muitos degraus é verificado no plano (referência: 50 degraus).
 
 ### Q-4 — Critério de "pisca-pisca construível" (CA-3)
 - **Enunciado:** o critério de aceitação CA-3, que usa o cenário de
@@ -293,6 +298,21 @@ data, decisão e justificativa; não apague o enunciado.
 - **Data da decisão:** 2026-09-16
 - **Decisão:** **Mesmo comportamento observável**, não equivalência exata ciclo a ciclo: o diagrama de pisca-pisca montado no editor deve piscar a saída por contagem e ser forçado ligado pela entrada. A divergência de fase em relação ao programa de referência é aceita e registrada como limite do subconjunto.
 - **Justificativa:** Medido no spike S4 (`spike-canvas.md` §5): com o contador crescente do subconjunto, a equivalência exata é impossível por construção — o contador conta bordas de subida, e um sinal leva no mínimo dois ciclos para produzir uma borda (1 divergência em 50 ciclos no melhor caso). Obter exatidão exigiria blocos de comparação e aritmética, ampliando o subconjunto além do que os cenários pedem (§11). O comportamento do diagrama ganha gabarito próprio no teste diferencial quando houver serialização (F8).
+- **Revisão aditiva (2026-09-16) — premissa da justificativa refutada, decisão
+  endurecida:** a justificativa acima afirma que a equivalência exata é
+  "impossível por construção". **Isso é falso.** A investigação posterior
+  (`spikes/modelo/preset25/RESULTADO.md`) encontrou um diagrama só com
+  elementos do subconjunto — contador crescente com limite 12, reinício da
+  contagem e realinhamento do sinal de contagem pelo próprio limite atingido,
+  e alternância da saída pelo limite atrasado um ciclo — que reproduz o
+  programa de referência **ciclo a ciclo**, com zero divergências em 200
+  ciclos e três padrões de entrada, no runtime real. A decisão passa a ser:
+  **o cenário de pisca-pisca deve ser construível com equivalência exata ciclo
+  a ciclo**; a verificação automática dessa equivalência a partir do diagrama
+  depende da serialização (F8) e fica registrada como pendência dela. A
+  decisão original ("mesmo comportamento observável") fica como piso, caso o
+  diagrama exato se mostre inviável no editor — o que exigiria nova revisão
+  aditiva.
 
 ### Q-5 — Contorno do contador crescente: reset e leitura do valor
 - **Enunciado:** o cenário de pisca-pisca (§2) usa uma contagem que, ao
@@ -305,10 +325,10 @@ data, decisão e justificativa; não apague o enunciado.
   ficar disponível para outras condições do diagrama — por exemplo, para
   alimentar o ramo paralelo que decide a alternância da saída? Como isso é
   representado na grade?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-16
+- **Decisão:** A contagem e o reinício vêm de **caminhos de contatos explícitos** no diagrama; o limite é um **número configurado** no elemento; o elemento publica apenas **"atingiu o limite"** numa variável booleana, usada por outros degraus como contato. O valor corrente da contagem **não é exposto**.
+- **Justificativa:** Segue o contador crescente da norma (entrada de contagem, entrada de reinício, valor-limite, saída de limite atingido). Expor a contagem só teria uso com blocos de comparação, que estão fora do subconjunto (§4, §7).
 
 ### Q-6 — Mesma variável de saída escrita em mais de um degrau
 - **Enunciado:** no cenário de pisca-pisca (§2), a mesma saída é afetada por
@@ -323,6 +343,39 @@ data, decisão e justificativa; não apague o enunciado.
 - **Data da decisão:** 2026-09-16
 - **Decisão:** Duas **bobinas simples** vinculadas à mesma variável são **erro estrutural** (RF-11). Bobinas SET e RESET da mesma variável são permitidas — é o uso normal delas — e recebem **aviso** quando a condição que as aciona depende da própria variável.
 - **Justificativa:** O spike S4 mostrou que SET e RESET da mesma variável acionados no mesmo ciclo, lendo a variável ao vivo, se anulam — comportamento correto da varredura sequencial, mas armadilha para o estudante. Bobina simples duplicada é sempre sobrescrita pela última e nunca é intencional; SET/RESET pareados são idioma legítimo de Ladder.
+- **Revisão aditiva (2026-09-16) — desvio deliberado da prática corrente:**
+  a decisão acima **diverge conscientemente** do comportamento usual. Nos
+  ambientes Ladder de mercado e na leitura corrente da IEC 61131-3, bobinas
+  simples duplicadas na mesma variável são **aceitas** — a última escrita do
+  ciclo prevalece, e há quem use isso de propósito (por exemplo, um degrau de
+  exceção depois do degrau normal). A frase "nunca é intencional", na
+  justificativa original, é portanto forte demais: o correto é "raramente é
+  intencional para quem está aprendendo, e é a origem mais comum de saída que
+  'não obedece'". O LadderFlow recusa a duplicação por objetivo **didático**
+  (§9, escopo acadêmico): torna explícito, no editor, um efeito que na prática
+  corrente fica implícito na ordem dos degraus. **Custo aceito:** programas
+  vindos de outros ambientes que usem bobina duplicada precisarão ser
+  reescritos (com ramo paralelo ou SET/RESET) para serem aceitos. O desvio
+  fica declarado junto ao subconjunto suportado (§4 e RF-11), conforme §3 da
+  Constituição — nunca implícito.
+
+### Q-7 — Contador crescente: dentro do escopo, mas destacável
+- **Enunciado:** o contador crescente entra no subconjunto só por causa do
+  cenário de pisca-pisca, e é o elemento de maior risco da spec (semântica de
+  borda, divergência medida no spike S4). Ele fica no escopo? Se ficar, como
+  garantir que um problema com ele não arraste o restante do editor?
+- **Status:** decidida
+- **Data da decisão:** 2026-09-16
+- **Decisão:** o contador crescente **fica no escopo**, como requisito
+  **destacável**: tem RF próprio (RF-5) e CA próprio (CA-3), e nenhum outro
+  requisito depende dele. Retirá-lo — por decisão do autor, se o custo se
+  mostrar desproporcional durante a implementação — remove apenas o cenário
+  de pisca-pisca da aceitação, sem reescrever os demais requisitos. Como isso
+  se traduz em isolamento técnico é decisão do plano.
+- **Justificativa:** mantém o cenário mais exigente como meta (os três
+  programas de referência construíveis), sem transformar o elemento de maior
+  risco em dependência do editor inteiro. A retirada, se ocorrer, é revisão
+  aditiva desta questão, não apagamento.
 
 ## 10. Conformidade com a Constituição
 
