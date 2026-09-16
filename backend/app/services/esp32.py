@@ -19,6 +19,8 @@ esse build incremental que sustenta a decisão de compilação síncrona (Q-6 da
 spec 001).
 """
 
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -52,6 +54,15 @@ class Esp32Timeout(Esp32Error):
     """A geração do firmware excedeu o tempo limite."""
 
 
+class FlashManifestError(Esp32Error):
+    """`flasher_args.json` do build ausente, ilegível ou fora do formato esperado.
+
+    Sempre um problema de ambiente (build incompleto, `idf.py` de outra
+    versão) — nunca do código ST do usuário, que já passou pelo `iec2c` e
+    pelo `idf.py build` antes de chegar aqui.
+    """
+
+
 @dataclass(frozen=True)
 class IdfStatus:
     """Disponibilidade da toolchain no ambiente atual."""
@@ -77,6 +88,121 @@ class BuildResult:
     stderr: str
     work_dir: Path
     binary: Path | None
+
+
+@dataclass(frozen=True)
+class FlashSettings:
+    """Parâmetros de gravação do chip (`flash_settings` do `flasher_args.json`)."""
+
+    mode: str
+    freq: str
+    size: str
+
+
+@dataclass(frozen=True)
+class FlashImage:
+    """Uma imagem a gravar: nome lógico, offset, bytes e hash.
+
+    `offset` é sempre lido do `flasher_args.json` do build — nunca de
+    constante deste módulo (ver `flash_manifest`).
+    """
+
+    name: str
+    offset: int
+    data: bytes
+    size: int
+    sha256: str
+
+
+@dataclass(frozen=True)
+class FlashManifest:
+    """Manifesto de gravação de um build (spec 001, S2 — `POST /compile/pacote`).
+
+    `images` vem em ordem crescente de `offset`, pronta para ser gravada em
+    sequência (ou serializada no contrato JSON do pacote).
+    """
+
+    chip: str
+    flash: FlashSettings
+    images: list[FlashImage]
+
+
+# Chaves do `flasher_args.json` que identificam cada imagem (ver
+# `idf.py build`, alvo esp32). São as mesmas três imagens que compõem uma
+# flash completa: bootloader, tabela de partições e a aplicação.
+_IMAGE_KEYS = ("bootloader", "partition-table", "app")
+
+
+def flash_manifest(build_dir: Path) -> FlashManifest:
+    """Lê `flasher_args.json` de `build_dir` e monta o manifesto de gravação.
+
+    Formato lido (gerado pelo `idf.py build`, não por este projeto):
+
+        {
+          "flash_settings": {"flash_mode": "dio", "flash_size": "4MB", "flash_freq": "40m"},
+          "bootloader": {"offset": "0x1000", "file": "bootloader/bootloader.bin", ...},
+          "partition-table": {"offset": "0x8000", "file": "partition_table/..."},
+          "app": {"offset": "0x10000", "file": "ladderflow_plc.bin", ...},
+          "extra_esptool_args": {"chip": "esp32", ...}
+        }
+
+    Os offsets aqui devolvidos vêm sempre desse arquivo (convertidos de
+    hexadecimal para inteiro); nenhum é constante deste módulo. Levanta
+    `FlashManifestError` quando o arquivo falta, não é JSON válido, ou não
+    tem os campos esperados — sempre falha de ambiente/build, nunca do
+    código ST do usuário.
+    """
+    path = build_dir / "flasher_args.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise FlashManifestError(f"flasher_args.json ausente em {build_dir}") from exc
+    except json.JSONDecodeError as exc:
+        raise FlashManifestError(f"flasher_args.json inválido em {build_dir}: {exc}") from exc
+
+    try:
+        chip = raw["extra_esptool_args"]["chip"]
+        settings_raw = raw["flash_settings"]
+        flash = FlashSettings(
+            mode=settings_raw["flash_mode"],
+            freq=settings_raw["flash_freq"],
+            size=settings_raw["flash_size"],
+        )
+    except KeyError as exc:
+        raise FlashManifestError(f"flasher_args.json sem o campo {exc} em {build_dir}") from exc
+
+    images: list[FlashImage] = []
+    for name in _IMAGE_KEYS:
+        try:
+            entry = raw[name]
+            offset = int(entry["offset"], 16)
+            image_path = build_dir / entry["file"]
+        except KeyError as exc:
+            raise FlashManifestError(
+                f"flasher_args.json sem a chave/campo {exc} para {name!r} em {build_dir}"
+            ) from exc
+        except ValueError as exc:
+            raise FlashManifestError(
+                f"offset de {name!r} não é hexadecimal válido em {build_dir}: {exc}"
+            ) from exc
+
+        try:
+            data = image_path.read_bytes()
+        except OSError as exc:
+            raise FlashManifestError(f"imagem {name!r} ilegível em {image_path}: {exc}") from exc
+
+        images.append(
+            FlashImage(
+                name=name,
+                offset=offset,
+                data=data,
+                size=len(data),
+                sha256=hashlib.sha256(data).hexdigest(),
+            )
+        )
+
+    images.sort(key=lambda image: image.offset)
+    return FlashManifest(chip=chip, flash=flash, images=images)
 
 
 def _paths() -> tuple[Path | None, Path]:

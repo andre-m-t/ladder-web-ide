@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (S1 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (S2 da spec 001) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -37,7 +37,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F2 | Adaptador MATIEC (ST → C) | servidor | ✅ |
 | F3 | Toolchain ESP32 + runtime hospedeiro | servidor + dispositivo | 🟡 |
 | F4 | Endpoint de compilação | servidor | ✅ |
-| F5 | Gravação via navegador | navegador | ⬜ |
+| F5 | Gravação via navegador | servidor + navegador | 🟡 |
 | F6 | Tela mínima (fatia vertical) | navegador | 🔒 |
 | F7 | Editor Ladder visual | navegador | ⬜ |
 | F8 | Serializador Ladder → ST | navegador | 🔒 |
@@ -45,7 +45,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
 
-**Leitura rápida:** a metade servidor tem agora uma porta HTTP — `POST /compile` compila ST até `.bin` de ponta a ponta — mas a metade navegador ainda não existe. O projeto compila firmware por API, mas ainda não tem interface nem nunca gravou um dispositivo físico.
+**Leitura rápida:** a metade servidor está completa até a gravação: `POST /compile` devolve o `.bin`, `POST /compile/pacote` devolve imagens e offsets, e esse pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. A metade navegador ainda não existe, e nenhum dispositivo físico foi gravado.
 
 ---
 
@@ -146,7 +146,7 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 
 ---
 
-## F5 — Gravação via navegador ⬜
+## F5 — Gravação via navegador 🟡
 
 **Camada:** navegador · **Autoral:** integração
 
@@ -156,7 +156,21 @@ Transfere o `.bin` ao ESP32 pela porta serial, sem driver nem instalação.
 
 **Requisitos de ambiente:** Chrome/Edge 89+, contexto HTTPS ou `localhost`
 
-**Falta:** tudo. Wrapper sobre o esptool-js, seleção de porta, offsets de gravação, tratamento de erro e progresso.
+**Concluído — camada servidor (S2, 2026-09-16)**
+- `esp32.flash_manifest(build_dir)` lê imagens, offsets, chip e `flash_settings` do `flasher_args.json` real. Nenhum offset hardcoded. Observado no `blink.st`: `0x1000` / `0x8000` / `0x10000`.
+- `POST /compile/pacote` entrega `{chip, flash, images[{name, offset, size, sha256, data_base64}]}`. É o contrato que o navegador consome.
+- Correção de concorrência: o binário e o manifesto são lidos **dentro** da trava do pipeline, e os endpoints não tocam mais no diretório de build compartilhado.
+- **Gravação provada no QEMU** (`test_gravacao_qemu.py`, `slow`):
+  - o pacote da API é gravado por `esptool` sobre `socket://` no `qemu-system-xtensa` em modo download;
+  - o QEMU reinicia sobre a mesma flash;
+  - o boot segue o mesmo contrato de `test_qemu.py` (sem panic, um reset, heartbeat crescente).
+  - Funcionou de primeira, sem plano B.
+- Offsets do pacote iguais aos do `flasher_args.json`, e sha256 igual ao dos arquivos do build — **conferidos por teste**, não por suposição.
+- Registro do que isso prova e do que não prova em `docs/validacao/gravacao-qemu-esptool.md`.
+
+**Falta**
+- Camada navegador: wrapper sobre o esptool-js, seleção de porta, progresso e tratamento de erro (S3).
+- **Transporte Web Serial:** depois da S2, é a única camada da gravação sem cobertura automatizada. É código da Espressif (esptool-js) e só fecha com ESP32 físico (CA-4).
 
 > **Observação:** o `esptool.py` no servidor vem embutido no ESP-IDF e gera o `.bin` a partir do ELF — não é decisão a tomar, é dependência do toolchain.
 
@@ -273,9 +287,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. **S2** (servidor) e **S3** (navegador) da spec 001, em paralelo, sobre o contrato fixado em `docs/specs/001-fatia-vertical-minima/plan.md`:
-   - S2: `esp32.flash_manifest`, `POST /compile/pacote`, validação de gravação real via `esptool`/QEMU por socket
-   - S3: `gravador.ts` sobre `esptool-js`, tela mínima (F5 + F6) — a afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
+1. **S3** (navegador) da spec 001, sobre o contrato de `docs/specs/001-fatia-vertical-minima/plan.md`: `gravador.ts` sobre `esptool-js` e tela mínima (F5 + F6). A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
 2. *Spike* de biblioteca de canvas → **F7** → **F8**
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
@@ -302,3 +314,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-15 | Validação sem hardware | Runtime autoral passa a **executar**: camada de abstração de I/O com stub, runtime no host, boot verificado em QEMU e arcabouço de teste diferencial pronto para F9. Nada do que exige ESP32 físico foi fechado — ver `docs/validacao/limites-da-validacao-sem-hardware.md` |
 | 2026-09-16 | Correção do painel e pendências de revisão | Gravação física saiu de "Próximos passos" para "Bloqueado aguardando hardware" (não há ESP32); `rsync`/`zip` na imagem — `test_deposito.py` deixa de pular (4 passed); aviso de imagem velha na Regra 5 do `CLAUDE.md`; critério "o programa, não o projeto" no cabeçalho do `build-deposito.sh`; invariante não testada de `plc_glue_scan` comentada |
 | 2026-09-16 | S1 da spec 001 — `POST /compile` | F4 fechada: parser de diagnóstico do `iec2c` (fixtures reais capturadas antes do parser), `pipeline.py` encadeando matiec→esp32 com lock e timeouts, endpoint com envelope Q-3 e limite de corpo (Q-2 decidida, 256 KiB); 50 testes verdes (com `slow`), curl de aceitação confirmado (`.bin` de 197 088 bytes, erro 422 com diagnostics, 413 por tamanho); `plan.md`/`tasks.md` da spec 001 preenchidos; manifesto do depósito atualizado |
+| 2026-09-16 | S2 da spec 001 — gravação, camada servidor | `esp32.flash_manifest` com offsets lidos do `flasher_args.json`; `POST /compile/pacote`; leitura do binário e do manifesto dentro da trava do pipeline; pacote da API gravado por `esptool` sobre socket no QEMU, reiniciado e com o laço progredindo (sem plano B); 63 testes verdes (com `slow`); Web Serial passa a ser a única camada da gravação sem cobertura |

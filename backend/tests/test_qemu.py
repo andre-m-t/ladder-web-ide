@@ -36,26 +36,15 @@ esperado dentro do QEMU e não é o que este teste mede.
 """
 
 import os
-import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from qemu_boot_contrato import qemu_disponivel, toolchain_disponivel, verificar_boot_saudavel
 
 from app.services import esp32, matiec
 from scripts import run_qemu
-
-toolchain_disponivel = pytest.mark.skipif(
-    not esp32.status().available,
-    reason="idf.py nao disponivel neste ambiente (rode dentro do container)",
-)
-
-qemu_disponivel = pytest.mark.skipif(
-    shutil.which("qemu-system-xtensa") is None,
-    reason="qemu-system-xtensa nao disponivel neste ambiente (rode dentro do container)",
-)
 
 # Cada linha de heartbeat sai a cada 50 ciclos de 20 ms (common_ticktime__ do
 # blink.st) -- 1 s de tempo emulado por linha. A janela de observacao precisa
@@ -63,18 +52,6 @@ qemu_disponivel = pytest.mark.skipif(
 # porque o QEMU nao usa -icount aqui) mais pelo menos 3 heartbeats, com folga
 # generosa para uma maquina de CI mais lenta.
 OBSERVATION_TIMEOUT_S = 30.0
-
-# Contrato do log (fixado entre as duas frentes de trabalho antes da
-# implementacao -- nao inventar outro formato aqui).
-_HEARTBEAT_RE = re.compile(r"ladderflow: scan ciclo=(\d+)")
-
-# Marcadores de falha de firmware que o handler de panico do ESP-IDF imprime.
-# Ausencia de ambos e a prova de "nao houve panic" que a rodada pediu.
-_PANIC_MARKERS = ("Guru Meditation Error", "abort() was called")
-
-# Banner que o ROM bootloader imprime a cada reset (POWERON, SW_CPU_RESET
-# etc.). Mais de uma ocorrencia na janela de observacao e bootloop.
-_RESET_BANNER_RE = re.compile(r"^rst:0x[0-9a-fA-F]+ \(", re.MULTILINE)
 
 
 @pytest.fixture
@@ -114,25 +91,7 @@ def test_firmware_da_boot_e_roda_o_laco_de_varredura_no_qemu(
         f"e so para porque este teste o mata no timeout.\nLog capturado:\n{log}"
     )
 
-    for marker in _PANIC_MARKERS:
-        assert marker not in log, f"firmware sinalizou falha ({marker!r}) no log:\n{log}"
-
-    reset_banners = _RESET_BANNER_RE.findall(log)
-    assert len(reset_banners) == 1, (
-        f"esperava exatamente 1 boot na janela de observacao, houve {len(reset_banners)} "
-        f"(bootloop se > 1, firmware nunca chegou a dar boot se 0):\n{log}"
-    )
-
-    ciclos = [int(n) for n in _HEARTBEAT_RE.findall(log)]
-    assert len(ciclos) >= 3, (
-        "esperava pelo menos 3 linhas de heartbeat "
-        f"('ladderflow: scan ciclo=<N>'), encontrei {len(ciclos)}. Se o formato do "
-        "heartbeat ainda nao foi acrescentado a app_main.c, este teste falha por "
-        f"contrato ainda nao cumprido, nao por bug aqui.\nLog capturado:\n{log}"
-    )
-    assert all(a < b for a, b in zip(ciclos, ciclos[1:], strict=False)), (
-        f"contagem de ciclos nao e estritamente crescente: {ciclos}\nLog capturado:\n{log}"
-    )
+    verificar_boot_saudavel(log)
 
 
 def test_efuse_padrao_casa_com_o_do_esp_idf() -> None:

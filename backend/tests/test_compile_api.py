@@ -1,11 +1,14 @@
-"""Contrato de `POST /compile` (spec 001, S1) e do parser de diagnósticos.
+"""Contrato de `POST /compile` e `POST /compile/pacote` (spec 001, S1 e S2) e
+do parser de diagnósticos.
 
 Testes de contrato usam `monkeypatch` nos **adaptadores** (`matiec.py`,
 `esp32.py`), nunca no pipeline em si — assim a suíte rápida também exercita o
 mapeamento de exceções que `pipeline.compilar` faz. Os testes que exigem o
-`iec2c`/`idf.py` de verdade pulam fora do container.
+`iec2c`/`idf.py` de verdade pulam fora do container. A gravação de verdade
+(esptool sobre o QEMU) tem arquivo próprio: `test_gravacao_qemu.py`.
 """
 
+import base64
 from pathlib import Path
 
 import pytest
@@ -50,6 +53,27 @@ def _fake_build_result(
     )
 
 
+def _fake_flash_manifest() -> esp32.FlashManifest:
+    """Manifesto de gravação sintético — usado quando o teste não faz build real.
+
+    `pipeline.compilar` sempre lê o manifesto no sucesso (ver S2), então todo
+    teste de contrato que simula sucesso do `esp32.build_firmware` também
+    precisa simular `esp32.flash_manifest`.
+    """
+    imagens = [
+        esp32.FlashImage(name="bootloader", offset=0x1000, data=b"BOOT", size=4, sha256="a" * 64),
+        esp32.FlashImage(
+            name="partition-table", offset=0x8000, data=b"PART", size=4, sha256="b" * 64
+        ),
+        esp32.FlashImage(name="app", offset=0x10000, data=b"APP-BIN", size=7, sha256="c" * 64),
+    ]
+    return esp32.FlashManifest(
+        chip="esp32",
+        flash=esp32.FlashSettings(mode="dio", freq="40m", size="4MB"),
+        images=imagens,
+    )
+
+
 def _nao_deveria_ser_chamado(*args: object, **kwargs: object) -> None:
     raise AssertionError("iec2c não deveria ter sido invocado")
 
@@ -73,6 +97,7 @@ def test_compile_sucesso_devolve_binario(
             ok=True, binary=binario
         ),
     )
+    monkeypatch.setattr(esp32, "flash_manifest", lambda build_dir: _fake_flash_manifest())
 
     response = client.post("/compile", json={"source": "PROGRAM prog0 END_PROGRAM"})
 
@@ -198,6 +223,115 @@ def test_compile_toolchain_ausente_devolve_503(
     body = response.json()
     assert body["stage"] == "matiec"
     assert body["code"] == "toolchain_error"
+
+
+def test_compile_falha_ao_ler_manifesto_devolve_503(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A leitura dos artefatos acontece dentro da trava (S2); se falhar, é
+    falha de ambiente (503), não erro no código ST do usuário."""
+    binario = tmp_path / "ladderflow_plc.bin"
+    binario.write_bytes(b"FIRMWARE-DE-TESTE")
+
+    monkeypatch.setattr(
+        matiec, "compile_st_to_c", lambda source, *, out_dir, timeout: _fake_compile_result(ok=True)
+    )
+    monkeypatch.setattr(
+        esp32,
+        "build_firmware",
+        lambda generated_dir, *, work_dir=None, timeout=900.0: _fake_build_result(
+            ok=True, binary=binario
+        ),
+    )
+
+    def _levanta_manifesto_ausente(build_dir: Path) -> esp32.FlashManifest:
+        raise esp32.FlashManifestError("flasher_args.json ausente")
+
+    monkeypatch.setattr(esp32, "flash_manifest", _levanta_manifesto_ausente)
+
+    response = client.post("/compile", json={"source": "PROGRAM prog0 END_PROGRAM"})
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["stage"] == "esp32"
+    assert body["code"] == "toolchain_error"
+
+
+# --- POST /compile/pacote: contrato rápido (monkeypatch) --------------------
+
+
+def test_compile_pacote_sucesso_devolve_a_forma_do_contrato(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    binario = tmp_path / "ladderflow_plc.bin"
+    binario.write_bytes(b"FIRMWARE-DE-TESTE")
+
+    monkeypatch.setattr(
+        matiec, "compile_st_to_c", lambda source, *, out_dir, timeout: _fake_compile_result(ok=True)
+    )
+    monkeypatch.setattr(
+        esp32,
+        "build_firmware",
+        lambda generated_dir, *, work_dir=None, timeout=900.0: _fake_build_result(
+            ok=True, binary=binario
+        ),
+    )
+    monkeypatch.setattr(esp32, "flash_manifest", lambda build_dir: _fake_flash_manifest())
+
+    response = client.post("/compile/pacote", json={"source": "PROGRAM prog0 END_PROGRAM"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chip"] == "esp32"
+    assert body["flash"] == {"mode": "dio", "freq": "40m", "size": "4MB"}
+
+    nomes = [imagem["name"] for imagem in body["images"]]
+    assert nomes == ["bootloader", "partition-table", "app"]
+
+    offsets = [imagem["offset"] for imagem in body["images"]]
+    assert offsets == sorted(offsets)
+
+    for imagem, esperado in zip(body["images"], _fake_flash_manifest().images, strict=True):
+        assert imagem["offset"] == esperado.offset
+        assert imagem["size"] == esperado.size
+        assert imagem["sha256"] == esperado.sha256
+        assert base64.b64decode(imagem["data_base64"]) == esperado.data
+
+
+def test_compile_pacote_st_invalido_devolve_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stderr = (IEC2C_SAIDAS_DIR / "variavel_nao_declarada.stderr.txt").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(
+        matiec,
+        "compile_st_to_c",
+        lambda source, *, out_dir, timeout: _fake_compile_result(ok=False, stderr=stderr),
+    )
+    monkeypatch.setattr(esp32, "build_firmware", _nao_deveria_ser_chamado)
+
+    response = client.post("/compile/pacote", json={"source": "isto nao compila"})
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["stage"] == "matiec"
+    assert body["code"] == "compile_error"
+    assert body["diagnostics"]
+
+
+def test_compile_pacote_payload_acima_do_limite_devolve_413(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(matiec, "compile_st_to_c", _nao_deveria_ser_chamado)
+    monkeypatch.setattr(esp32, "build_firmware", _nao_deveria_ser_chamado)
+
+    fonte_grande = "X" * 300_000  # acima dos 262 144 bytes de Q-2
+    response = client.post("/compile/pacote", json={"source": fonte_grande})
+
+    assert response.status_code == 413
+    body = response.json()
+    assert body["stage"] == "request"
+    assert body["code"] == "payload_too_large"
 
 
 # --- iec2c real (pula fora do container) ------------------------------------

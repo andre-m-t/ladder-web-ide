@@ -12,6 +12,8 @@ mapeamento `FalhaCompilacao -> status HTTP` também, porque o contrato de erro
 não muda com o formato de saída.
 """
 
+import base64
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -168,7 +170,77 @@ def compile_source(req: CompileRequest) -> Response:
         raise mapear_falha(resultado)
 
     return Response(
-        content=resultado.binary.read_bytes(),
+        content=resultado.binary_bytes,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{_BINARY_FILENAME}"'},
+    )
+
+
+class FlashSettingsResposta(BaseModel):
+    """`flash` do contrato de `POST /compile/pacote`: parâmetros de gravação do chip."""
+
+    mode: str
+    freq: str
+    size: str
+
+
+class ImagemResposta(BaseModel):
+    """Um item de `images` do contrato de `POST /compile/pacote`.
+
+    `offset` é inteiro e sai do `flasher_args.json` do build (via
+    `esp32.flash_manifest`) — nunca de constante. `data_base64` carrega os
+    bytes da imagem, prontos para decodificar e gravar (no navegador via
+    Web Serial, ou aqui no servidor para validação — ver
+    `docs/validacao/gravacao-qemu-esptool.md`).
+    """
+
+    name: str
+    offset: int
+    size: int
+    sha256: str
+    data_base64: str
+
+
+class PacoteResposta(BaseModel):
+    """Corpo de sucesso de `POST /compile/pacote` (spec 001, S2)."""
+
+    chip: str
+    flash: FlashSettingsResposta
+    images: list[ImagemResposta]
+
+
+@router.post("/compile/pacote", dependencies=[Depends(checar_tamanho_corpo)])
+def compile_pacote(req: CompileRequest) -> PacoteResposta:
+    """Compila `req.source` e devolve as três imagens de gravação com offsets.
+
+    Mesmo pipeline, mesmo limite de corpo e mesmo envelope de erro (Q-3) de
+    `POST /compile`; só o formato de sucesso muda — aqui vai o JSON com
+    `bootloader`, `partition-table` e `app` em ordem crescente de offset,
+    pronto para gravação via `esptool` (por trás de qualquer transporte:
+    Web Serial no navegador, ou socket no QEMU — ver
+    `backend/scripts/run_qemu.py`). Síncrono pelo mesmo motivo de
+    `compile_source`.
+    """
+    resultado = pipeline.compilar(req.source)
+    if isinstance(resultado, pipeline.FalhaCompilacao):
+        raise mapear_falha(resultado)
+
+    manifesto = resultado.flash_manifest
+    return PacoteResposta(
+        chip=manifesto.chip,
+        flash=FlashSettingsResposta(
+            mode=manifesto.flash.mode,
+            freq=manifesto.flash.freq,
+            size=manifesto.flash.size,
+        ),
+        images=[
+            ImagemResposta(
+                name=imagem.name,
+                offset=imagem.offset,
+                size=imagem.size,
+                sha256=imagem.sha256,
+                data_base64=base64.b64encode(imagem.data).decode("ascii"),
+            )
+            for imagem in manifesto.images
+        ],
     )

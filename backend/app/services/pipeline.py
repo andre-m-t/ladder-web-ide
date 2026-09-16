@@ -14,6 +14,15 @@ disputariam o mesmo diretório sem essa trava. Não é uma fila — é apenas
 "uma compilação de cada vez", suficiente para o contrato síncrono (consequência
 (a) registrada em Q-6). Uma fila real, se necessário, é decisão para depois da
 fatia mínima.
+
+A trava não pode ser liberada antes de os artefatos do sucesso serem lidos: o
+`.bin` da aplicação e o `flasher_args.json` (via `esp32.flash_manifest`) vivem
+no diretório de build COMPARTILHADO, e uma compilação concorrente que entrasse
+na trava assim que ela fosse liberada poderia sobrescrever esses arquivos no
+meio da leitura de quem chamou `compilar()`. Por isso `compilar()` lê os bytes
+do binário e monta o manifesto de gravação AINDA DENTRO da trava, e devolve os
+dois já prontos em `ResultadoCompilacao` — os endpoints (`api/compile.py`)
+nunca leem arquivo nenhum do `build_dir` compartilhado por conta própria.
 """
 
 import tempfile
@@ -31,12 +40,16 @@ _lock = threading.Lock()
 
 @dataclass(frozen=True)
 class ResultadoCompilacao:
-    """Compilação bem-sucedida: ST válido, C válido, firmware gerado."""
+    """Compilação bem-sucedida: ST válido, C válido, firmware gerado.
 
-    binary: Path
-    # Diretório de build do ESP-IDF (`work_dir/build`) — é onde vive o
-    # `flasher_args.json` que a S2 (`POST /compile/pacote`) vai ler.
-    build_dir: Path
+    `binary_bytes` e `flash_manifest` já vêm lidos do diretório de build
+    compartilhado — lidos AINDA DENTRO da trava de `compilar()` (ver
+    docstring do módulo), nunca depois. Quem chama não tem (nem deveria
+    precisar) acesso a um `Path` de build para ler por conta própria.
+    """
+
+    binary_bytes: bytes
+    flash_manifest: esp32.FlashManifest
     matiec_result: matiec.CompileResult
     esp32_result: esp32.BuildResult
 
@@ -119,9 +132,20 @@ def compilar(source: str) -> ResultadoCompilacao | FalhaCompilacao:
                     raw_stderr=esp32_result.stderr,
                 )
 
+            # Leitura dos artefatos AINDA DENTRO da trava (ver docstring do
+            # módulo): é o que impede uma compilação concorrente de
+            # sobrescrever o build no meio desta leitura.
+            try:
+                binary_bytes = esp32_result.binary.read_bytes()
+                manifesto = esp32.flash_manifest(esp32_result.work_dir / "build")
+            except OSError as exc:
+                return _falha("esp32", "toolchain_error", f"falha ao ler artefatos do build: {exc}")
+            except esp32.Esp32Error as exc:
+                return _falha("esp32", "toolchain_error", str(exc))
+
             return ResultadoCompilacao(
-                binary=esp32_result.binary,
-                build_dir=esp32_result.work_dir / "build",
+                binary_bytes=binary_bytes,
+                flash_manifest=manifesto,
                 matiec_result=matiec_result,
                 esp32_result=esp32_result,
             )

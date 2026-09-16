@@ -7,11 +7,53 @@ seguintes reaproveitam o diretorio de trabalho.
 Para rodar so o rapido:  pytest -m "not slow"
 """
 
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
 from app.services import esp32, matiec
+
+# Exemplo de flasher_args.json capturado de um build real de blink.st (idf.py
+# build, ESP-IDF v5.4.1, alvo esp32) — os testes de flash_manifest abaixo
+# validam a leitura contra este formato, não contra suposição.
+_FLASHER_ARGS_EXEMPLO = {
+    "write_flash_args": ["--flash_mode", "dio", "--flash_size", "4MB", "--flash_freq", "40m"],
+    "flash_settings": {"flash_mode": "dio", "flash_size": "4MB", "flash_freq": "40m"},
+    "flash_files": {
+        "0x1000": "bootloader/bootloader.bin",
+        "0x10000": "ladderflow_plc.bin",
+        "0x8000": "partition_table/partition-table.bin",
+    },
+    "bootloader": {"offset": "0x1000", "file": "bootloader/bootloader.bin", "encrypted": "false"},
+    "app": {"offset": "0x10000", "file": "ladderflow_plc.bin", "encrypted": "false"},
+    "partition-table": {
+        "offset": "0x8000",
+        "file": "partition_table/partition-table.bin",
+        "encrypted": "false",
+    },
+    "extra_esptool_args": {
+        "after": "hard_reset",
+        "before": "default_reset",
+        "stub": True,
+        "chip": "esp32",
+    },
+}
+
+
+def _escrever_build_exemplo(build_dir: Path) -> None:
+    """Monta um `build_dir` de exemplo: o JSON acima mais os três arquivos que ele referencia."""
+    build_dir.mkdir(parents=True, exist_ok=True)
+    (build_dir / "flasher_args.json").write_text(
+        json.dumps(_FLASHER_ARGS_EXEMPLO), encoding="utf-8"
+    )
+    (build_dir / "bootloader").mkdir()
+    (build_dir / "bootloader" / "bootloader.bin").write_bytes(b"BOOTLOADER-FALSO")
+    (build_dir / "partition_table").mkdir()
+    (build_dir / "partition_table" / "partition-table.bin").write_bytes(b"TABELA-FALSA")
+    (build_dir / "ladderflow_plc.bin").write_bytes(b"APP-FALSO-MAIOR-QUE-OS-OUTROS")
+
 
 toolchain_disponivel = pytest.mark.skipif(
     not esp32.status().available,
@@ -82,3 +124,67 @@ def test_template_ausente_levanta(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 
     with pytest.raises(esp32.Esp32NotAvailable):
         esp32.build_firmware(generated, work_dir=tmp_path / "work")
+
+
+# --- flash_manifest (spec 001, S2) -------------------------------------------
+
+
+def test_flash_manifest_le_offsets_bytes_e_sha256_do_flasher_args(tmp_path: Path) -> None:
+    build_dir = tmp_path / "build"
+    _escrever_build_exemplo(build_dir)
+
+    manifesto = esp32.flash_manifest(build_dir)
+
+    assert manifesto.chip == "esp32"
+    assert manifesto.flash == esp32.FlashSettings(mode="dio", freq="40m", size="4MB")
+
+    # Em ordem crescente de offset -- não na ordem em que aparecem no JSON.
+    assert [imagem.name for imagem in manifesto.images] == [
+        "bootloader",
+        "partition-table",
+        "app",
+    ]
+    assert [imagem.offset for imagem in manifesto.images] == [0x1000, 0x8000, 0x10000]
+
+    por_nome = {imagem.name: imagem for imagem in manifesto.images}
+    assert por_nome["bootloader"].data == b"BOOTLOADER-FALSO"
+    assert por_nome["bootloader"].size == len(b"BOOTLOADER-FALSO")
+    assert por_nome["app"].data == b"APP-FALSO-MAIOR-QUE-OS-OUTROS"
+    assert por_nome["app"].sha256 == hashlib.sha256(b"APP-FALSO-MAIOR-QUE-OS-OUTROS").hexdigest()
+
+
+def test_flash_manifest_arquivo_ausente_levanta(tmp_path: Path) -> None:
+    with pytest.raises(esp32.FlashManifestError):
+        esp32.flash_manifest(tmp_path / "build-inexistente")
+
+
+def test_flash_manifest_json_invalido_levanta(tmp_path: Path) -> None:
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "flasher_args.json").write_text("isto nao e json", encoding="utf-8")
+
+    with pytest.raises(esp32.FlashManifestError):
+        esp32.flash_manifest(build_dir)
+
+
+def test_flash_manifest_sem_chave_de_imagem_levanta(tmp_path: Path) -> None:
+    build_dir = tmp_path / "build"
+    _escrever_build_exemplo(build_dir)
+    sem_app = dict(_FLASHER_ARGS_EXEMPLO)
+    del sem_app["app"]
+    (build_dir / "flasher_args.json").write_text(json.dumps(sem_app), encoding="utf-8")
+
+    with pytest.raises(esp32.FlashManifestError):
+        esp32.flash_manifest(build_dir)
+
+
+def test_flash_manifest_imagem_referenciada_ausente_levanta(tmp_path: Path) -> None:
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    (build_dir / "flasher_args.json").write_text(
+        json.dumps(_FLASHER_ARGS_EXEMPLO), encoding="utf-8"
+    )
+    # Não cria os arquivos .bin referenciados pelo JSON.
+
+    with pytest.raises(esp32.FlashManifestError):
+        esp32.flash_manifest(build_dir)

@@ -94,7 +94,7 @@ explícitas e um critério de pronto verificável. `[x]` marca concluída.
 
 ## Fatia 2 — S2: gravação, camada servidor (em paralelo com a Fatia 3)
 
-- [ ] **#11 — `esp32.flash_manifest(build_dir)`**
+- [x] **#11 — `esp32.flash_manifest(build_dir)`**
   - Arquivos: `backend/app/services/esp32.py`
   - Depende de: #5 (S1 commitada)
   - Pronto quando: lê `flasher_args.json` (`flash_files`, `flash_settings`,
@@ -102,13 +102,13 @@ explícitas e um critério de pronto verificável. `[x]` marca concluída.
     (vindo do JSON, nunca de constante), bytes e sha256, em ordem crescente
     de offset.
 
-- [ ] **#12 — `POST /compile/pacote`**
+- [x] **#12 — `POST /compile/pacote`**
   - Arquivos: `backend/app/api/compile.py`
   - Depende de: #11
   - Pronto quando: reaproveita `checar_tamanho_corpo` e `mapear_falha` da S1,
     devolve o JSON do contrato (`chip`, `flash`, `images[]`) no sucesso.
 
-- [ ] **#13 — Validação de gravação real via QEMU/esptool**
+- [x] **#13 — Validação de gravação real via QEMU/esptool**
   - Arquivos: `backend/scripts/run_qemu.py`,
     `backend/tests/test_gravacao_qemu.py`,
     `docs/validacao/gravacao-qemu-esptool.md`
