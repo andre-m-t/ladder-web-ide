@@ -56,21 +56,70 @@ export interface Problema {
  *   - não checa se a célula já está ocupada — isso é de `edicao.ts`.
  */
 export function posicaoValida(rung: Rung, tipo: Elemento['tipo'], celula: Celula): boolean {
+  // Fonte única da regra: `motivoPosicaoInvalida`. O índice do degrau só
+  // entra no texto da mensagem, não na decisão.
+  return motivoPosicaoInvalida(0, rung, tipo, celula) === null
+}
+
+// -- mensagens voltadas ao usuário ---------------------------------------
+
+/**
+ * Descreve uma célula do jeito que a interface rotula (1-based): "degrau N,
+ * coluna M" no trilho principal (linha 0), "degrau N, ramo L, coluna M" num
+ * ramo (linha L > 0). Nunca expõe `linha=`/`coluna=` internos (0-based) —
+ * toda mensagem voltada ao usuário passa por aqui. Usado por `edicao.ts` e
+ * por `validarDiagrama`, para que as duas frentes descrevam posição do
+ * mesmo jeito.
+ */
+export function descreverCelula(indiceDegrau: number, celula: Celula): string {
+  const degrau = `degrau ${indiceDegrau + 1}`
+  const coluna = `coluna ${celula.coluna + 1}`
+  return celula.linha === 0 ? `${degrau}, ${coluna}` : `${degrau}, ramo ${celula.linha}, ${coluna}`
+}
+
+/**
+ * Regra de posição, com o motivo: devolve `null` se `celula` aceita `tipo` em
+ * `rung`, ou a mensagem em português, 1-based, explicando a primeira regra
+ * violada (não só constatando a recusa). É a **única** implementação da
+ * regra — `posicaoValida` deriva daqui, para que a decisão e o motivo
+ * relatado nunca divirjam.
+ */
+export function motivoPosicaoInvalida(
+  indiceDegrau: number,
+  rung: Rung,
+  tipo: Elemento['tipo'],
+  celula: Celula,
+): string | null {
   const { linha, coluna } = celula
+  const onde = descreverCelula(indiceDegrau, celula)
+  const colunaTerminal1Based = COLUNA_TERMINAL + 1
 
-  if (linha < 0 || linha > LINHAS_EXTRAS_MAX) return false
-  if (coluna < 0 || coluna >= COLUNAS_POR_DEGRAU) return false
-
+  if (linha < 0) {
+    return `posição inválida: ${onde} está fora da grade (linha negativa)`
+  }
+  if (coluna < 0 || coluna >= COLUNAS_POR_DEGRAU) {
+    return `posição inválida: ${onde} está fora da grade (o degrau tem colunas 1 a ${COLUNAS_POR_DEGRAU})`
+  }
+  if (linha > LINHAS_EXTRAS_MAX) {
+    return `posição inválida: ${onde} passa do limite de ramos do degrau (no máximo ${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal)`
+  }
   if (linha > 0) {
     const dentroDeRamo = rung.ramos.some(
       (ramo) => ramo.linha === linha && coluna >= ramo.colunaInicio && coluna <= ramo.colunaFim,
     )
-    if (!dentroDeRamo) return false
+    if (!dentroDeRamo) {
+      return `posição inválida: ${onde} não tem ramo declarado nessa coluna`
+    }
   }
-
-  if (ehBobina(tipo)) return linha === 0 && coluna === COLUNA_TERMINAL
-  if (ehContato(tipo)) return coluna < COLUNA_TERMINAL
-  return false
+  if (ehBobina(tipo)) {
+    if (linha === 0 && coluna === COLUNA_TERMINAL) return null
+    return `posição inválida: bobina só pode ficar na última coluna (coluna ${colunaTerminal1Based}) do trilho principal`
+  }
+  if (ehContato(tipo)) {
+    if (coluna < COLUNA_TERMINAL) return null
+    return `posição inválida: a coluna ${colunaTerminal1Based} é reservada a bobinas; contatos vão nas colunas 1 a ${COLUNA_TERMINAL}`
+  }
+  return `posição inválida em ${onde}`
 }
 
 // -- validarDiagrama ------------------------------------------------------
@@ -96,9 +145,9 @@ function validarEnderecosDasVariaveis(diagrama: Diagrama): Problema[] {
   return problemas
 }
 
-function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Problema[] {
+function validarElemento(indiceDegrau: number, rung: Rung, elemento: Elemento, diagrama: Diagrama): Problema[] {
   const problemas: Problema[] = []
-  const { linha, coluna } = elemento.celula
+  const onde = descreverCelula(indiceDegrau, elemento.celula)
 
   if (!posicaoValida(rung, elemento.tipo, elemento.celula)) {
     problemas.push({
@@ -106,7 +155,7 @@ function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Pr
       severidade: 'erro',
       rungId: rung.id,
       elementoId: elemento.id,
-      mensagem: `elemento '${elemento.id}' (${elemento.tipo}) em posição inválida (linha=${linha}, coluna=${coluna})`,
+      mensagem: `${motivoPosicaoInvalida(indiceDegrau, rung, elemento.tipo, elemento.celula)} (elemento '${elemento.id}', ${elemento.tipo})`,
     })
   }
 
@@ -116,7 +165,7 @@ function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Pr
       severidade: 'erro',
       rungId: rung.id,
       elementoId: elemento.id,
-      mensagem: `elemento '${elemento.id}' (${elemento.tipo}, coluna ${coluna}) sem variável atribuída`,
+      mensagem: `elemento '${elemento.id}' (${elemento.tipo}) em ${onde} está sem variável atribuída — vincule uma variável a esse elemento`,
     })
     return problemas
   }
@@ -128,7 +177,7 @@ function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Pr
       severidade: 'erro',
       rungId: rung.id,
       elementoId: elemento.id,
-      mensagem: `elemento '${elemento.id}' referencia variável inexistente '${elemento.variavel}'`,
+      mensagem: `elemento '${elemento.id}' (${elemento.tipo}) em ${onde} referencia a variável '${elemento.variavel}', que não existe`,
     })
     return problemas
   }
@@ -139,7 +188,7 @@ function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Pr
       severidade: 'erro',
       rungId: rung.id,
       elementoId: elemento.id,
-      mensagem: `bobina '${elemento.id}' escreve em '${variavel.nome}' (${variavel.endereco}), que é uma entrada`,
+      mensagem: `bobina '${elemento.id}' em ${onde} escreve em '${variavel.nome}' (${variavel.endereco}), que é uma entrada — bobinas não podem escrever em entradas`,
     })
   }
 
@@ -153,9 +202,9 @@ function validarElemento(rung: Rung, elemento: Elemento, diagrama: Diagrama): Pr
 export function validarDiagrama(diagrama: Diagrama): Problema[] {
   const problemas: Problema[] = [...validarEnderecosDasVariaveis(diagrama)]
 
-  for (const rung of diagrama.rungs) {
+  diagrama.rungs.forEach((rung, indiceDegrau) => {
     for (const elemento of rung.elementos) {
-      problemas.push(...validarElemento(rung, elemento, diagrama))
+      problemas.push(...validarElemento(indiceDegrau, rung, elemento, diagrama))
     }
 
     if (!temBobina(rung)) {
@@ -164,10 +213,10 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
         severidade: 'erro',
         rungId: rung.id,
         elementoId: null,
-        mensagem: `degrau '${rung.id}' sem nenhuma bobina`,
+        mensagem: `degrau ${indiceDegrau + 1} sem nenhuma bobina — todo degrau precisa terminar numa bobina na coluna ${COLUNA_TERMINAL + 1}`,
       })
     }
-  }
+  })
 
   return problemas
 }

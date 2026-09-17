@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -186,5 +186,151 @@ describe('EditorLadder — remover elemento selecionado limpa a seleção', () =
     for (const celula of celulas) {
       expect(celula).toHaveAttribute('aria-pressed', 'false')
     }
+  })
+})
+
+describe('EditorLadder — prévia por mouse e teclado (plano D-11)', () => {
+  it('hover com NA ativa numa célula vazia mostra a prévia de inserção, sem aplicar nada', async () => {
+    const usuario = userEvent.setup()
+    const aoMudar = vi.fn()
+    render(<EditorLadder aoMudar={aoMudar} />)
+
+    await usuario.click(screen.getByRole('button', { name: /contato na/i }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    await usuario.hover(celula)
+
+    expect(celula).toHaveAttribute('data-previa', 'inserir')
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('hover na coluna 1 com bobina ativa mostra a prévia inválida com o motivo do núcleo', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /^bobina$/i }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    await usuario.hover(celula)
+
+    expect(celula).toHaveAttribute('data-previa', 'invalida')
+    expect(celula.querySelector('title')).toHaveTextContent(/posição inválida/i)
+  })
+
+  it('foco por teclado produz a mesma prévia que o hover, e mouseLeave/blur limpam', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /contato na/i }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+
+    await usuario.hover(celula)
+    expect(celula).toHaveAttribute('data-previa', 'inserir')
+    await usuario.unhover(celula)
+    expect(celula).not.toHaveAttribute('data-previa')
+
+    fireEvent.focus(celula)
+    expect(celula).toHaveAttribute('data-previa', 'inserir')
+    fireEvent.blur(celula)
+    expect(celula).not.toHaveAttribute('data-previa')
+  })
+
+  it('remover sobre um elemento existente mostra a prévia de remoção', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /contato na/i }))
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+
+    await usuario.click(screen.getByRole('button', { name: /remover/i }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    await usuario.hover(celula)
+
+    expect(celula).toHaveAttribute('data-previa', 'remover')
+  })
+
+  it('sem ferramenta ativa, nenhuma célula mostra prévia ao passar o mouse', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    await usuario.hover(celula)
+
+    for (const umaCelula of screen.getAllByRole('button', { name: /^Degrau/ })) {
+      expect(umaCelula).not.toHaveAttribute('data-previa')
+    }
+  })
+})
+
+describe('EditorLadder — recusa junto à grade (plano D-11)', () => {
+  it('recusa marca a célula com aria-invalid/aria-describedby apontando para o alerta', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /^bobina$/i }))
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+
+    const alerta = screen.getByRole('alert')
+    expect(alerta).toHaveTextContent(/posição inválida/i)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    expect(celula).toHaveAttribute('aria-invalid', 'true')
+    expect(celula).toHaveAttribute('aria-describedby', alerta.id)
+  })
+
+  it('Esc limpa a recusa e o marcador da célula', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    const botaoBobina = screen.getByRole('button', { name: /^bobina$/i })
+    await usuario.click(botaoBobina)
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    botaoBobina.focus()
+    await usuario.keyboard('{Escape}')
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('trocar de ferramenta na paleta limpa a recusa', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /^bobina$/i }))
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: /contato na/i }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('uma ação válida na célula limpa a recusa anterior', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.click(screen.getByRole('button', { name: /^bobina$/i }))
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('EditorLadder — erro do painel de variáveis continua no painel', () => {
+  it('declarar uma variável com nome já usado mostra o erro dentro do painel de variáveis', async () => {
+    const usuario = userEvent.setup()
+    render(<EditorLadder />)
+
+    await usuario.type(screen.getByLabelText('Nome'), 'entrada')
+    await usuario.click(screen.getByRole('button', { name: /declarar/i }))
+
+    await usuario.type(screen.getByLabelText('Nome'), 'entrada')
+    await usuario.click(screen.getByRole('button', { name: /declarar/i }))
+
+    const painel = screen.getByRole('region', { name: 'Variáveis' })
+    expect(within(painel).getByRole('alert')).toHaveTextContent(/já existe uma variável/i)
   })
 })

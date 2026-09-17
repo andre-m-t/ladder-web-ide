@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -38,5 +38,35 @@ describe('Paleta', () => {
     await usuario.click(screen.getByRole('button', { name: /remover/i }))
 
     expect(aoEscolher).toHaveBeenCalledWith(null)
+  })
+
+  it('cada botão tem exatamente um ícone SVG marcado como aria-hidden', () => {
+    render(<Paleta ativa={null} aoEscolher={vi.fn()} />)
+
+    for (const botao of screen.getAllByRole('button')) {
+      const svgsEscondidos = botao.querySelectorAll('svg[aria-hidden="true"]')
+      expect(svgsEscondidos).toHaveLength(1)
+    }
+  })
+
+  it('nome acessível de cada botão é exatamente o rótulo, sem texto do ícone', () => {
+    render(<Paleta ativa={null} aoEscolher={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'Contato NA' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Contato NF' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Bobina' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remover' })).toBeInTheDocument()
+  })
+
+  it('botão pressionado envolve o ícone num chip claro (contraste sobre o fundo sky)', () => {
+    render(<Paleta ativa="bobina" aoEscolher={vi.fn()} />)
+
+    const botaoPressionado = screen.getByRole('button', { name: 'Bobina' })
+    const chip = within(botaoPressionado).getByTestId('chip-icone')
+    expect(chip.className).toContain('bg-white/90')
+    expect(chip.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+
+    const botaoSolto = screen.getByRole('button', { name: 'Contato NA' })
+    expect(within(botaoSolto).queryByTestId('chip-icone')).toBeNull()
   })
 })

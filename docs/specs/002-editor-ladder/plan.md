@@ -404,3 +404,36 @@ núcleo **antes** de as frentes de desenho começarem a fatia.
 A recusa de bobina simples duplicada entra, no TCC, como **limitação
 declarada**, ao lado da cobertura parcial da IEC 61131-3: desvio consciente
 da prática de mercado ("vale a última escrita"), por motivo didático.
+
+## 11. Revisão aditiva — ajuste de interação entre as fatias 1 e 2 (2026-09-16)
+
+Depois da fatia 1, o autor pediu que o editor mostrasse o efeito de uma ação
+**antes** do clique e a recusa **junto à grade**. Não muda a spec (RF-12 já
+exige sinalização visual; D-4/R-2 continuam valendo): muda o como da
+interação. Tarefa #21.
+
+### D-11: prévia fiel ao núcleo e recusa junto à grade
+- **Escolha:**
+  - **Paleta com símbolo:** cada botão mostra o símbolo do elemento (mini-SVG
+    `aria-hidden`, reaproveitando `Simbolos.tsx`) ao lado do nome; o nome
+    acessível continua sendo o texto.
+  - **Prévia sob o cursor:** com ferramenta ativa, a célula sob o mouse **ou
+    com foco de teclado** é destacada, e a prévia é calculada chamando a
+    **própria operação do núcleo** (`inserirElemento`, ou a existência de
+    elemento para `remover`) sem aplicar o resultado. Válida → fantasma
+    translúcido do símbolo; inválida → célula em vermelho com o motivo do
+    núcleo em `<title>`; remover → elemento em vermelho.
+  - **Recusa junto à grade:** o motivo aparece em `role="alert"` logo abaixo do
+    degrau afetado, e a célula recusada fica marcada (`aria-invalid`,
+    `aria-describedby`) até a próxima ação bem-sucedida, Esc ou troca de
+    ferramenta. Erros de declarar/vincular variável continuam no painel.
+- **Por quê:** a prévia só é honesta se prometer exatamente o que o clique
+  fará; derivá-la da operação do núcleo evita uma segunda cópia da regra de
+  posição na UI, que divergiria com o tempo. Prévia também no foco mantém a
+  paridade entre mouse e teclado exigida por R-2.
+- **Alternativas descartadas:** reimplementar `posicaoValida` + ocupação no
+  componente — duplica regra; texto do motivo dentro da célula — não cabe em
+  64 px; prévia só por mouse — quebra a paridade com o teclado.
+- **Requisito atendido:** RF-12, CA-5 (antecipa a parte "recusa visível junto
+  ao elemento" da #13; a lista de problemas da validação continua na #13).
+

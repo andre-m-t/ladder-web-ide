@@ -72,15 +72,33 @@ describe('inserirElemento', () => {
     expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
   })
 
-  it('recusa: posição inválida (bobina fora da última coluna)', () => {
+  it('recusa: posição inválida (bobina fora da última coluna) — motivo 1-based explica a regra', () => {
     const diagrama = congelarProfundo(diagramaVazio())
     const resultado = inserirElemento(diagrama, 'r1', 'bobina', { linha: 0, coluna: 0 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('posição inválida')
+    // explica a regra (bobina só na última coluna do trilho principal), com
+    // a coluna terminal em 1-based (a interface rotula a partir de 1)
+    expect(resultado.motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
+    expect(resultado.motivo).toContain('trilho principal')
+    // nunca no formato interno linha=/coluna= (0-based)
+    expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
   })
 
-  it('recusa: célula ocupada', () => {
+  it('recusa: contato na coluna terminal — motivo diz que é reservada a bobinas e onde vão os contatos', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+    expect(resultado.motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
+    expect(resultado.motivo).toContain('reservada a bobinas')
+    expect(resultado.motivo).toContain(`1 a ${COLUNA_TERMINAL}`)
+    expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
+  })
+
+  it('recusa: célula ocupada — motivo localiza a célula em degrau/coluna 1-based', () => {
     const base = diagramaVazio()
     const comContato = inserirElemento(base, 'r1', 'contato_na', { linha: 0, coluna: 0 })
     if (!comContato.ok) throw new Error('esperava sucesso')
@@ -90,6 +108,8 @@ describe('inserirElemento', () => {
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('ocupada')
+    expect(resultado.motivo).toContain('degrau 1, coluna 1')
+    expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
   })
 })
 

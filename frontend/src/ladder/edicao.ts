@@ -9,7 +9,7 @@
  */
 
 import type { Celula, Diagrama, Elemento, Rung, Variavel } from './modelo'
-import { posicaoValida } from './validacao'
+import { descreverCelula, motivoPosicaoInvalida } from './validacao'
 import { enderecoValido } from './enderecos'
 
 export type ResultadoEdicao = { ok: true; diagrama: Diagrama } | { ok: false; motivo: string }
@@ -49,6 +49,12 @@ function encontrarRung(diagrama: Diagrama, rungId: string): Rung | undefined {
   return diagrama.rungs.find((rung) => rung.id === rungId)
 }
 
+/** Posição (0-based) do degrau `rungId` em `diagrama.rungs` — é o índice que
+ * as mensagens voltadas ao usuário mostram como "degrau N" (1-based). */
+function indiceDoRung(diagrama: Diagrama, rungId: string): number {
+  return diagrama.rungs.findIndex((rung) => rung.id === rungId)
+}
+
 function encontrarElemento(diagrama: Diagrama, elementoId: string): { rung: Rung; elemento: Elemento } | undefined {
   for (const rung of diagrama.rungs) {
     const elemento = rung.elementos.find((e) => e.id === elementoId)
@@ -70,12 +76,14 @@ export function inserirElemento(
 ): ResultadoEdicao {
   const rungOriginal = encontrarRung(diagrama, rungId)
   if (rungOriginal === undefined) return recusa(`degrau '${rungId}' inexistente`)
+  const indiceDegrau = indiceDoRung(diagrama, rungId)
 
-  if (!posicaoValida(rungOriginal, tipo, celula)) {
-    return recusa(`posição inválida para ${tipo} (linha=${celula.linha}, coluna=${celula.coluna})`)
+  const motivoPosicao = motivoPosicaoInvalida(indiceDegrau, rungOriginal, tipo, celula)
+  if (motivoPosicao !== null) {
+    return recusa(motivoPosicao)
   }
   if (celulaOcupada(rungOriginal, celula)) {
-    return recusa(`célula (linha=${celula.linha}, coluna=${celula.coluna}) já ocupada`)
+    return recusa(`célula ocupada: já existe um elemento em ${descreverCelula(indiceDegrau, celula)}`)
   }
 
   const novoDiagrama = structuredClone(diagrama)
@@ -105,7 +113,7 @@ export function declararVariavel(diagrama: Diagrama, variavel: { nome: string; e
   const { nome, endereco } = variavel
 
   if (nome.length === 0 || !REGEX_IDENTIFICADOR.test(nome)) {
-    return recusa(`nome de variável inválido: '${nome}'`)
+    return recusa(`nome de variável inválido: '${nome}' — use letra ou '_' no início, seguido de letras, dígitos ou '_'`)
   }
   if (diagrama.variaveis.some((v) => v.nome === nome)) {
     return recusa(`já existe uma variável chamada '${nome}'`)

@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (spec 002 — Fatia 1 do editor Ladder concluída) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 — ajuste de interação #21 concluído) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -254,9 +254,14 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Verificação: `tsc` limpo, 69 testes vitest, `vite build` (JS 350 kB / 110 kB gzip), pytest `not slow` 60 passed, `ruff` limpo, `build-deposito.sh --verificar` ok
 - Implementado por frentes paralelas (N, D, T, B) no mesmo checkout, com dono único por arquivo; nenhum conflito
 
-**Pendente de revisão:** recusas de célula aparecem no alerta do painel de variáveis (longe da grade) — reavaliar na #13.
+**Concluído — ajuste de interação #21 (entre as fatias 1 e 2, plano §11/D-11, 2026-09-16)**
+- Paleta com símbolo de cada elemento ao lado do nome (ícone `aria-hidden`, chip claro no botão pressionado para contraste)
+- Prévia sob o cursor **e** sob o foco de teclado, calculada chamando a própria operação do núcleo sem aplicar: fantasma translúcido (válida), célula vermelha com motivo em `<title>` (inválida), elemento em vermelho (remover)
+- Recusa em `role="alert"` logo abaixo do degrau, com a célula marcada (`aria-invalid`, `aria-describedby`); erros de variável seguem no painel — resolve a pendência "recusa longe da grade" da fatia 1
+- Mensagens do núcleo 1-based ("degrau N, coluna M") e explicando a regra violada; achado na verificação visual em Chromium headless, onde a mensagem dizia `linha=0, coluna=0` contra o rótulo "coluna 1" da tela. `motivoPosicaoInvalida` passou a ser a única implementação da regra de posição (`posicaoValida` deriva dela)
+- Verificação: `tsc` limpo, 107 testes vitest, `vite build`; capturas em Chromium headless (paleta ativa, fantasma, célula inválida, recusa abaixo da grade)
 
-**Falta:** Fatia 2 (#9–#10), Fatia 3 (#11–#14), Fatia 4 (#15–#20); migração do modelo de `spikes/modelo/` para `frontend/src`, renderização, edição, validação, persistência.
+**Falta:** Fatia 2 (#9–#10), Fatia 3 (#11–#14), Fatia 4 (#15–#20).
 
 ---
 
@@ -373,3 +378,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Spec 002 aprovada e plano 002 | Checklist de revisão da spec percorrido: acrescentados CA-9 (bobina duplicada/aviso SET-RESET) e CA-10 (limites), corrigida contagem de elementos; spec aprovada. `plan.md` escrito com D-1 a D-10, contrato do modelo (CTU com `linhaReset`, `tipo` só `BOOL`, severidade), mapeamento CA → teste e quatro fatias; aguardando aprovação do autor |
 | 2026-09-16 | Plano 002 aprovado e tarefas 002 | Push de `main` (`ce93bce..d983635`). Ressalvas da aprovação registradas no plano como §10 (R-1 aviso no código do elo manual do CA-3; R-2 seleção como decisão de design; R-3 teste de acoplamento endereços ↔ `plc_io_map.h` movido para o pytest, que hoje não existia). `tasks.md`: 20 tarefas, 4 fatias, frentes com dono único de arquivo para evitar conflito em `frontend/src/ladder/`; aguardando aprovação |
 | 2026-09-16 | Fatia 1 da spec 002 (#1–#8) | Editor Ladder mínimo na tela: núcleo puro (modelo, endereços, validação, edição) + SVG (grade, símbolos, paleta, variáveis, editor). `IO_ESPELHO` e `MINIMAL` construíveis pela UI (CA-1, CA-2), recusa de posição inválida visível (CA-5); teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3). 69 testes vitest, 60 pytest, build e depósito verdes. Frentes paralelas sem conflito de arquivo |
+| 2026-09-16 | Ajuste de interação #21 (spec 002) | Pedido do autor antes da fatia 2: paleta com símbolo, prévia sob cursor/foco derivada do núcleo, recusa abaixo do degrau com célula marcada (plano §11, D-11). Frentes D1 (símbolos/paleta) e D2 (grade/editor) em paralelo; ambas caíram por limite de API e foram retomadas. Revisão do orquestrador pegou ícone invisível no botão pressionado e, na verificação visual, mensagens 0-based sem a regra — corrigidas (frente N), com a regra de posição tornada fonte única. 107 testes vitest, build verde |

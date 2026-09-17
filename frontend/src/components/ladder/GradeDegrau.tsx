@@ -12,11 +12,22 @@
  * reescrever o cálculo de posição.
  *
  * Função pura das props: nenhum estado próprio, nenhuma mutação do `rung`.
+ * A prévia (`previa`) e a recusa (`recusa`) chegam prontas de `EditorLadder`
+ * — este componente só desenha, nunca decide se uma jogada é válida (plano
+ * D-11): hover/foco na célula só avisam `aoPassarCelula`, que sobe para o
+ * editor calcular a prévia chamando o núcleo.
  */
 import type { KeyboardEvent } from 'react'
 
 import { COLUNAS_POR_DEGRAU, COLUNA_TERMINAL, ehBobina, type Celula, type Elemento, type Rung, type TipoBobina, type TipoContato } from '../../ladder/modelo'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
+
+/** Prévia da jogada da ferramenta ativa sobre uma célula, calculada pelo
+ * editor chamando o núcleo sem aplicar (plano D-11). */
+export type Previa =
+  | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo'] }
+  | { celula: Celula; tipo: 'remover' }
+  | { celula: Celula; tipo: 'invalida'; motivo: string }
 
 export interface GradeDegrauProps {
   rung: Rung
@@ -25,6 +36,12 @@ export interface GradeDegrauProps {
   /** Id do elemento selecionado, ou null se nenhum. */
   selecionado: string | null
   aoAtivarCelula: (rungId: string, celula: Celula) => void
+  /** Prévia a desenhar na célula sob hover/foco, ou null/ausente. */
+  previa?: Previa | null
+  /** Avisa qual célula está sob o mouse ou o foco (null ao sair). */
+  aoPassarCelula?: (rungId: string, celula: Celula | null) => void
+  /** Última recusa de ação sobre uma célula deste degrau, ou null/ausente. */
+  recusa?: { celula: Celula; motivo: string } | null
 }
 
 const LARGURA_CELULA = 64
@@ -43,6 +60,10 @@ function xDaColuna(coluna: number): number {
 
 function encontrarElemento(rung: Rung, celula: Celula): Elemento | undefined {
   return rung.elementos.find((e) => e.celula.linha === celula.linha && e.celula.coluna === celula.coluna)
+}
+
+function celulaIgual(a: Celula, b: Celula): boolean {
+  return a.linha === b.linha && a.coluna === b.coluna
 }
 
 function rotuloTipo(tipo: TipoContato | TipoBobina): string {
@@ -66,18 +87,37 @@ function rotuloCelula(indiceDegrau: number, coluna: number, elemento: Elemento |
   return `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
 }
 
-export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula }: GradeDegrauProps) {
+/** Classe do retângulo da célula conforme prévia/recusa (D-11: precedência
+ * recusa > prévia inválida > prévia remover > prévia inserir > normal). */
+function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusada: boolean): string {
+  if (recusada) return 'fill-red-50 stroke-red-500'
+  if (previa?.tipo === 'invalida') return 'fill-red-50 stroke-red-300'
+  if (previa?.tipo === 'remover') return 'fill-red-50 stroke-red-300'
+  if (previa?.tipo === 'inserir') return 'fill-sky-50 stroke-sky-400'
+  return ehTerminal ? 'fill-slate-100 stroke-slate-300' : 'fill-transparent stroke-slate-200'
+}
+
+export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula, previa, aoPassarCelula, recusa }: GradeDegrauProps) {
   const largura = MARGEM_ESQUERDA * 2 + COLUNAS_POR_DEGRAU * LARGURA_CELULA
   const altura = MARGEM_TOPO * 2 + ALTURA_LINHA
   const y0 = yDaLinha(0)
   const xEsquerda = MARGEM_ESQUERDA
   const xDireita = MARGEM_ESQUERDA + COLUNAS_POR_DEGRAU * LARGURA_CELULA
+  const idAlerta = `recusa-${rung.id}`
 
   function handleTecla(evento: KeyboardEvent<SVGGElement>, celula: Celula) {
     if (evento.key === 'Enter' || evento.key === ' ') {
       evento.preventDefault()
       aoAtivarCelula(rung.id, celula)
     }
+  }
+
+  function aoEntrarNaCelula(celula: Celula) {
+    aoPassarCelula?.(rung.id, celula)
+  }
+
+  function aoSairDaCelula() {
+    aoPassarCelula?.(rung.id, null)
   }
 
   return (
@@ -98,6 +138,11 @@ export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula 
           const ehTerminal = coluna === COLUNA_TERMINAL
           const ativo = elemento !== undefined && elemento.id === selecionado
 
+          const previaAqui = previa && celulaIgual(previa.celula, celula) ? previa : undefined
+          const recusada = recusa != null && celulaIgual(recusa.celula, celula)
+          const ehRemocaoAqui = previaAqui?.tipo === 'remover'
+          const cursorInvalido = previaAqui?.tipo === 'invalida'
+
           return (
             <g
               key={coluna}
@@ -105,11 +150,19 @@ export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula 
               role="button"
               aria-label={rotuloCelula(indice, coluna, elemento)}
               aria-pressed={ativo}
+              aria-invalid={recusada ? 'true' : undefined}
+              aria-describedby={recusada ? idAlerta : undefined}
               data-terminal={ehTerminal ? 'true' : undefined}
+              data-previa={previaAqui ? previaAqui.tipo : undefined}
               onClick={() => aoAtivarCelula(rung.id, celula)}
               onKeyDown={(evento) => handleTecla(evento, celula)}
-              className="cursor-pointer outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+              onMouseEnter={() => aoEntrarNaCelula(celula)}
+              onMouseLeave={() => aoSairDaCelula()}
+              onFocus={() => aoEntrarNaCelula(celula)}
+              onBlur={() => aoSairDaCelula()}
+              className={`outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${cursorInvalido ? 'cursor-not-allowed' : 'cursor-pointer'}`}
             >
+              {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
               <rect
                 x={cx}
                 y={y0 - ALTURA_LINHA / 2}
@@ -117,15 +170,29 @@ export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula 
                 height={ALTURA_LINHA}
                 strokeWidth={1}
                 strokeDasharray={ehTerminal ? undefined : '2,3'}
-                className={ehTerminal ? 'fill-slate-100 stroke-slate-300' : 'fill-transparent stroke-slate-200'}
+                className={classeRetangulo(ehTerminal, previaAqui, recusada)}
               />
-              {elemento?.tipo === 'contato_na' && <ContatoNA cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} />}
-              {elemento?.tipo === 'contato_nf' && <ContatoNF cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} />}
-              {elemento && ehBobina(elemento.tipo) && <Bobina cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} />}
+              {elemento?.tipo === 'contato_na' && <ContatoNA cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
+              {elemento?.tipo === 'contato_nf' && <ContatoNF cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
+              {elemento && ehBobina(elemento.tipo) && <Bobina cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
+              {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
+                <ContatoNA cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+              )}
+              {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
+                <ContatoNF cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+              )}
+              {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
+                <Bobina cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+              )}
             </g>
           )
         })}
       </svg>
+      {recusa && (
+        <p id={idAlerta} role="alert" className="mt-1 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-900">
+          {recusa.motivo}
+        </p>
+      )}
     </figure>
   )
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
 import type { Diagrama, Rung } from './modelo'
 import { IO_ESPELHO, MINIMAL } from './fixtures'
-import { posicaoValida, validarDiagrama } from './validacao'
+import { descreverCelula, motivoPosicaoInvalida, posicaoValida, validarDiagrama } from './validacao'
 
 /** Rung mínimo e válido: contato em (0,0), bobina no terminal. Ponto de
  * partida que os testes de `validarDiagrama` desmontam para forçar cada código. */
@@ -77,6 +77,66 @@ describe('posicaoValida', () => {
   })
 })
 
+describe('descreverCelula — rotulagem 1-based, igual à interface (rotuloCelula de GradeDegrau)', () => {
+  it('linha 0 (trilho principal): "degrau N, coluna M"', () => {
+    expect(descreverCelula(0, { linha: 0, coluna: 0 })).toBe('degrau 1, coluna 1')
+    expect(descreverCelula(2, { linha: 0, coluna: COLUNA_TERMINAL })).toBe(`degrau 3, coluna ${COLUNA_TERMINAL + 1}`)
+  })
+
+  it('linha > 0 (ramo): "degrau N, ramo L, coluna M"', () => {
+    expect(descreverCelula(0, { linha: 1, coluna: 0 })).toBe('degrau 1, ramo 1, coluna 1')
+    expect(descreverCelula(1, { linha: 2, coluna: 3 })).toBe('degrau 2, ramo 2, coluna 4')
+  })
+})
+
+describe('motivoPosicaoInvalida — explica a regra, sempre 1-based, nunca linha=/coluna=', () => {
+  it('bobina fora da última coluna: cita a coluna terminal e o trilho principal', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(0, rung, 'bobina', { linha: 0, coluna: 0 })
+    expect(motivo).toMatch(/posição inválida/i)
+    expect(motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
+    expect(motivo).toContain('trilho principal')
+    expect(motivo).not.toMatch(/linha=|coluna=/)
+  })
+
+  it('contato na coluna terminal: diz que a coluna é reservada a bobinas e onde vão os contatos', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(0, rung, 'contato_na', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(motivo).toMatch(/posição inválida/i)
+    expect(motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
+    expect(motivo).toContain('reservada a bobinas')
+    expect(motivo).toContain(`1 a ${COLUNA_TERMINAL}`)
+  })
+
+  it('linha sem ramo declarado: motivo específico, não confunde com fora da grade', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(0, rung, 'contato_na', { linha: 1, coluna: 0 })
+    expect(motivo).toContain('degrau 1, ramo 1, coluna 1')
+    expect(motivo).toContain('não tem ramo declarado')
+  })
+
+  it('linha além de LINHAS_EXTRAS_MAX: motivo de limite, não de "sem ramo"', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(0, rung, 'contato_na', { linha: LINHAS_EXTRAS_MAX + 1, coluna: 0 })
+    expect(motivo).toContain('limite de ramos')
+  })
+
+  it('coluna fora da grade: motivo de fora da grade, com o total de colunas', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(0, rung, 'contato_na', { linha: 0, coluna: COLUNAS_POR_DEGRAU })
+    expect(motivo).toContain('fora da grade')
+    expect(motivo).toContain(`${COLUNAS_POR_DEGRAU}`)
+  })
+
+  it('degrau 3: o número do degrau aparece 1-based na mensagem', () => {
+    const rung = rungBase()
+    const motivo = motivoPosicaoInvalida(2, rung, 'bobina', { linha: 0, coluna: 0 })
+    // a mensagem de bobina não cita a célula de destino, só a regra — mas
+    // não deve vazar índice interno em nenhum formato linha=/coluna=
+    expect(motivo).not.toMatch(/linha=|coluna=/)
+  })
+})
+
 describe('validarDiagrama — um código por vez', () => {
   it('rung_incompleto: degrau sem nenhuma bobina', () => {
     const rung: Rung = {
@@ -85,9 +145,11 @@ describe('validarDiagrama — um código por vez', () => {
       ramos: [],
     }
     const problemas = validarDiagrama(diagramaBase([rung]))
-    expect(problemas).toContainEqual(
-      expect.objectContaining({ codigo: 'rung_incompleto', severidade: 'erro', rungId: 'r1' }),
-    )
+    const problema = problemas.find((p) => p.codigo === 'rung_incompleto')
+    expect(problema).toEqual(expect.objectContaining({ codigo: 'rung_incompleto', severidade: 'erro', rungId: 'r1' }))
+    // único rung do diagrama: "degrau 1" (1-based), não o id interno 'r1'
+    expect(problema?.mensagem).toContain('degrau 1')
+    expect(problema?.mensagem).toContain('bobina')
   })
 
   it('rung_incompleto: degrau vazio', () => {
@@ -111,9 +173,12 @@ describe('validarDiagrama — um código por vez', () => {
       ramos: [],
     }
     const problemas = validarDiagrama(diagramaBase([rung]))
-    expect(problemas).toContainEqual(
+    const problema = problemas.find((p) => p.codigo === 'variavel_nao_atribuida')
+    expect(problema).toEqual(
       expect.objectContaining({ codigo: 'variavel_nao_atribuida', severidade: 'erro', rungId: 'r1', elementoId: 'c1' }),
     )
+    expect(problema?.mensagem).toContain('degrau 1, coluna 1')
+    expect(problema?.mensagem).not.toMatch(/linha=|coluna=/)
   })
 
   it('variavel_inexistente: elemento referencia nome não declarado em diagrama.variaveis', () => {
@@ -126,9 +191,12 @@ describe('validarDiagrama — um código por vez', () => {
       ramos: [],
     }
     const problemas = validarDiagrama(diagramaBase([rung]))
-    expect(problemas).toContainEqual(
+    const problema = problemas.find((p) => p.codigo === 'variavel_inexistente')
+    expect(problema).toEqual(
       expect.objectContaining({ codigo: 'variavel_inexistente', severidade: 'erro', rungId: 'r1', elementoId: 'c1' }),
     )
+    expect(problema?.mensagem).toContain('degrau 1, coluna 1')
+    expect(problema?.mensagem).toContain("'fantasma'")
   })
 
   it('posicao_invalida: bobina fora de COLUNA_TERMINAL', () => {
@@ -141,9 +209,14 @@ describe('validarDiagrama — um código por vez', () => {
       ramos: [],
     }
     const problemas = validarDiagrama(diagramaBase([rung]))
-    expect(problemas).toContainEqual(
+    const problema = problemas.find((p) => p.codigo === 'posicao_invalida')
+    expect(problema).toEqual(
       expect.objectContaining({ codigo: 'posicao_invalida', severidade: 'erro', rungId: 'r1', elementoId: 'b1' }),
     )
+    // mensagem explica a regra (bobina só no trilho principal), 1-based, sem linha=/coluna=
+    expect(problema?.mensagem).toMatch(/posição inválida/i)
+    expect(problema?.mensagem).toContain('trilho principal')
+    expect(problema?.mensagem).not.toMatch(/linha=|coluna=/)
   })
 
   it('endereco_invalido: endereço de variável fora de ENDERECOS_LOCALIZADOS', () => {

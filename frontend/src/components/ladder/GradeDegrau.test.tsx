@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { IO_ESPELHO } from '../../ladder/fixtures'
-import GradeDegrau from './GradeDegrau'
+import GradeDegrau, { type Previa } from './GradeDegrau'
 
 describe('GradeDegrau', () => {
   it('renderiza as células do degrau com aria-label de conteúdo', () => {
@@ -67,5 +67,102 @@ describe('GradeDegrau', () => {
       'aria-pressed',
       'false',
     )
+  })
+})
+
+describe('GradeDegrau — prévia (plano D-11)', () => {
+  const rung = IO_ESPELHO.rungs[0]
+
+  it('previa "inserir" marca a célula vazia com data-previa="inserir"', () => {
+    const previa: Previa = { celula: { linha: 0, coluna: 1 }, tipo: 'inserir', elemento: 'contato_na' }
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} previa={previa} />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })).toHaveAttribute('data-previa', 'inserir')
+  })
+
+  it('previa "remover" marca o elemento existente com data-previa="remover"', () => {
+    const previa: Previa = { celula: { linha: 0, coluna: 0 }, tipo: 'remover' }
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} previa={previa} />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })).toHaveAttribute(
+      'data-previa',
+      'remover',
+    )
+  })
+
+  it('previa "invalida" marca a célula com data-previa="invalida" e expõe o motivo em <title>', () => {
+    const previa: Previa = {
+      celula: { linha: 0, coluna: 1 },
+      tipo: 'invalida',
+      motivo: 'posição inválida para bobina (linha=0, coluna=1)',
+    }
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} previa={previa} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
+    expect(celula).toHaveAttribute('data-previa', 'invalida')
+    expect(celula.querySelector('title')).toHaveTextContent('posição inválida para bobina (linha=0, coluna=1)')
+  })
+
+  it('sem previa, nenhuma célula tem data-previa', () => {
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} />)
+
+    for (const celula of screen.getAllByRole('button')) {
+      expect(celula).not.toHaveAttribute('data-previa')
+    }
+  })
+})
+
+describe('GradeDegrau — recusa (plano D-11)', () => {
+  const rung = IO_ESPELHO.rungs[0]
+
+  it('recusa marca a célula com aria-invalid/aria-describedby e mostra o alerta abaixo da grade', () => {
+    const recusa = { celula: { linha: 0, coluna: 1 }, motivo: 'célula (linha=0, coluna=1) já ocupada' }
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} recusa={recusa} />)
+
+    const alerta = screen.getByRole('alert')
+    expect(alerta).toHaveTextContent(recusa.motivo)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
+    expect(celula).toHaveAttribute('aria-invalid', 'true')
+    expect(celula).toHaveAttribute('aria-describedby', alerta.id)
+  })
+
+  it('sem recusa, não há alerta', () => {
+    render(<GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} />)
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('GradeDegrau — aoPassarCelula (hover e foco, plano D-11)', () => {
+  const rung = IO_ESPELHO.rungs[0]
+
+  it('chama aoPassarCelula ao passar o mouse e limpa ao sair', async () => {
+    const usuario = userEvent.setup()
+    const aoPassarCelula = vi.fn()
+    render(
+      <GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} aoPassarCelula={aoPassarCelula} />,
+    )
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
+    await usuario.hover(celula)
+    expect(aoPassarCelula).toHaveBeenLastCalledWith('r1', { linha: 0, coluna: 1 })
+
+    await usuario.unhover(celula)
+    expect(aoPassarCelula).toHaveBeenLastCalledWith('r1', null)
+  })
+
+  it('chama aoPassarCelula ao focar por teclado e limpa ao perder o foco', () => {
+    const aoPassarCelula = vi.fn()
+    render(
+      <GradeDegrau rung={rung} indice={0} selecionado={null} aoAtivarCelula={vi.fn()} aoPassarCelula={aoPassarCelula} />,
+    )
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
+    celula.focus()
+    expect(aoPassarCelula).toHaveBeenLastCalledWith('r1', { linha: 0, coluna: 1 })
+
+    celula.blur()
+    expect(aoPassarCelula).toHaveBeenLastCalledWith('r1', null)
   })
 })

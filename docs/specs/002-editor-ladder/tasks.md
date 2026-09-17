@@ -103,6 +103,21 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     sem alterar compilação/gravação; testes atuais de `App.test.tsx` seguem
     verdes; `npm run build` limpo. (Os modos da Q-2 chegam em #12.)
 
+## Ajuste de interação — entre as fatias 1 e 2 (plano §11, D-11)
+
+- [x] **#21 — [D] Paleta com símbolo, prévia sob o cursor e recusa junto à grade**
+  - Arquivos: `frontend/src/components/ladder/Simbolos.tsx`, `Paleta.tsx`,
+    `GradeDegrau.tsx`, `EditorLadder.tsx` e testes
+  - Depende de: #8
+  - Pronto quando: botões da paleta com símbolo `aria-hidden` e nome
+    acessível inalterado; com ferramenta ativa, hover **e** foco destacam a
+    célula com prévia calculada pelo núcleo (`inserir` com fantasma,
+    `invalida` com motivo, `remover`), sem alterar o diagrama; recusa em
+    `role="alert"` abaixo do degrau com a célula marcada (`aria-invalid`,
+    `aria-describedby`), limpa por sucesso, Esc ou troca de ferramenta; erros
+    de variável seguem no painel; CA-1, CA-2 e CA-5 continuam verdes;
+    verificação visual em Chromium headless registrada.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [ ] **#9 — [N] Degraus, mover e limite de colunas**
@@ -152,7 +167,8 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
   - Pronto quando: `validarDiagrama` roda a cada mudança; erros e avisos
     listados separadamente (`role="alert"` para erros), clicar leva o foco à
     célula; célula com problema marcada por cor **e** ícone/`aria-label`
-    distintos para erro e aviso. Testes: **CA-4** (contato sem terminal;
+    distintos para erro e aviso (a recusa de ação junto à grade já veio na #21;
+    aqui entram os problemas da validação). Testes: **CA-4** (contato sem terminal;
     variável não vinculada) e **CA-9** (bobina duplicada = erro; aviso visualmente
     distinto do erro).
 
@@ -258,6 +274,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #18 | RF-3, RF-4, RF-5, RF-12 | CA-3, CA-10 |
 | #19 | §10 | — |
 | #20 | todos | todos |
+| #21 | RF-12 (D-11) | CA-5 |
 
 ## Paralelismo previsto
 
