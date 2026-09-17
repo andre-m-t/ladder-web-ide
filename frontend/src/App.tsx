@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 
 import AreaEditor from './components/ide/AreaEditor'
-import BarraSuperior, { type Aba, type EstadoSaude } from './components/ide/BarraSuperior'
+import BarraSuperior, { type Aba } from './components/ide/BarraSuperior'
 import Console from './components/ide/Console'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelLateral from './components/ide/PainelLateral'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
 import { diagramaVazio } from './ladder/edicao'
 import type { Diagrama } from './ladder/modelo'
-import { compilarPacote, ErroCompilacao, ErroHttpCompilacao, ErroRedeCompilacao, fetchHealth, type Pacote } from './lib/api'
+import {
+  compilarPacote,
+  ErroCompilacao,
+  ErroHttpCompilacao,
+  ErroRedeCompilacao,
+  fetchHealth,
+  type Pacote,
+  type ToolInfo,
+} from './lib/api'
 import { registrar, type EntradaConsole } from './lib/console'
 import { BLINK_ST } from './lib/exemplos'
 import { ErroGravacao, gravar, webSerialDisponivel } from './lib/gravador'
@@ -92,12 +100,14 @@ function alturaMaximaConsole(): number {
 }
 
 /**
- * Shell de IDE do LadderFlow (spec 002, tarefa #23, plano
- * `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-13): tela inteira com
- * barra superior (abas, saúde do servidor, compilar/gravar, alternadores),
- * editor central por aba (Ladder controlado / ST), painel de variáveis
- * recolhível e redimensionável à direita, e console de eventos do cliente
- * recolhível e redimensionável embaixo.
+ * Shell de IDE do LadderFlow (spec 002, tarefas #23/#24, plano
+ * `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-13/D-14): tela inteira com
+ * barra superior (abas, compilar/gravar, alternadores — ícones `lucide-react`,
+ * sem chips de saúde), editor central por aba (Ladder controlado / ST),
+ * painel de variáveis recolhível e redimensionável à direita, e console de
+ * eventos do cliente recolhível e redimensionável embaixo. A saúde do
+ * servidor de compilação (`/health`) não aparece mais na barra: uma linha por
+ * ferramenta (MATIEC, toolchain ESP32) vai para o console na carga inicial.
  *
  * O diagrama do editor Ladder já sobe para cá (`useState<Diagrama>`), como
  * preparação para a tarefa #12 (persistência) — aqui ele só vive em memória,
@@ -123,7 +133,6 @@ export default function App() {
 
   const [compilacao, setCompilacao] = useState<EstadoCompilacao>({ fase: 'ocioso' })
   const [gravacao, setGravacao] = useState<EstadoGravacao>({ fase: 'ocioso' })
-  const [saude, setSaude] = useState<EstadoSaude>({ kind: 'carregando' })
   const [entradasConsole, setEntradasConsole] = useState<EntradaConsole[]>([])
 
   const cargaInicialRegistrada = useRef(false)
@@ -135,6 +144,7 @@ export default function App() {
   useEffect(() => {
     if (cargaInicialRegistrada.current) return
     cargaInicialRegistrada.current = true
+    document.title = '🔧 LadderFlow'
     log('info', 'LadderFlow iniciado.')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -145,21 +155,12 @@ export default function App() {
     fetchHealth()
       .then((health) => {
         if (cancelado) return
-        setSaude({ kind: 'ok', health })
-        const problemas: string[] = []
-        if (!health.iec2c.available) problemas.push('MATIEC indisponível')
-        if (!health.esp_idf.available) problemas.push('toolchain ESP32 indisponível')
-        if (problemas.length === 0) {
-          log('sucesso', 'Servidor de compilação disponível (MATIEC e toolchain ESP32 ok).')
-        } else {
-          log('aviso', `Servidor de compilação disponível com ressalvas: ${problemas.join(', ')}.`)
-        }
+        logLinhaFerramenta('MATIEC (iec2c)', health.iec2c)
+        logLinhaFerramenta('Toolchain ESP32 (ESP-IDF)', health.esp_idf)
       })
-      .catch((erro: unknown) => {
+      .catch(() => {
         if (cancelado) return
-        const mensagem = erro instanceof Error ? erro.message : String(erro)
-        setSaude({ kind: 'erro', message: mensagem })
-        log('erro', `Servidor de compilação indisponível: ${mensagem}`)
+        log('erro', 'Servidor de compilação indisponível.')
       })
 
     return () => {
@@ -167,6 +168,16 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /** Uma linha por ferramenta ao abrir (plano D-14, item 3): disponível com a
+   * versão relatada por `/health`, ou indisponível com o caminho esperado. */
+  function logLinhaFerramenta(nome: string, info: ToolInfo) {
+    if (info.available) {
+      log('sucesso', `${nome}: disponível — ${info.version ?? 'versão desconhecida'}`)
+    } else {
+      log('erro', `${nome}: indisponível — não encontrado em ${info.path}`)
+    }
+  }
 
   useEffect(() => gravarPreferencia(CHAVE_ABA, aba), [aba])
   useEffect(() => gravarPreferencia(CHAVE_PAINEL_ABERTO, String(painelAberto)), [painelAberto])
@@ -254,10 +265,10 @@ export default function App() {
       <BarraSuperior
         aba={aba}
         aoMudarAba={setAba}
-        saude={saude}
         compilando={compilando}
         aoCompilar={aoCompilar}
         gravando={gravando}
+        progressoGravacao={gravacao.fase === 'gravando' ? gravacao.progresso : undefined}
         podeGravar={podeGravar}
         aoGravar={aoGravar}
         painelVariaveisAberto={painelAberto}
