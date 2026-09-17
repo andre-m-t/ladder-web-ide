@@ -2,28 +2,36 @@
  * Grade SVG de um degrau (plano D-1, spike S4 §3 — SVG puro venceu Konva:
  * ver `docs/specs/002-editor-ladder/spike-canvas.md`).
  *
- * Padrão reescrito a partir de `spikes/canvas-svg/src/App.tsx` (célula = `<g>`
- * com `tabIndex`, `role="button"`, `aria-label`, `onClick` + `onKeyDown`), sem
- * copiar o arquivo: geometria e rótulos são outros, e a leitura do elemento
- * ocupando a célula vem do `Rung` de `frontend/src/ladder/modelo.ts`.
+ * Reescrito na tarefa #22 (plano `agora-precisamos-trabalhar-em-cozy-dragon.md`,
+ * D-12): não existe mais "ferramenta ativa" nem `aoAtivarCelula` — o gesto
+ * principal é arrastar (paleta → célula, célula → célula, célula → lixeira),
+ * por Pointer Events ou teclado. Este componente continua função pura das
+ * props, sem estado próprio e sem decidir se uma jogada é válida: só desenha
+ * e encaminha os eventos nativos (clique, duplo clique, tecla, pointerdown,
+ * pointerenter/leave) para quem manda, `EditorLadder.tsx`, que é quem tem a
+ * máquina de estado do arrasto e chama o núcleo para calcular prévia/recusa.
  *
  * Só a linha 0 (trilho principal) é desenhada aqui — ramos entram na tarefa
  * #18 — mas a geometria já é função de `linha`, para reaproveitar no ramo sem
  * reescrever o cálculo de posição.
  *
- * Função pura das props: nenhum estado próprio, nenhuma mutação do `rung`.
- * A prévia (`previa`) e a recusa (`recusa`) chegam prontas de `EditorLadder`
- * — este componente só desenha, nunca decide se uma jogada é válida (plano
- * D-11): hover/foco na célula só avisam `aoPassarCelula`, que sobe para o
- * editor calcular a prévia chamando o núcleo.
+ * `select-none touch-none` e `onDragStart` bloqueado na célula (SVG não tem o
+ * atributo `draggable` do HTML): correção de bug real do Chromium (relatado
+ * após a entrega inicial da #22) em que, sem isso, uma seleção de texto
+ * residente na página fazia um arrasto de ponteiro seguinte virar um drag
+ * nativo de conteúdo, cancelado pelo navegador (`pointercancel`) no meio do
+ * gesto — ver `armarPonteiro` em `EditorLadder.tsx`.
  */
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
 import { COLUNAS_POR_DEGRAU, COLUNA_TERMINAL, ehBobina, type Celula, type Elemento, type Rung, type TipoBobina, type TipoContato } from '../../ladder/modelo'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
 
-/** Prévia da jogada da ferramenta ativa sobre uma célula, calculada pelo
- * editor chamando o núcleo sem aplicar (plano D-11). */
+/** Prévia de uma jogada de arrasto sobre uma célula, calculada pelo editor
+ * chamando o núcleo (`inserirElemento`/`moverElemento`) sem aplicar (D-11,
+ * reaproveitada pela #22 durante o arrasto). O tipo `remover` também é usado
+ * para destacar o próprio elemento de origem quando o alvo do arrasto é a
+ * lixeira. */
 export type Previa =
   | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo'] }
   | { celula: Celula; tipo: 'remover' }
@@ -33,14 +41,22 @@ export interface GradeDegrauProps {
   rung: Rung
   /** 0-based; usado nos rótulos "Degrau 1", "Degrau 2"... */
   indice: number
-  /** Id do elemento selecionado, ou null se nenhum. */
-  selecionado: string | null
-  aoAtivarCelula: (rungId: string, celula: Celula) => void
-  /** Prévia a desenhar na célula sob hover/foco, ou null/ausente. */
+  /** Id do elemento marcado, ou null se nenhum (clique simples marca; #22). */
+  marcado: string | null
+  /** Clique simples: marca o elemento da célula, ou desmarca se vazia. */
+  aoClicarCelula: (rungId: string, celula: Celula) => void
+  /** Duplo clique: abre o modal de variável do elemento (célula vazia é no-op). */
+  aoDuploClicarCelula: (rungId: string, celula: Celula) => void
+  /** Encaminha o evento de teclado bruto: `EditorLadder` decide Espaço/Enter/Delete/setas. */
+  aoTeclarNaCelula: (evento: KeyboardEvent<SVGGElement>, rungId: string, celula: Celula) => void
+  /** pointerdown na célula: só importa quando há elemento (início do arrasto por ponteiro). */
+  aoIniciarArrastoPonteiro: (evento: ReactPointerEvent<SVGGElement>, rungId: string, celula: Celula) => void
+  /** Prévia a desenhar na célula sob o arrasto, ou null/ausente. */
   previa?: Previa | null
-  /** Avisa qual célula está sob o mouse ou o foco (null ao sair). */
+  /** Avisa qual célula está sob o ponteiro ou o foco (null ao sair) — usado
+   * pelo editor para acompanhar o alvo do arrasto. */
   aoPassarCelula?: (rungId: string, celula: Celula | null) => void
-  /** Última recusa de ação sobre uma célula deste degrau, ou null/ausente. */
+  /** Última recusa de uma jogada sobre uma célula deste degrau, ou null/ausente. */
   recusa?: { celula: Celula; motivo: string } | null
 }
 
@@ -97,20 +113,24 @@ function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusa
   return ehTerminal ? 'fill-slate-100 stroke-slate-300' : 'fill-transparent stroke-slate-200'
 }
 
-export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula, previa, aoPassarCelula, recusa }: GradeDegrauProps) {
+export default function GradeDegrau({
+  rung,
+  indice,
+  marcado,
+  aoClicarCelula,
+  aoDuploClicarCelula,
+  aoTeclarNaCelula,
+  aoIniciarArrastoPonteiro,
+  previa,
+  aoPassarCelula,
+  recusa,
+}: GradeDegrauProps) {
   const largura = MARGEM_ESQUERDA * 2 + COLUNAS_POR_DEGRAU * LARGURA_CELULA
   const altura = MARGEM_TOPO * 2 + ALTURA_LINHA
   const y0 = yDaLinha(0)
   const xEsquerda = MARGEM_ESQUERDA
   const xDireita = MARGEM_ESQUERDA + COLUNAS_POR_DEGRAU * LARGURA_CELULA
   const idAlerta = `recusa-${rung.id}`
-
-  function handleTecla(evento: KeyboardEvent<SVGGElement>, celula: Celula) {
-    if (evento.key === 'Enter' || evento.key === ' ') {
-      evento.preventDefault()
-      aoAtivarCelula(rung.id, celula)
-    }
-  }
 
   function aoEntrarNaCelula(celula: Celula) {
     aoPassarCelula?.(rung.id, celula)
@@ -136,7 +156,7 @@ export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula,
           const cx = xDaColuna(coluna)
           const centroX = cx + LARGURA_CELULA / 2
           const ehTerminal = coluna === COLUNA_TERMINAL
-          const ativo = elemento !== undefined && elemento.id === selecionado
+          const ativo = elemento !== undefined && elemento.id === marcado
 
           const previaAqui = previa && celulaIgual(previa.celula, celula) ? previa : undefined
           const recusada = recusa != null && celulaIgual(recusa.celula, celula)
@@ -149,18 +169,22 @@ export default function GradeDegrau({ rung, indice, selecionado, aoAtivarCelula,
               tabIndex={0}
               role="button"
               aria-label={rotuloCelula(indice, coluna, elemento)}
-              aria-pressed={ativo}
+              aria-selected={ativo}
               aria-invalid={recusada ? 'true' : undefined}
               aria-describedby={recusada ? idAlerta : undefined}
               data-terminal={ehTerminal ? 'true' : undefined}
               data-previa={previaAqui ? previaAqui.tipo : undefined}
-              onClick={() => aoAtivarCelula(rung.id, celula)}
-              onKeyDown={(evento) => handleTecla(evento, celula)}
-              onMouseEnter={() => aoEntrarNaCelula(celula)}
-              onMouseLeave={() => aoSairDaCelula()}
+              data-celula={`${rung.id}:${celula.linha}:${celula.coluna}`}
+              onDragStart={(evento) => evento.preventDefault()}
+              onClick={() => aoClicarCelula(rung.id, celula)}
+              onDoubleClick={() => aoDuploClicarCelula(rung.id, celula)}
+              onKeyDown={(evento) => aoTeclarNaCelula(evento, rung.id, celula)}
+              onPointerDown={(evento) => aoIniciarArrastoPonteiro(evento, rung.id, celula)}
+              onPointerEnter={() => aoEntrarNaCelula(celula)}
+              onPointerLeave={() => aoSairDaCelula()}
               onFocus={() => aoEntrarNaCelula(celula)}
               onBlur={() => aoSairDaCelula()}
-              className={`outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${cursorInvalido ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+              className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
             >
               {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
               <rect

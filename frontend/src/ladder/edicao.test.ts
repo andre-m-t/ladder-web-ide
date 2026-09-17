@@ -4,10 +4,13 @@ import { COLUNA_TERMINAL } from './modelo'
 import type { Diagrama, Elemento } from './modelo'
 import { IO_ESPELHO } from './fixtures'
 import {
+  atualizarVariavel,
   declararVariavel,
   diagramaVazio,
   inserirElemento,
+  moverElemento,
   removerElemento,
+  removerVariavel,
   vincularVariavel,
 } from './edicao'
 
@@ -239,6 +242,267 @@ describe('vincularVariavel', () => {
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('inexistente')
+  })
+})
+
+describe('moverElemento', () => {
+  it('caminho feliz: move para outra célula válida e livre no mesmo degrau, sem mutar a entrada', () => {
+    const comContato = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comContato.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = moverElemento(original, 'e1', 'r1', { linha: 0, coluna: 2 })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].elementos).toEqual([
+      { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 2 }, variavel: null },
+    ])
+    expect(original).toEqual(antes)
+  })
+
+  it('mesma célula e mesmo degrau: ok, diagrama igual ao original', () => {
+    const comContato = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comContato.diagrama)
+
+    const resultado = moverElemento(original, 'e1', 'r1', { linha: 0, coluna: 0 })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama).toEqual(original)
+  })
+
+  it('recusa: elemento inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = moverElemento(diagrama, 'e-fantasma', 'r1', { linha: 0, coluna: 0 })
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: degrau destino inexistente', () => {
+    const comContato = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContato.diagrama)
+
+    const resultado = moverElemento(diagrama, 'e1', 'r-fantasma', { linha: 0, coluna: 1 })
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: célula destino ocupada por outro elemento', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: 0 }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_nf', { linha: 0, coluna: 1 }) as { ok: true; diagrama: Diagrama }).diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = moverElemento(congelado, 'e1', 'r1', { linha: 0, coluna: 1 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('ocupada')
+    expect(resultado.motivo).toContain('degrau 1, coluna 2')
+  })
+
+  it('recusa: posição inválida para o tipo — motivo 1-based com o degrau destino', () => {
+    const comBobina = inserirElemento(diagramaVazio(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comBobina.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comBobina.diagrama)
+
+    // bobina só pode ficar na coluna terminal
+    const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 0, coluna: 0 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
+  })
+
+  it('move entre degraus: remove da origem, insere no destino, mantém id e vínculo', () => {
+    const doisRungs: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'x', tipo: 'BOOL' }],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'x' }],
+          ramos: [],
+        },
+        { id: 'r2', elementos: [], ramos: [] },
+      ],
+    }
+    const original = congelarProfundo(doisRungs)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = moverElemento(original, 'e1', 'r2', { linha: 0, coluna: 3 })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].elementos).toEqual([])
+    expect(resultado.diagrama.rungs[1].elementos).toEqual([
+      { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 3 }, variavel: 'x' },
+    ])
+    expect(original).toEqual(antes)
+  })
+
+  it('recusa de posição inválida ao mover entre degraus cita o índice do degrau destino', () => {
+    const doisRungs: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: null }],
+          ramos: [],
+        },
+        { id: 'r2', elementos: [], ramos: [] },
+      ],
+    }
+    const diagrama = congelarProfundo(doisRungs)
+
+    // fora da grade: mensagem passa por descreverCelula, que rotula o degrau
+    // pelo índice do DESTINO (r2, índice 1), não pelo de origem (r1)
+    const resultado = moverElemento(diagrama, 'e1', 'r2', { linha: 0, coluna: 99 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('degrau 2')
+    expect(resultado.motivo).toContain('fora da grade')
+  })
+})
+
+describe('atualizarVariavel', () => {
+  it('caminho feliz: renomeia e propaga para o elemento vinculado, sem mutar a entrada', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (declararVariavel(diagrama, { nome: 'x' }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: 0 }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (vincularVariavel(diagrama, 'e1', 'x') as { ok: true; diagrama: Diagrama }).diagrama
+    const original = congelarProfundo(diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = atualizarVariavel(original, 'x', { nome: 'y' })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.variaveis).toEqual([{ nome: 'y', tipo: 'BOOL' }])
+    expect(resultado.diagrama.rungs[0].elementos[0].variavel).toBe('y')
+    expect(original).toEqual(antes)
+  })
+
+  it('caminho feliz: adiciona endereço a variável interna', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comVariavel.diagrama)
+
+    const resultado = atualizarVariavel(diagrama, 'x', { nome: 'x', endereco: '%IX0.0' })
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.variaveis).toEqual([{ nome: 'x', tipo: 'BOOL', endereco: '%IX0.0' }])
+  })
+
+  it('caminho feliz: endereço ausente torna a variável interna', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x', endereco: '%IX0.0' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comVariavel.diagrama)
+
+    const resultado = atualizarVariavel(diagrama, 'x', { nome: 'x' })
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.variaveis).toEqual([{ nome: 'x', tipo: 'BOOL' }])
+  })
+
+  it('caminho feliz: manter o mesmo nome e o mesmo endereço não colide consigo mesma', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x', endereco: '%IX0.0' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comVariavel.diagrama)
+
+    const resultado = atualizarVariavel(diagrama, 'x', { nome: 'x', endereco: '%IX0.0' })
+    expect(resultado.ok).toBe(true)
+  })
+
+  it('recusa: variável inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = atualizarVariavel(diagrama, 'fantasma', { nome: 'y' })
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: nome inválido para identificador IEC', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comVariavel.diagrama)
+
+    const resultado = atualizarVariavel(diagrama, 'x', { nome: '1invalido' })
+    expect(resultado.ok).toBe(false)
+  })
+
+  it('recusa: nome duplicado com outra variável', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (declararVariavel(diagrama, { nome: 'x' }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (declararVariavel(diagrama, { nome: 'y' }) as { ok: true; diagrama: Diagrama }).diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = atualizarVariavel(congelado, 'x', { nome: 'y' })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('já existe uma variável')
+  })
+
+  it('recusa: endereço fora de ENDERECOS_LOCALIZADOS', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comVariavel.diagrama)
+
+    const resultado = atualizarVariavel(diagrama, 'x', { nome: 'x', endereco: '%QX9.9' })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('controlador')
+  })
+
+  it('recusa: endereço já usado por outra variável', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (declararVariavel(diagrama, { nome: 'a', endereco: '%IX0.0' }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (declararVariavel(diagrama, { nome: 'b' }) as { ok: true; diagrama: Diagrama }).diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = atualizarVariavel(congelado, 'b', { nome: 'b', endereco: '%IX0.0' })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('em uso')
+  })
+})
+
+describe('removerVariavel', () => {
+  it('caminho feliz: remove variável sem vínculo, sem mutar a entrada', () => {
+    const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x' })
+    if (!comVariavel.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comVariavel.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = removerVariavel(original, 'x')
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.variaveis).toEqual([])
+    expect(original).toEqual(antes)
+  })
+
+  it('recusa: variável inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = removerVariavel(diagrama, 'fantasma')
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: variável vinculada a elementos — motivo conta os vínculos', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (declararVariavel(diagrama, { nome: 'x' }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: 0 }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirElemento(diagrama, 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (vincularVariavel(diagrama, 'e1', 'x') as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (vincularVariavel(diagrama, 'e2', 'x') as { ok: true; diagrama: Diagrama }).diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = removerVariavel(congelado, 'x')
+    expect(resultado).toEqual({
+      ok: false,
+      motivo: "variável 'x' está vinculada a 2 elemento(s); desvincule antes de remover",
+    })
   })
 })
 

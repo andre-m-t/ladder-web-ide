@@ -21,3 +21,23 @@ export function enderecoValido(endereco: string): boolean {
 export function ehEntrada(endereco: string): boolean {
   return endereco.startsWith('%IX')
 }
+
+/**
+ * Classe de uma variável, derivada do endereço (plano D-12): sem `endereco` é
+ * interna; `%IX...` é entrada; `%QX...` é saída. O tipo de dado continua
+ * único (`BOOL`, Q-5/D-2) — a classe só existe para a tabela de variáveis e
+ * para filtrar os endereços oferecidos por classe.
+ */
+export type ClasseVariavel = 'entrada' | 'saida' | 'interna'
+
+export function classeDaVariavel(v: { endereco?: string }): ClasseVariavel {
+  if (v.endereco === undefined) return 'interna'
+  return ehEntrada(v.endereco) ? 'entrada' : 'saida'
+}
+
+/** Endereços localizados de uma classe. Interna não tem endereço: `[]`. */
+export function enderecosDaClasse(c: ClasseVariavel): readonly string[] {
+  if (c === 'entrada') return ENTRADAS_LOCALIZADAS
+  if (c === 'saida') return SAIDAS_LOCALIZADAS
+  return []
+}

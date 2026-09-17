@@ -437,3 +437,41 @@ interação. Tarefa #21.
 - **Requisito atendido:** RF-12, CA-5 (antecipa a parte "recusa visível junto
   ao elemento" da #13; a lista de problemas da validação continua na #13).
 
+## 12. Revisão aditiva — arrastar-e-soltar, tabela de variáveis e modal (2026-09-16)
+
+O autor usou o editor da fatia 1 com a #21 e **reverteu a decisão de
+interação**: elementos com cara de botão, ferramenta ativa e seleção
+persistente atrapalham o uso. D-4 (seleção ferramenta → célula) e a ressalva
+R-2 (seleção como decisão de design) ficam registradas acima como a decisão
+anterior; esta seção as **substitui**. A spec não muda — RF-2 a RF-10 dizem o
+quê, não o gesto. D-11 (prévia pelo núcleo, recusa junto à grade) continua,
+agora acionada durante o arrasto. Tarefa #22.
+
+### D-12: somente arrastar-e-soltar, com teclado dentro do próprio arrasto
+- **Escolha:**
+  - Inserir (paleta → célula), mover (célula → célula) e remover (célula →
+    lixeira) **só por arrasto**. Clique simples apenas marca o item; a
+    lixeira (ou Delete) remove o marcado; a marcação some ao clicar fora,
+    soltar algo ou Esc.
+  - Arrasto implementado com **Pointer Events**, sem biblioteca: a grade é
+    SVG (onde `draggable` nativo não existe) e o jsdom não tem `DataTransfer`.
+  - **Teclado** usa a mesma máquina de estado: Espaço pega, setas movem o
+    alvo, Espaço/Enter solta, Esc cancela, com anúncios em `aria-live`.
+  - **Variáveis numa tabela ao lado dos degraus**: nome, **tipo**
+    (entrada/saída/interna, derivado do endereço — modelo inalterado, dado
+    continua BOOL) e **valor** (endereço, só pinos mapeados e livres).
+  - **Modal** para atribuir variável: abre ao soltar item novo e com duplo
+    clique/Enter no item; bobina não aceita variável de entrada.
+  - Núcleo ganha `moverElemento` (antecipado da #9), `atualizarVariavel`
+    (renomear propaga aos itens), `removerVariavel` (recusa se em uso) e
+    `classeDaVariavel`/`enderecosDaClasse`.
+- **Por quê:** avaliação de uso do autor — arrastar é o gesto esperado para
+  compor um diagrama, e a seleção persistente criava modo escondido. A
+  paridade de teclado que motivou R-2 é preservada dentro do arrasto.
+- **Alternativas descartadas:** HTML5 DnD nativo — não arrasta a partir de
+  SVG e não é testável em jsdom; `@dnd-kit` — dependência nova e colisão por
+  retângulos sem teste em jsdom; manter seleção como alternativa ao arrasto —
+  rejeitado explicitamente pelo autor ("apenas arrastar-e-soltar").
+- **Requisito atendido:** RF-2, RF-6, RF-7, RF-9, RF-10, RF-12; CA-1, CA-2,
+  CA-5, CA-7.
+

@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (spec 002 — ajuste de interação #21 concluído) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 — #22: editor só com arrastar-e-soltar, tabela de variáveis e modal) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -261,7 +261,16 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Mensagens do núcleo 1-based ("degrau N, coluna M") e explicando a regra violada; achado na verificação visual em Chromium headless, onde a mensagem dizia `linha=0, coluna=0` contra o rótulo "coluna 1" da tela. `motivoPosicaoInvalida` passou a ser a única implementação da regra de posição (`posicaoValida` deriva dela)
 - Verificação: `tsc` limpo, 107 testes vitest, `vite build`; capturas em Chromium headless (paleta ativa, fantasma, célula inválida, recusa abaixo da grade)
 
-**Falta:** Fatia 2 (#9–#10), Fatia 3 (#11–#14), Fatia 4 (#15–#20).
+**Concluído — #22: arrastar-e-soltar, tabela de variáveis e modal (plano §12, D-12, 2026-09-16)**
+- Decisão do autor após uso: reverte D-4/R-2 (seleção ferramenta → célula). Inserir, mover e remover **só por arrasto** (Pointer Events próprios, sem biblioteca); teclado dentro do próprio arrasto (Espaço pega, setas, Espaço solta, Esc cancela, `aria-live`)
+- Clique marca; lixeira ou Delete remove o marcado; duplo clique/Enter abre o modal
+- `TabelaVariaveis` ao lado dos degraus (nome, tipo entrada/saída/interna, endereço livre da classe) e `ModalVariavel` acessível (bobina não aceita entrada); `PainelVariaveis` removido
+- Núcleo: `moverElemento` (antecipado da #9), `atualizarVariavel` (renomear propaga), `removerVariavel` (recusa em uso), `classeDaVariavel`/`enderecosDaClasse`
+- **Bug achado só no navegador real:** o segundo arrasto não funcionava. A primeira hipótese da frente (pointerenter perdido) estava errada — o teste simulava o defeito errado e passava. Log de eventos no Chromium mostrou `pointercancel`: seleção de texto residual fazia o navegador iniciar arrasto nativo. Correção: `preventDefault` no `pointerdown`, `select-none`/`touch-none`, limpeza de seleção; regressão testada
+- Verificação: `tsc` limpo, 181 testes vitest, `vite build` (JS 370 kB / 116 kB gzip); fluxo completo em Chromium headless com mouse real (tabela, NA→col 1 com prévia e modal, recusa de bobina na col 2, bobina na col 8 com entrada desabilitada, mover, marcar+lixeira, arrastar à lixeira) e só por teclado
+- Lição de processo: teste em jsdom não substitui verificação no navegador para interação de ponteiro — nenhum dos 172 testes pegou o bug
+
+**Falta:** Fatia 2 (#9 degraus e limite de colunas, #10 vários degraus na UI), Fatia 3 (#11–#14), Fatia 4 (#15–#20).
 
 ---
 
@@ -379,3 +388,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Plano 002 aprovado e tarefas 002 | Push de `main` (`ce93bce..d983635`). Ressalvas da aprovação registradas no plano como §10 (R-1 aviso no código do elo manual do CA-3; R-2 seleção como decisão de design; R-3 teste de acoplamento endereços ↔ `plc_io_map.h` movido para o pytest, que hoje não existia). `tasks.md`: 20 tarefas, 4 fatias, frentes com dono único de arquivo para evitar conflito em `frontend/src/ladder/`; aguardando aprovação |
 | 2026-09-16 | Fatia 1 da spec 002 (#1–#8) | Editor Ladder mínimo na tela: núcleo puro (modelo, endereços, validação, edição) + SVG (grade, símbolos, paleta, variáveis, editor). `IO_ESPELHO` e `MINIMAL` construíveis pela UI (CA-1, CA-2), recusa de posição inválida visível (CA-5); teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3). 69 testes vitest, 60 pytest, build e depósito verdes. Frentes paralelas sem conflito de arquivo |
 | 2026-09-16 | Ajuste de interação #21 (spec 002) | Pedido do autor antes da fatia 2: paleta com símbolo, prévia sob cursor/foco derivada do núcleo, recusa abaixo do degrau com célula marcada (plano §11, D-11). Frentes D1 (símbolos/paleta) e D2 (grade/editor) em paralelo; ambas caíram por limite de API e foram retomadas. Revisão do orquestrador pegou ícone invisível no botão pressionado e, na verificação visual, mensagens 0-based sem a regra — corrigidas (frente N), com a regra de posição tornada fonte única. 107 testes vitest, build verde |
+| 2026-09-16 | #22 da spec 002 — só arrastar-e-soltar | Autor reverteu D-4/R-2 após uso (plano §12, D-12): arrasto por Pointer Events com teclado, clique marca + lixeira/Delete, tabela de variáveis (tipo e endereço) ao lado dos degraus, modal de variável. Frentes N, D1, D2, T em paralelo. Verificação no Chromium real achou bug que os testes não pegavam (segundo arrasto cancelado por arrasto nativo de seleção); primeira correção do agente partiu de causa errada e foi refutada no navegador; causa isolada por log de eventos e corrigida. Tabela alargada após captura. 181 testes vitest, build verde |

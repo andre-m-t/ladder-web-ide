@@ -80,6 +80,14 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: /^Editor Ladder$/ })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: /Degrau 1, coluna 1/ })).toBeInTheDocument()
+    expect(await screen.findByLabelText(/Degrau 1, coluna 1/)).toBeInTheDocument()
+  })
+
+  it('mostra a tabela de variáveis ao lado da grade do editor Ladder (tarefa #22)', async () => {
+    render(<App />)
+
+    const tabela = await screen.findByRole('table')
+    expect(tabela).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^Variáveis$/ })).toBeInTheDocument()
   })
 })

@@ -118,18 +118,33 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     de variável seguem no painel; CA-1, CA-2 e CA-5 continuam verdes;
     verificação visual em Chromium headless registrada.
 
+- [x] **#22 — [N][D][T] Arrastar-e-soltar, tabela de variáveis e modal (plano §12, D-12)**
+  - Arquivos: `frontend/src/ladder/edicao.ts`, `enderecos.ts`;
+    `components/ladder/Paleta.tsx`, `GradeDegrau.tsx`, `EditorLadder.tsx`,
+    `TabelaVariaveis.tsx`, `ModalVariavel.tsx` (novos), remoção de
+    `PainelVariaveis.tsx`; `App.tsx`; testes
+  - Depende de: #21
+  - Pronto quando: inserir, mover e remover só por arrasto (ponteiro) e pelo
+    arrasto de teclado; clique marca, lixeira/Delete remove o marcado; modal
+    ao soltar item novo e com duplo clique/Enter; tabela com tipo e endereço
+    livres, renomear propagando e remoção recusada se em uso; CA-1, CA-2 e
+    CA-5 refeitos com o gesto novo e verdes; verificação em Chromium headless
+    com arrasto real de mouse e só por teclado.
+  - Substitui: a ferramenta/seleção das #6/#7 e o "mover por seleção" da #10;
+    `moverElemento` sai da #9.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [ ] **#9 — [N] Degraus, mover e limite de colunas**
   - Arquivos: `frontend/src/ladder/edicao.ts`, `edicao.test.ts`
   - Depende de: #3
-  - Pronto quando: `inserirDegrau(posicao)`, `removerDegrau(id)`,
-    `moverElemento(id, destino)`; recusa além de `COLUNAS_POR_DEGRAU` com
+  - Pronto quando: `inserirDegrau(posicao)`, `removerDegrau(id)`
+    (`moverElemento` já entregue na #22); recusa além de `COLUNAS_POR_DEGRAU` com
     mensagem do limite; mover para posição inválida recusa e mantém o original;
     remover degrau não afeta os outros (**CA-6**, **CA-7** e parte de **CA-10**
     em unidade).
 
-- [ ] **#10 — [D] Vários degraus, mover por seleção**
+- [ ] **#10 — [D] Vários degraus (mover por arrasto já entregue na #22)**
   - Arquivos: `frontend/src/components/ladder/EditorLadder.tsx`, `Paleta.tsx`,
     testes
   - Depende de: #7, #9
@@ -275,6 +290,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #19 | §10 | — |
 | #20 | todos | todos |
 | #21 | RF-12 (D-11) | CA-5 |
+| #22 | RF-2, RF-6, RF-7, RF-9, RF-10, RF-12 (D-12) | CA-1, CA-2, CA-5, CA-7 |
 
 ## Paralelismo previsto
 

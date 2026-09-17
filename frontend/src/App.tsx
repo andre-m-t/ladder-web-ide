@@ -35,10 +35,11 @@ type EstadoSaude =
  * servidor → grava no ESP32 pelo navegador via Web Serial. Deliberadamente
  * crua — o simulador vem em specs seguintes.
  *
- * Ganhou também o editor visual Ladder (spec 002, tarefa #8): provisório,
- * exibido acima do fluxo de ST na mesma tela, sem afetar compilação nem
- * gravação. Os modos Ladder/ST (com alternância e persistência) chegam na
- * tarefa #12 da spec 002.
+ * Ganhou também o editor visual Ladder (spec 002, tarefa #8), exibido acima
+ * do fluxo de ST na mesma tela, sem afetar compilação nem gravação: arrasto
+ * e soltura (paleta e células, mouse ou teclado) e uma tabela de variáveis ao
+ * lado da grade em telas largas (plano D-12, tarefa #22). Os modos Ladder/ST
+ * (com alternância e persistência) chegam na tarefa #12 da spec 002.
  */
 export default function App() {
   const [fonte, setFonte] = useState(BLINK_ST)
@@ -110,11 +111,13 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10 text-slate-900">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-semibold tracking-tight">LadderFlow</h1>
-        <p className="mt-2 text-slate-600">
-          Cole um Structured Text, compile no servidor e grave o resultado no ESP32 direto do navegador.
-        </p>
+      <div className="mx-auto max-w-6xl">
+        <div className="max-w-3xl">
+          <h1 className="text-3xl font-semibold tracking-tight">LadderFlow</h1>
+          <p className="mt-2 text-slate-600">
+            Cole um Structured Text, compile no servidor e grave o resultado no ESP32 direto do navegador.
+          </p>
+        </div>
 
         <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold tracking-tight">Editor Ladder</h2>
@@ -123,7 +126,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="mt-8 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="mt-8 max-w-3xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <EditorST value={fonte} onChange={setFonte} disabled={compilando} />
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -182,7 +185,7 @@ export default function App() {
 /** Status do `/health`, como rodapé compacto — não bloqueia o uso da tela. */
 function RodapeSaude({ saude }: { saude: EstadoSaude }) {
   return (
-    <footer className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-slate-500">
+    <footer className="mt-8 flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-1 text-xs text-slate-500">
       <span>Serviço de compilação:</span>
       {saude.kind === 'carregando' && <span>consultando…</span>}
       {saude.kind === 'erro' && <span className="text-red-600">indisponível ({saude.message})</span>}
