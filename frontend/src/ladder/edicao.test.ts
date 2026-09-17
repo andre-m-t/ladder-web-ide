@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX } from './modelo'
+import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
 import type { Diagrama, Elemento } from './modelo'
 import { IO_ESPELHO } from './fixtures'
 import { validarDiagrama } from './validacao'
@@ -9,9 +9,11 @@ import {
   criarRamo,
   declararVariavel,
   diagramaVazio,
+  inserirDegrau,
   inserirElemento,
   moverElemento,
   redimensionarRamo,
+  removerDegrau,
   removerElemento,
   removerRamo,
   removerVariavel,
@@ -153,6 +155,190 @@ describe('removerElemento', () => {
     const diagrama = congelarProfundo(diagramaVazio())
     const resultado = removerElemento(diagrama, 'e-fantasma')
     expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+})
+
+describe('inserirDegrau', () => {
+  it('caminho feliz: insere no fim de um diagrama de um degrau — id r2', () => {
+    const original = congelarProfundo(diagramaVazio())
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = inserirDegrau(original, 1)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs).toEqual([
+      { id: 'r1', elementos: [], ramos: [] },
+      { id: 'r2', elementos: [], ramos: [] },
+    ])
+    // entrada não foi mutada
+    expect(original).toEqual(antes)
+  })
+
+  it('caminho feliz: insere no início — o degrau novo fica na posição 0', () => {
+    const primeira = inserirDegrau(diagramaVazio(), 1)
+    if (!primeira.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(primeira.diagrama) // r1, r2
+
+    const resultado = inserirDegrau(diagrama, 0)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs.map((r) => r.id)).toEqual(['r3', 'r1', 'r2'])
+  })
+
+  it('caminho feliz: insere no meio — os degraus vizinhos mantêm posição relativa', () => {
+    const primeira = inserirDegrau(diagramaVazio(), 1)
+    if (!primeira.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(primeira.diagrama) // r1, r2
+
+    const resultado = inserirDegrau(diagrama, 1)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs.map((r) => r.id)).toEqual(['r1', 'r3', 'r2'])
+  })
+
+  it('id novo é o menor r<N> livre em todo o diagrama — preenche a lacuna', () => {
+    const comSegundo = inserirDegrau(diagramaVazio(), 1)
+    if (!comSegundo.ok) throw new Error('esperava sucesso') // r1, r2
+
+    const semR1 = removerDegrau(comSegundo.diagrama, 'r1')
+    if (!semR1.ok) throw new Error('esperava sucesso') // só r2
+
+    const resultado = inserirDegrau(semR1.diagrama, 1)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs.map((r) => r.id)).toEqual(['r2', 'r1'])
+  })
+
+  it('recusa: posição negativa', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = inserirDegrau(diagrama, -1)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição de degrau inválida')
+  })
+
+  it('recusa: posição além do fim (rungs.length + 1)', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = inserirDegrau(diagrama, 2)
+    expect(resultado.ok).toBe(false)
+  })
+
+  it('recusa: posição não inteira', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = inserirDegrau(diagrama, 0.5)
+    expect(resultado.ok).toBe(false)
+  })
+})
+
+describe('removerDegrau', () => {
+  it('caminho feliz: remove o degrau indicado, sem mutar a entrada', () => {
+    const comSegundo = inserirDegrau(diagramaVazio(), 1)
+    if (!comSegundo.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comSegundo.diagrama) // r1, r2
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = removerDegrau(original, 'r2')
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs).toEqual([{ id: 'r1', elementos: [], ramos: [] }])
+    expect(original).toEqual(antes)
+  })
+
+  it('CA-6: dois degraus, remover um — o outro continua idêntico', () => {
+    const primeira = inserirElemento(diagramaVazio(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!primeira.ok) throw new Error('esperava sucesso')
+    const comSegundo = inserirDegrau(primeira.diagrama, 1)
+    if (!comSegundo.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comSegundo.diagrama) // r1 com bobina, r2 vazio
+    const r1Antes = JSON.parse(JSON.stringify(diagrama.rungs[0]))
+
+    const resultado = removerDegrau(diagrama, 'r2')
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs).toEqual([r1Antes])
+  })
+
+  it('recusa: degrau inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = removerDegrau(diagrama, 'r-fantasma')
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: último degrau — o diagrama precisa de pelo menos um', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = removerDegrau(diagrama, 'r1')
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('pelo menos um degrau')
+  })
+
+  it('variáveis declaradas permanecem após remover o degrau que as usava', () => {
+    let diagrama = diagramaVazio()
+    diagrama = (declararVariavel(diagrama, { nome: 'x' }) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirDegrau(diagrama, 1) as { ok: true; diagrama: Diagrama }).diagrama
+    diagrama = (inserirElemento(diagrama, 'r2', 'contato_na', { linha: 0, coluna: 0 }) as { ok: true; diagrama: Diagrama })
+      .diagrama
+    diagrama = (vincularVariavel(diagrama, 'e1', 'x') as { ok: true; diagrama: Diagrama }).diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = removerDegrau(congelado, 'r2')
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.variaveis).toEqual([{ nome: 'x', tipo: 'BOOL' }])
+  })
+
+  it('CA-7: mover elemento para outro degrau e depois remover a origem não deixa ramo órfão nem id duplicado', () => {
+    // ramo em r1, coluna 0; contato de trilho movido para dentro do ramo
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 0)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const comContato = inserirElemento(comRamo.diagrama, 'r1', 'contato_na', { linha: 0, coluna: 1 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const comSegundoDegrau = inserirDegrau(comContato.diagrama, 1)
+    if (!comSegundoDegrau.ok) throw new Error('esperava sucesso') // r1 (com ramo b1 e elemento e1), r2 vazio
+
+    const movido = moverElemento(comSegundoDegrau.diagrama, 'e1', 'r2', { linha: 0, coluna: 1 })
+    if (!movido.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(movido.diagrama)
+
+    const resultado = removerDegrau(diagrama, 'r1')
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    // r1 (e seu ramo b1) sumiu por completo; só resta r2, com o elemento movido
+    expect(resultado.diagrama.rungs).toEqual([
+      { id: 'r2', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 1 }, variavel: null }], ramos: [] },
+    ])
+    // nenhum ramo órfão remanescente e nenhum id de elemento duplicado
+    const todosElementos = resultado.diagrama.rungs.flatMap((r) => r.elementos.map((e) => e.id))
+    expect(new Set(todosElementos).size).toBe(todosElementos.length)
+    expect(resultado.diagrama.rungs.some((r) => r.ramos.some((ramo) => ramo.id === 'b1'))).toBe(false)
+  })
+})
+
+describe('limite de colunas (CA-10): 9ª coluna (índice 8) além de COLUNAS_POR_DEGRAU', () => {
+  it('inserirElemento recusa citando o limite de 8 colunas', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: COLUNAS_POR_DEGRAU })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+    expect(resultado.motivo).toContain(`${COLUNAS_POR_DEGRAU}`)
+  })
+
+  it('moverElemento recusa citando o limite de 8 colunas', () => {
+    const comContato = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContato.diagrama)
+
+    const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 0, coluna: COLUNAS_POR_DEGRAU })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+    expect(resultado.motivo).toContain(`${COLUNAS_POR_DEGRAU}`)
   })
 })
 

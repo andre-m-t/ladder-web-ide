@@ -144,6 +144,8 @@ REQUIRED_FILES=(
   "frontend/src/lib/api.ts"
   "frontend/src/lib/gravador.ts"
   "frontend/src/App.tsx"
+  "frontend/src/ladder/persistencia.ts"
+  "frontend/src/components/ide/ListaProblemas.tsx"
 )
 
 # --- Proibidos: artefato de terceiro ou gerado que NÃO pode entrar -----------

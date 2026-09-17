@@ -1,6 +1,6 @@
 # Tarefas 002 — Editor Ladder visual
 
-> **Status:** aprovado (2026-09-16) — em execução (Fatia 1 concluída)
+> **Status:** aprovado (2026-09-16) — em execução (Fatias 1, 2 e 3 concluídas; falta a Fatia 4)
 > **Plano de origem:** [`plan.md`](./plan.md) (aprovado em 2026-09-16, com as ressalvas R-1 a R-3 da §10)
 
 Lista de execução. Cada tarefa é pequena, tem arquivos-alvo, dependências
@@ -163,7 +163,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
-- [ ] **#9 — [N] Degraus, mover e limite de colunas**
+- [x] **#9 — [N] Degraus, mover e limite de colunas**
   - Arquivos: `frontend/src/ladder/edicao.ts`, `edicao.test.ts`
   - Depende de: #3
   - Pronto quando: `inserirDegrau(posicao)`, `removerDegrau(id)`
@@ -172,7 +172,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     remover degrau não afeta os outros (**CA-6**, **CA-7** e parte de **CA-10**
     em unidade).
 
-- [ ] **#10 — [D] Vários degraus (mover por arrasto já entregue na #22)**
+- [x] **#10 — [D] Vários degraus (mover por arrasto já entregue na #22)**
   - Arquivos: `frontend/src/components/ladder/EditorLadder.tsx`, `Paleta.tsx`,
     testes
   - Depende de: #7, #9
@@ -183,7 +183,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 
 ## Fatia 3 — S5b: validação visível, persistência e modos
 
-- [ ] **#11 — [N] Regras da Q-6 e persistência**
+- [x] **#11 — [N] Regras da Q-6 e persistência**
   - Arquivos: `frontend/src/ladder/validacao.ts`, `persistencia.ts`, testes
   - Depende de: #9
   - Pronto quando: `bobina_duplicada` (erro, aponta as duas bobinas) e
@@ -195,7 +195,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
   - Nota: o SET/RESET só é inserível pela UI em #18; aqui a regra é testada em
     unidade sobre diagramas montados à mão.
 
-- [ ] **#12 — [T] Persistência ligada (modos Ladder/ST já entregues na #23)**
+- [x] **#12 — [T] Persistência ligada (modos Ladder/ST já entregues na #23)**
   - Arquivos: `frontend/src/App.tsx`, `App.test.tsx`
   - Depende de: #8, #11
   - Pronto quando: `modo: 'ladder' | 'st'` com `role="tablist"`, Ladder como
@@ -203,7 +203,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     modo ST inalteradas (testes existentes verdes); diagrama carregado de
     `localStorage` ao montar e salvo a cada mudança; aviso de descarte visível.
 
-- [ ] **#13 — [D] Problemas na grade e na lista**
+- [x] **#13 — [D] Problemas na grade e na lista**
   - Arquivos: `frontend/src/components/ladder/ListaProblemas.tsx`,
     `GradeDegrau.tsx`, `EditorLadder.tsx`, testes
   - Depende de: #10, #11
@@ -215,7 +215,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     variável não vinculada) e **CA-9** (bobina duplicada = erro; aviso visualmente
     distinto do erro).
 
-- [ ] **#14 — [T] Ponta a ponta com recarga**
+- [x] **#14 — [T] Ponta a ponta com recarga**
   - Arquivos: e2e em contêiner Playwright (script fora de `frontend/src`, em
     `frontend/e2e/`)
   - Depende de: #12, #13
@@ -224,6 +224,16 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     para ST e compilar `blink.st` como antes (com backend disponível) ou, sem
     backend, conferir que a aba ST abre intacta; captura salva no relatório da
     rodada.
+
+> **Revisão aditiva (2026-09-17) — execução das fatias 2 e 3 juntas (plano §15, D-15).**
+> A #13 mudou de lugar: a lista de problemas é `components/ide/ListaProblemas.tsx`,
+> numa aba "Problemas (N)" do painel inferior (`PainelInferiorConteudo.tsx`),
+> e não `components/ladder/ListaProblemas.tsx` abaixo dos degraus. O `App`
+> valida e passa `problemas` e `foco` ao editor. O "mover por clique" da #10 foi
+> substituído pelo arrasto da #22 (entre degraus, ponteiro e teclado). A #14 roda
+> por `bash frontend/e2e/rodar.sh` (Playwright 1.55.0 em contêiner, `--network none`),
+> e o CA-8 está verde. Frentes: N1 (#9) ∥ N2 (#11) → L (#10, #13 na grade) ∥
+> I (#12, #13 na IDE) → E (#14).
 
 ## Fatia 4 — S5b: ramo paralelo, SET/RESET e CTU
 

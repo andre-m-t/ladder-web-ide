@@ -11,6 +11,8 @@ describe('AreaEditor', () => {
         aba="ladder"
         diagrama={diagramaVazio()}
         aoMudarDiagrama={() => {}}
+        problemas={[]}
+        foco={null}
         fonte=""
         aoMudarFonte={() => {}}
         compilando={false}
@@ -29,6 +31,8 @@ describe('AreaEditor', () => {
         aba="st"
         diagrama={diagramaVazio()}
         aoMudarDiagrama={() => {}}
+        problemas={[]}
+        foco={null}
         fonte="PROGRAM x END_PROGRAM"
         aoMudarFonte={() => {}}
         compilando={false}
@@ -48,6 +52,8 @@ describe('AreaEditor', () => {
         aba="ladder"
         diagrama={diagramaVazio()}
         aoMudarDiagrama={() => {}}
+        problemas={[]}
+        foco={null}
         fonte="conteudo st"
         aoMudarFonte={aoMudarFonte}
         compilando={false}
@@ -61,6 +67,8 @@ describe('AreaEditor', () => {
         aba="st"
         diagrama={diagramaVazio()}
         aoMudarDiagrama={() => {}}
+        problemas={[]}
+        foco={null}
         fonte="conteudo st"
         aoMudarFonte={aoMudarFonte}
         compilando={false}

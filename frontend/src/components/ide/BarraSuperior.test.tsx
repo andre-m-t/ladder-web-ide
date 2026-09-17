@@ -97,7 +97,7 @@ describe('BarraSuperior', () => {
     render(<BarraSuperior {...props} painelVariaveisAberto={true} consoleAberto={false} />)
 
     const botaoVariaveis = screen.getByRole('button', { name: /alternar painel de variáveis/i })
-    const botaoConsole = screen.getByRole('button', { name: /alternar console/i })
+    const botaoConsole = screen.getByRole('button', { name: /alternar painel inferior/i })
     expect(botaoVariaveis).toHaveAttribute('aria-pressed', 'true')
     expect(botaoConsole).toHaveAttribute('aria-pressed', 'false')
 

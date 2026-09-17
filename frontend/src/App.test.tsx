@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
+import { IO_ESPELHO } from './ladder/fixtures'
+import type { Diagrama } from './ladder/modelo'
+import { CHAVE_DIAGRAMA } from './ladder/persistencia'
 
 function respostaJson(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
@@ -130,14 +133,17 @@ describe('App', () => {
     arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    const celulaNA = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    // a IDE integra a lista de problemas ao vivo (tarefa #13): um elemento
+    // sem variável já tem `variavel_nao_atribuida` (erro), então o rótulo
+    // acessível da célula ganha o motivo como sufixo — daí o match parcial.
+    const celulaNA = screen.getByRole('button', { name: /^Degrau 1, coluna 1, contato NA sem variável/ })
     await usuario.click(celulaNA)
     const dialogoNA = screen.getByRole('dialog')
     await usuario.click(within(dialogoNA).getByRole('button', { name: /^entrada/i }))
 
     // arrasta a bobina para a coluna 8
     arrastar(screen.getByRole('button', { name: /^bobina$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
-    const celulaBobina = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })
+    const celulaBobina = screen.getByRole('button', { name: /^Degrau 1, coluna 8, bobina sem variável/ })
     await usuario.click(celulaBobina)
     const dialogoBobina = screen.getByRole('dialog')
     await usuario.click(within(dialogoBobina).getByRole('button', { name: /^saida/i }))
@@ -216,5 +222,76 @@ describe('App', () => {
 
     await usuario.click(screen.getByRole('tab', { name: 'Ladder' }))
     expect(screen.getByLabelText(/Degrau 1, coluna 1/)).toBeInTheDocument()
+  })
+
+  // -- Persistência (tarefa #12, CA-8) ------------------------------------
+
+  it('CA-8: um diagrama salvo em localStorage é carregado na montagem', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: IO_ESPELHO }))
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina saida' })).toBeInTheDocument()
+  })
+
+  it('CA-8: uma mudança do diagrama grava no localStorage', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
+    await usuario.click(screen.getByRole('radio', { name: 'Memória' }))
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    await waitFor(() => {
+      const bruto = window.localStorage.getItem(CHAVE_DIAGRAMA)
+      expect(bruto).not.toBeNull()
+      const envelope = JSON.parse(bruto as string) as { versao: number; diagrama: Diagrama }
+      expect(envelope.versao).toBe(1)
+      expect(envelope.diagrama.variaveis.some((v) => v.nome === 'contador')).toBe(true)
+    })
+  })
+
+  it('CA-8: JSON corrompido no localStorage gera um aviso no console e abre com editor vazio', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, '{ isso não é json')
+
+    render(<App />)
+
+    const log = screen.getByRole('log')
+    expect(await within(log).findByText(/diagrama salvo descartado/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  // -- Problemas (tarefa #13) ----------------------------------------------
+
+  it('a contagem "Problemas (N)" reflete validarDiagrama (contato sem bobina)', async () => {
+    const usuario = userEvent.setup()
+    const diagramaComContatoSemBobina: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' }],
+          ramos: [],
+        },
+      ],
+    }
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: diagramaComContatoSemBobina }))
+
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const abaProblemas = screen.getByRole('tab', { name: /problemas \(\d+\)/i })
+    expect(abaProblemas).toHaveTextContent(/Problemas \([1-9]\d*\)/)
+
+    await usuario.click(abaProblemas)
+    // A grade também marca a célula com problema (tarefa #13, frente D) — a
+    // mesma mensagem pode aparecer ali também; escopada em `ListaProblemas`
+    // (seu grupo de erros é o `role="alert"`) para não colidir com isso.
+    const grupoErros = screen.getByRole('alert')
+    expect(grupoErros).toBeInTheDocument()
+    expect(within(grupoErros).getByText(/sem nenhuma bobina/)).toBeInTheDocument()
   })
 })

@@ -554,3 +554,38 @@ Ajustes pedidos pelo autor após usar a #23. Tarefa #24. D-12 e D-13 continuam.
 - **Requisito atendido:** RF-1, RF-4, RF-9, RF-10, RF-12; CA-2, CA-4 (ramo vazio),
   CA-10 (limite de linhas).
 
+
+## 15. Revisão aditiva — fatias 2 e 3 na casca de IDE (2026-09-17)
+
+As fatias 2 e 3 (#9–#14) foram executadas juntas, porque a #22–#24 já tinham
+entregue mover, abas Ladder/ST e ramo paralelo. D-5 e D-10 continuam valendo;
+esta seção só registra onde a interface mudou em relação à §8.
+
+### D-15: problemas numa aba do painel inferior, foco por token e leitura de "caminho"
+- **Escolha:**
+  - **Lista de problemas** (`components/ide/ListaProblemas.tsx`) vai para uma
+    aba **"Problemas (N)"** no painel inferior, ao lado do Console, em vez de
+    ficar abaixo dos degraus como a §8 previa. Erros e avisos em grupos
+    separados, ícone e texto distintos; `role="alert"` só com erro.
+  - `validarDiagrama` roda uma vez no `App` (`useMemo`) e desce para o editor
+    (`problemas`) e para a lista; a grade marca a célula com selo de forma
+    distinta (círculo = erro, triângulo = aviso) e sufixo no `aria-label`;
+    problema sem elemento marca o cabeçalho do degrau.
+  - **Foco por token:** `EditorLadder` recebe `foco = { rungId, elementoId,
+    token }`; clicar num problema troca para a aba Ladder e incrementa o token.
+  - **Degraus:** inserir abaixo e remover por botões no cabeçalho do degrau,
+    inserir no fim por botão após a lista; o último degrau não pode ser
+    removido.
+  - **Persistência:** carregada no `App` na montagem, salva a cada mudança; aviso
+    de descarte ou falha de gravação vai ao Console (uma vez por falha).
+  - **`set_reset_autodependente`:** D-10 não define "caminho". Leitura adotada:
+    o **degrau inteiro** do SET/RESET, porque cada degrau tem no máximo uma
+    bobina. É a leitura mais abrangente que dispensa simular o circuito — pode
+    avisar a mais (contato num ramo sem efeito real), nunca a menos.
+- **Por quê:** a tela virou IDE na #23; lista abaixo dos degraus disputaria
+  espaço com a grade, e o painel inferior já é o lugar de saída da ferramenta.
+  Decisão do autor em 2026-09-17.
+- **Alternativas descartadas:** faixa de problemas dentro do `EditorLadder`;
+  validar dentro do editor (duplicaria o cálculo que a lista também usa).
+- **Requisito atendido:** RF-6, RF-8, RF-11, RF-12, RF-13; CA-4, CA-6, CA-7,
+  CA-8, CA-9, CA-10.

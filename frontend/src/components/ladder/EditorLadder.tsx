@@ -39,12 +39,22 @@
  * mesmo alerta (`role="alert"`) do resto do degrau.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { GitBranch } from 'lucide-react'
+import { GitBranch, Plus } from 'lucide-react'
 
-import { criarRamo, inserirElemento, moverElemento, redimensionarRamo, removerElemento, removerRamo, vincularVariavel } from '../../ladder/edicao'
+import {
+  criarRamo,
+  inserirDegrau,
+  inserirElemento,
+  moverElemento,
+  redimensionarRamo,
+  removerDegrau,
+  removerElemento,
+  removerRamo,
+  vincularVariavel,
+} from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
 import { COLUNAS_POR_DEGRAU, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
-import { descreverCelula } from '../../ladder/validacao'
+import { descreverCelula, type Problema } from '../../ladder/validacao'
 import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalVariavel from './ModalVariavel'
 import Paleta, { type TipoPaleta } from './Paleta'
@@ -56,12 +66,25 @@ export interface EditorLadderProps {
   /** Chamado a cada mudança bem-sucedida do diagrama. Quem monta o editor
    * decide o que fazer (persistência, `PainelVariaveis`, etc.). */
   aoMudar: (diagrama: Diagrama) => void
+  /** Problemas já calculados por `validarDiagrama` (tarefa #13) — o editor
+   * nunca chama `validarDiagrama` sozinho; quem monta a IDE decide quando
+   * revalidar (normalmente a cada `aoMudar`). Repassado a cada `GradeDegrau`,
+   * filtrado pelo `rungId` de cada degrau. */
+  problemas?: Problema[]
+  /** Pede foco para uma célula específica quando `token` muda (ex.: clicar
+   * num problema na lista de fora do editor). `elementoId: null`, ou um
+   * elemento que não existe mais, leva o foco à primeira célula do degrau
+   * `rungId`. */
+  foco?: { rungId: string; elementoId: string | null; token: number } | null
 }
 
-/** Recusa de uma jogada sobre célula, localizada no degrau e na célula afetados. */
+/** Recusa de uma jogada, localizada no degrau (e, quando há, na célula)
+ * afetados. `celula` fica ausente para recusas que não vêm de uma célula
+ * específica — inserir/remover degrau (tarefa #10) — e o alerta aparece do
+ * mesmo jeito, ancorado no degrau, sem marcar nenhuma célula como inválida. */
 interface RecusaCelula {
   rungId: string
-  celula: Celula
+  celula?: Celula
   motivo: string
 }
 
@@ -250,7 +273,7 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
   return alvo
 }
 
-export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
+export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
   const [ramoMarcado, setRamoMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
@@ -297,6 +320,27 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
     if (origem.de !== 'paleta') return
     containerRef.current?.querySelector<HTMLElement>(`[data-tipo-paleta="${origem.tipo}"]`)?.focus({ preventScroll: true })
   }
+
+  /** Foco pedido por quem monta o editor (`foco`, contrato fixado com a
+   * frente I): dispara só quando `foco.token` muda, nunca a cada
+   * renderização — por isso a dependência é só o `token`, com o resto lido
+   * de `diagramaRef` no momento em que o efeito roda. `elementoId` presente
+   * e existente vai para a célula desse elemento; `null`, ou um elemento que
+   * não existe mais (ex.: acabou de ser removido), vai para a primeira
+   * célula (linha 0, coluna 0) do degrau `rungId`. */
+  useEffect(() => {
+    if (!foco) return
+    if (foco.elementoId !== null) {
+      const achado = encontrarElementoPorId(diagramaRef.current, foco.elementoId)
+      if (achado) {
+        focarAlvo({ rungId: achado.rungId, celula: achado.elemento.celula })
+        return
+      }
+    }
+    const rung = diagramaRef.current.rungs.find((r) => r.id === foco.rungId)
+    if (rung) focarAlvo({ rungId: rung.id, celula: { linha: 0, coluna: 0 } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foco?.token])
 
   /** Conclui um arrasto (ponteiro ou teclado): aplica a operação do núcleo
    * correspondente à origem/alvo, ou cancela silenciosamente quando não há
@@ -557,6 +601,62 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
       aoMudar(resultado.diagrama)
       setMarcado(null)
     }
+  }
+
+  /** Insere um degrau vazio ao fim da lista (tarefa #10, CA-6). Uma recusa
+   * (hoje improvável — `inserirDegrau(diagrama, diagrama.rungs.length)` é
+   * sempre uma posição válida) usa o mesmo alerta das demais jogadas,
+   * ancorado no último degrau, sem alterar o diagrama. */
+  function aoInserirDegrauNoFim() {
+    const resultado = inserirDegrau(diagrama, diagrama.rungs.length)
+    if (!resultado.ok) {
+      const ultimo = diagrama.rungs[diagrama.rungs.length - 1]
+      setRecusa({ rungId: ultimo.id, motivo: resultado.motivo })
+      setAnuncio(`recusado: ${resultado.motivo}`)
+      return
+    }
+    aoMudar(resultado.diagrama)
+    setRecusa(null)
+    setAnuncio('degrau inserido')
+  }
+
+  /** Insere um degrau vazio logo abaixo de `rungId` (tarefa #10, CA-6). */
+  function aoInserirDegrauAbaixoDe(rungId: string) {
+    const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
+    if (indice === -1) return
+    const resultado = inserirDegrau(diagrama, indice + 1)
+    if (!resultado.ok) {
+      setRecusa({ rungId, motivo: resultado.motivo })
+      setAnuncio(`recusado: ${resultado.motivo}`)
+      return
+    }
+    aoMudar(resultado.diagrama)
+    setRecusa(null)
+    setAnuncio(`degrau inserido abaixo do degrau ${indice + 1}`)
+  }
+
+  /** Remove um degrau inteiro (tarefa #10, CA-6): a recusa do núcleo (hoje só
+   * "é o último degrau") aparece no mesmo alerta das demais jogadas, sem
+   * alterar o diagrama; um sucesso limpa a marcação de elemento ou ramo que
+   * pertencesse ao degrau removido — do contrário ficaria apontando para algo
+   * que não existe mais. */
+  function aoRemoverDegrauHandler(rungId: string) {
+    const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
+    const marcadoNesteDegrau = marcado !== null && encontrarElementoPorId(diagrama, marcado)?.rungId === rungId
+    const ramoMarcadoNesteDegrau = ramoMarcado !== null && encontrarRamoPorId(diagrama, ramoMarcado)?.rungId === rungId
+
+    const resultado = removerDegrau(diagrama, rungId)
+    if (!resultado.ok) {
+      setRecusa({ rungId, motivo: resultado.motivo })
+      setAnuncio(`recusado: ${resultado.motivo}`)
+      return
+    }
+
+    aoMudar(resultado.diagrama)
+    setRecusa(null)
+    if (marcadoNesteDegrau) setMarcado(null)
+    if (ramoMarcadoNesteDegrau) setRamoMarcado(null)
+    setAnuncio(`degrau ${indice + 1} removido`)
   }
 
   // Um arrasto que se movimenta o bastante para contar como arrasto (>4px)
@@ -868,9 +968,24 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
               aoCancelarAlca={cancelarAlca}
               aoTeclarNaAlca={aoTeclarNaAlca}
               previaAlca={previaAlcaAqui}
+              problemas={problemas?.filter((p) => p.rungId === rung.id)}
+              aoInserirDegrauAbaixo={() => aoInserirDegrauAbaixoDe(rung.id)}
+              aoRemoverDegrau={() => aoRemoverDegrauHandler(rung.id)}
             />
           )
         })}
+
+        <div className="flex justify-center py-2">
+          <button
+            type="button"
+            onClick={aoInserirDegrauNoFim}
+            aria-label="Inserir degrau"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none hover:bg-ide-painel focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+          >
+            <Plus aria-hidden="true" size={16} />
+            Inserir degrau
+          </button>
+        </div>
       </div>
 
       <div aria-live="polite" className="sr-only">

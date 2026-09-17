@@ -273,6 +273,191 @@ describe('validarDiagrama — um código por vez', () => {
   })
 })
 
+describe('validarDiagrama — Q-6 (D-10): bobina_duplicada', () => {
+  it('duas bobinas simples na mesma variável, em degraus diferentes: erro nas duas, cada uma apontando a outra', () => {
+    const rung1: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'b1', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const rung2: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_nf', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'b2', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rung1, rung2]))
+    const duplicadas = problemas.filter((p) => p.codigo === 'bobina_duplicada')
+    expect(duplicadas).toHaveLength(2)
+    expect(duplicadas).toContainEqual(
+      expect.objectContaining({ codigo: 'bobina_duplicada', severidade: 'erro', rungId: 'r1', elementoId: 'b1' }),
+    )
+    expect(duplicadas).toContainEqual(
+      expect.objectContaining({ codigo: 'bobina_duplicada', severidade: 'erro', rungId: 'r2', elementoId: 'b2' }),
+    )
+    const problemaB1 = duplicadas.find((p) => p.elementoId === 'b1')
+    // aponta a outra posição (1-based), degrau 2
+    expect(problemaB1?.mensagem).toContain('degrau 2')
+    expect(problemaB1?.mensagem).toContain("'saida'")
+    const problemaB2 = duplicadas.find((p) => p.elementoId === 'b2')
+    expect(problemaB2?.mensagem).toContain('degrau 1')
+  })
+
+  it('bobina única por variável: sem bobina_duplicada', () => {
+    const problemas = validarDiagrama(diagramaBase([rungBase()]))
+    expect(problemas.filter((p) => p.codigo === 'bobina_duplicada')).toEqual([])
+  })
+
+  it('duas bobinas simples na mesma variável, no mesmo degrau (linha 0 e um ramo): ainda é erro', () => {
+    const rung: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'b1', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+        // segunda bobina simples da mesma variável: posição inválida por si
+        // só (bobina fora do terminal), mas ainda deve acusar duplicidade
+        { id: 'b2', tipo: 'bobina', celula: { linha: 0, coluna: 1 }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    const duplicadas = problemas.filter((p) => p.codigo === 'bobina_duplicada')
+    expect(duplicadas.map((p) => p.elementoId).sort()).toEqual(['b1', 'b2'])
+  })
+
+  it('SET e RESET da mesma variável não contam como bobina_duplicada', () => {
+    const rung1: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const rung2: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 'r1elem', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const diagrama = diagramaBase([rung1, rung2])
+    diagrama.variaveis.push({ nome: 'botao', tipo: 'BOOL' })
+    const problemas = validarDiagrama(diagrama)
+    expect(problemas.filter((p) => p.codigo === 'bobina_duplicada')).toEqual([])
+  })
+})
+
+describe('validarDiagrama — Q-6 (D-10): set_reset_autodependente', () => {
+  it('SET e RESET da mesma variável, condição do SET depende da própria variável: aviso no SET', () => {
+    const rungSet: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'saida' },
+        { id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const rungReset: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 'rs1', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const diagrama = diagramaBase([rungSet, rungReset])
+    diagrama.variaveis.push({ nome: 'botao', tipo: 'BOOL' })
+    const problemas = validarDiagrama(diagrama)
+    const avisos = problemas.filter((p) => p.codigo === 'set_reset_autodependente')
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0]).toEqual(
+      expect.objectContaining({
+        codigo: 'set_reset_autodependente',
+        severidade: 'aviso',
+        rungId: 'r1',
+        elementoId: 's1',
+      }),
+    )
+    expect(avisos[0].mensagem).toContain("'saida'")
+  })
+
+  it('SET e RESET, condição do RESET depende da própria variável (via ramo): aviso no RESET', () => {
+    const rungSet: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const rungReset: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 'c3', tipo: 'contato_nf', celula: { linha: 1, coluna: 0 }, variavel: 'saida' },
+        { id: 'rs1', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [{ id: 'ramo1', linha: 1, colunaInicio: 0, colunaFim: 0 }],
+    }
+    const diagrama = diagramaBase([rungSet, rungReset])
+    diagrama.variaveis.push({ nome: 'botao', tipo: 'BOOL' })
+    const problemas = validarDiagrama(diagrama)
+    const avisos = problemas.filter((p) => p.codigo === 'set_reset_autodependente')
+    expect(avisos).toHaveLength(1)
+    expect(avisos[0]).toEqual(
+      expect.objectContaining({
+        codigo: 'set_reset_autodependente',
+        severidade: 'aviso',
+        rungId: 'r2',
+        elementoId: 'rs1',
+      }),
+    )
+  })
+
+  it('caso negativo obrigatório: par SET/RESET normal, condições que não citam a própria variável, não gera aviso', () => {
+    const rungSet: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao_liga' },
+        { id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const rungReset: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao_desliga' },
+        { id: 'rs1', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const diagrama = diagramaBase([rungSet, rungReset])
+    diagrama.variaveis.push({ nome: 'botao_liga', tipo: 'BOOL' }, { nome: 'botao_desliga', tipo: 'BOOL' })
+    const problemas = validarDiagrama(diagrama)
+    expect(problemas.filter((p) => p.codigo === 'set_reset_autodependente')).toEqual([])
+  })
+
+  it('só SET (sem RESET correspondente) com contato da própria variável: sem aviso — precisa do par', () => {
+    const rungSet: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'saida' },
+        { id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rungSet]))
+    expect(problemas.filter((p) => p.codigo === 'set_reset_autodependente')).toEqual([])
+  })
+})
+
 describe('fixtures sem problemas', () => {
   it('IO_ESPELHO não tem problemas', () => {
     expect(validarDiagrama(IO_ESPELHO)).toEqual([])

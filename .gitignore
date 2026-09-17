@@ -50,6 +50,14 @@ dependencies.lock
 .claude/settings.local.json
 .claude/*.local.json
 
+# e2e (Playwright, spec 002 tarefa #14) — pasta fora do pacote de depósito
+# do INPI (scripts/build-deposito.sh só empacota frontend/src); só os
+# artefatos gerados ficam de fora do controle de versão, não os fontes.
+frontend/e2e/node_modules/
+frontend/e2e/test-results/
+frontend/e2e/playwright-report/
+frontend/e2e/blob-report/
+
 # Sistema operacional / editor
 .DS_Store
 Thumbs.db

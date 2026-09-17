@@ -41,6 +41,23 @@
  * residente na página fazia um arrasto de ponteiro seguinte virar um drag
  * nativo de conteúdo, cancelado pelo navegador (`pointercancel`) no meio do
  * gesto — ver `armarPonteiro` em `EditorLadder.tsx`.
+ *
+ * **Vários degraus (tarefa #10):** o cabeçalho de cada cartão ganha duas
+ * ações — "Inserir degrau abaixo" e "Remover degrau" — encaminhadas cruas
+ * para `EditorLadder.tsx` (`aoInserirDegrauAbaixo`/`aoRemoverDegrau`), que é
+ * quem chama `inserirDegrau`/`removerDegrau` do núcleo e decide o que fazer
+ * com uma recusa; este componente só desenha os botões, com `aria-label` que
+ * cita o número do degrau (1-based).
+ *
+ * **Problemas na grade (tarefa #13):** `problemas` traz só os problemas do
+ * próprio degrau (filtrados por `EditorLadder`, que é quem chama
+ * `validarDiagrama`). Um problema com `elementoId` marca a célula daquele
+ * elemento — cor e ícone no canto (círculo vermelho para erro, triângulo
+ * amarelo para aviso), sem tocar `classeRetangulo` (a marcação de
+ * recusa/prévia/seleção continua tendo a palavra final sobre o preenchimento
+ * da célula: o problema é só um selo por cima). Um problema com
+ * `elementoId: null` (ex.: `rung_incompleto`) marca o degrau inteiro, com um
+ * selo no cabeçalho (ícone + texto visível, não só `aria-hidden`).
  */
 import {
   useEffect,
@@ -51,6 +68,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react'
+import { CircleAlert, Plus, Trash2, TriangleAlert } from 'lucide-react'
 
 import {
   COLUNAS_POR_DEGRAU,
@@ -64,7 +82,37 @@ import {
   type TipoContato,
   type Variavel,
 } from '../../ladder/modelo'
+import type { Problema } from '../../ladder/validacao'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
+
+/** Resumo de um ou mais `Problema` para uma célula ou para o degrau inteiro
+ * (tarefa #13): severidade mais grave presente (erro tem precedência sobre
+ * aviso) e as mensagens de todos os problemas dessa severidade, unidas — um
+ * elemento raramente acumula mais de um problema, mas a marcação nunca perde
+ * informação quando acontece. */
+interface ResumoProblema {
+  severidade: 'erro' | 'aviso'
+  mensagem: string
+}
+
+function resumirProblemas(lista: Problema[]): ResumoProblema | null {
+  if (lista.length === 0) return null
+  const erros = lista.filter((p) => p.severidade === 'erro')
+  const alvo = erros.length > 0 ? erros : lista
+  return { severidade: alvo[0].severidade, mensagem: alvo.map((p) => p.mensagem).join('; ') }
+}
+
+/** Problemas do elemento em `elementoId` (não do resto do degrau). */
+function problemaDaCelula(problemas: Problema[] | undefined, elementoId: string | undefined): ResumoProblema | null {
+  if (!problemas || elementoId === undefined) return null
+  return resumirProblemas(problemas.filter((p) => p.elementoId === elementoId))
+}
+
+/** Problemas do degrau inteiro (`elementoId: null` — ex.: `rung_incompleto`). */
+function problemaDoRung(problemas: Problema[] | undefined): ResumoProblema | null {
+  if (!problemas) return null
+  return resumirProblemas(problemas.filter((p) => p.elementoId === null))
+}
 
 /** Prévia de uma jogada de arrasto sobre uma célula, calculada pelo editor
  * chamando o núcleo (`inserirElemento`/`moverElemento`) sem aplicar (D-11,
@@ -111,8 +159,11 @@ export interface GradeDegrauProps {
   /** Avisa qual célula está sob o ponteiro ou o foco (null ao sair) — usado
    * pelo editor para acompanhar o alvo do arrasto. */
   aoPassarCelula?: (rungId: string, celula: Celula | null) => void
-  /** Última recusa de uma jogada sobre uma célula deste degrau, ou null/ausente. */
-  recusa?: { celula: Celula; motivo: string } | null
+  /** Última recusa de uma jogada sobre este degrau, ou null/ausente. `celula`
+   * fica ausente quando a recusa não vem de uma célula específica (ex.:
+   * remover degrau, tarefa #10) — o alerta aparece do mesmo jeito, só sem
+   * marcar nenhuma célula como inválida. */
+  recusa?: { celula?: Celula; motivo: string } | null
   /** pointerdown na alça de um ramo (D-14): início do arrasto geométrico local. */
   aoIniciarArrastoAlca?: (evento: ReactPointerEvent<SVGGElement>, rungId: string, ramoId: string) => void
   /** Reporta, a cada `pointermove` com o botão pressionado sobre a alça, a
@@ -126,6 +177,16 @@ export interface GradeDegrauProps {
   aoTeclarNaAlca?: (evento: KeyboardEvent<SVGGElement>, rungId: string, ramoId: string) => void
   /** Prévia de redimensionamento da alça em curso (D-14), ou null/ausente. */
   previaAlca?: PreviaAlca | null
+  /** Problemas deste degrau (`validarDiagrama`, já filtrados por `rungId`
+   * pelo `EditorLadder` — este componente não chama `validarDiagrama`,
+   * tarefa #13), ou null/ausente. */
+  problemas?: Problema[]
+  /** Botão "Inserir degrau abaixo" no cabeçalho (tarefa #10), ou
+   * ausente/no-op se quem monta o editor não oferecer a ação. */
+  aoInserirDegrauAbaixo?: () => void
+  /** Botão "Remover degrau" no cabeçalho (tarefa #10); a recusa (ex.: único
+   * degrau) é decidida e mostrada por `EditorLadder`, não aqui. */
+  aoRemoverDegrau?: () => void
 }
 
 const LARGURA_CELULA_MIN = 56
@@ -193,11 +254,20 @@ function rotuloTipo(tipo: TipoContato | TipoBobina): string {
 
 /** Rótulo acessível de uma célula — "Degrau N, coluna M" no trilho principal
  * (linha 0), "Degrau N, ramo L, coluna M" num ramo (linha L > 0, D-14),
- * mesma convenção de `validacao.ts#descreverCelula`. */
-function rotuloCelula(indiceDegrau: number, linha: number, coluna: number, elemento: Elemento | undefined): string {
+ * mesma convenção de `validacao.ts#descreverCelula`. Com um problema de
+ * validação nessa célula (tarefa #13), o rótulo ganha o sufixo "erro:
+ * <mensagem>" ou "aviso: <mensagem>". */
+function rotuloCelula(
+  indiceDegrau: number,
+  linha: number,
+  coluna: number,
+  elemento: Elemento | undefined,
+  problema?: ResumoProblema | null,
+): string {
   const base = linha === 0 ? `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}` : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
-  if (!elemento) return `${base}, vazia`
-  return `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
+  const conteudo = !elemento ? `${base}, vazia` : `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
+  if (!problema) return conteudo
+  return `${conteudo}, ${problema.severidade}: ${problema.mensagem}`
 }
 
 /** Endereço da variável vinculada a `nome`, ou `null` (interna ou sem vínculo). */
@@ -209,6 +279,32 @@ function enderecoDaVariavel(variaveis: Variavel[], nome: string | null): string 
 /** Número do degrau com três dígitos, para o cabeçalho do cartão ("Degrau 001"). */
 function numeroDegrau(indice: number): string {
   return String(indice + 1).padStart(3, '0')
+}
+
+/** Selo de problema no canto superior direito da célula (tarefa #13, D-10):
+ * círculo vermelho para erro, triângulo amarelo para aviso — cor **e** forma
+ * distintas, não só cor, para não depender de percepção de cor. `(x, y)` é o
+ * canto superior direito do retângulo da célula; o selo fica sempre por
+ * cima, sem alterar `classeRetangulo` (recusa/prévia/seleção mantêm a
+ * palavra final sobre o preenchimento da célula). `aria-hidden`: o texto
+ * acessível do problema já está no `aria-label` da célula
+ * (`rotuloCelula`). */
+function SeloProblema({ x, y, severidade }: { x: number; y: number; severidade: 'erro' | 'aviso' }) {
+  const cx = x - 9
+  const cy = y + 9
+  const classe = severidade === 'erro' ? 'fill-ide-perigo stroke-ide-painel' : 'fill-ide-aviso stroke-ide-painel'
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      {severidade === 'erro' ? (
+        <circle cx={cx} cy={cy} r={6} strokeWidth={1} className={classe} />
+      ) : (
+        <polygon points={`${cx},${cy - 6} ${cx - 6},${cy + 5} ${cx + 6},${cy + 5}`} strokeWidth={1} className={classe} />
+      )}
+      <text x={cx} y={cy + 3} textAnchor="middle" className="select-none fill-ide-painel text-[8px] font-bold">
+        !
+      </text>
+    </g>
+  )
 }
 
 /** Classe do retângulo da célula conforme marcação/prévia/recusa (D-11/D-13:
@@ -250,7 +346,11 @@ export default function GradeDegrau({
   aoCancelarAlca,
   aoTeclarNaAlca,
   previaAlca,
+  problemas,
+  aoInserirDegrauAbaixo,
+  aoRemoverDegrau,
 }: GradeDegrauProps) {
+  const problemaRung = problemaDoRung(problemas)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const larguraDisponivel = useLarguraDisponivel(wrapperRef)
@@ -335,22 +435,24 @@ export default function GradeDegrau({
     const ativo = (elemento !== undefined && elemento.id === marcado) || (ramoId !== undefined && ramoId === ramoMarcado)
 
     const previaAqui = previa && 'celula' in previa && celulaIgual(previa.celula, celula) ? previa : undefined
-    const recusada = recusa != null && celulaIgual(recusa.celula, celula)
+    const recusada = recusa != null && recusa.celula != null && celulaIgual(recusa.celula, celula)
     const ehRemocaoAqui = previaAqui?.tipo === 'remover'
     const cursorInvalido = previaAqui?.tipo === 'invalida'
     const endereco = enderecoDaVariavel(variaveis, elemento?.variavel ?? null)
+    const problemaAqui = problemaDaCelula(problemas, elemento?.id)
 
     return (
       <g
         key={`${linha}:${coluna}`}
         tabIndex={0}
         role="button"
-        aria-label={rotuloCelula(indice, linha, coluna, elemento)}
+        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui)}
         aria-selected={ativo}
         aria-invalid={recusada ? 'true' : undefined}
         aria-describedby={recusada ? idAlerta : undefined}
         data-terminal={ehTerminal ? 'true' : undefined}
         data-previa={previaAqui ? previaAqui.tipo : undefined}
+        data-problema={problemaAqui ? problemaAqui.severidade : undefined}
         data-celula={`${rung.id}:${linha}:${coluna}`}
         onDragStart={(evento) => evento.preventDefault()}
         onClick={() => aoClicarCelula(rung.id, celula)}
@@ -391,6 +493,7 @@ export default function GradeDegrau({
         {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
           <Bobina cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
         )}
+        {problemaAqui && <SeloProblema x={cx + larguraCelula} y={y - ALTURA_LINHA / 2} severidade={problemaAqui.severidade} />}
       </g>
     )
   }
@@ -456,6 +559,44 @@ export default function GradeDegrau({
         <span className="rounded bg-ide-destaque px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ide-destaque-texto">
           Degrau {numeroDegrau(indice)}
         </span>
+
+        {problemaRung && (
+          <span
+            className={
+              problemaRung.severidade === 'erro'
+                ? 'inline-flex items-center gap-1 rounded bg-ide-perigo/10 px-1.5 py-0.5 text-[11px] font-medium text-ide-perigo'
+                : 'inline-flex items-center gap-1 rounded bg-ide-aviso/10 px-1.5 py-0.5 text-[11px] font-medium text-ide-aviso'
+            }
+          >
+            {problemaRung.severidade === 'erro' ? <CircleAlert aria-hidden="true" size={12} /> : <TriangleAlert aria-hidden="true" size={12} />}
+            {problemaRung.severidade}: {problemaRung.mensagem}
+          </span>
+        )}
+
+        <div className="ml-auto flex items-center gap-1">
+          {aoInserirDegrauAbaixo && (
+            <button
+              type="button"
+              onClick={aoInserirDegrauAbaixo}
+              aria-label={`Inserir degrau abaixo do degrau ${indice + 1}`}
+              title="Inserir degrau abaixo"
+              className="rounded p-1 text-ide-suave outline-none hover:bg-ide-painel hover:text-ide-texto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+            >
+              <Plus aria-hidden="true" size={14} />
+            </button>
+          )}
+          {aoRemoverDegrau && (
+            <button
+              type="button"
+              onClick={aoRemoverDegrau}
+              aria-label={`Remover degrau ${indice + 1}`}
+              title="Remover degrau"
+              className="rounded p-1 text-ide-suave outline-none hover:bg-ide-perigo/10 hover:text-ide-perigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+            >
+              <Trash2 aria-hidden="true" size={14} />
+            </button>
+          )}
+        </div>
       </figcaption>
 
       <div ref={wrapperRef} className="overflow-x-auto p-3">

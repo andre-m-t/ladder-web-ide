@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { diagramaVazio } from '../../ladder/edicao'
 import { IO_ESPELHO, MINIMAL } from '../../ladder/fixtures'
 import type { Diagrama, Elemento, Variavel } from '../../ladder/modelo'
-import { validarDiagrama } from '../../ladder/validacao'
+import { validarDiagrama, type Problema } from '../../ladder/validacao'
 import EditorLadder from './EditorLadder'
 
 /** Harness de teste (sugerido pelo plano da tarefa #23): `EditorLadder` é
@@ -787,5 +787,233 @@ describe('EditorLadder — contato de selo pela UI (tarefa #24)', () => {
     const final = ultimoDiagrama(aoMudar)
     expect(final.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
     expect(validarDiagrama(final)).toEqual([])
+  })
+})
+
+describe('EditorLadder — CA-6: vários degraus (tarefa #10)', () => {
+  it('inserir um segundo degrau permite editar os dois independentemente; remover um preserva o outro', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau' }))
+    expect(ultimoDiagrama(aoMudar).rungs).toHaveLength(2)
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toBeInTheDocument()
+
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), screen.getByRole('button', { name: 'Degrau 2, coluna 8, vazia' }))
+    expect(screen.getByRole('button', { name: 'Degrau 2, coluna 8, bobina sem variável' })).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs).toHaveLength(1)
+    expect(final.rungs[0].elementos).toHaveLength(1)
+    expect(final.rungs[0].elementos[0].tipo).toBe('bobina')
+    // o degrau que restou (era o 2º) passa a ser o único, "Degrau 1"
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+  })
+
+  it('"Inserir degrau abaixo" no cabeçalho insere logo depois daquele degrau', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau abaixo do degrau 1' }))
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Degrau 2, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  it('recusa remover o último degrau, sem alterar o diagrama, e mostra o motivo no alerta existente', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/pelo menos um degrau/i)
+    expect(aoMudar).not.toHaveBeenCalled()
+    // o único degrau continua lá, intacto
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  it('remover o degrau com o elemento marcado limpa a marcação', async () => {
+    const usuario = userEvent.setup()
+    renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau' }))
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const elemento = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    expect(elemento).toHaveAttribute('aria-selected', 'true')
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+
+    // o elemento marcado foi embora junto com o degrau; nenhuma célula do que restou continua marcada
+    const celulasRestantes = screen.getAllByRole('button', { name: /^Degrau 1,/ })
+    for (const celula of celulasRestantes) {
+      expect(celula).toHaveAttribute('aria-selected', 'false')
+    }
+  })
+})
+
+describe('EditorLadder — CA-7: mover elemento entre degraus pelo teclado (tarefa #10)', () => {
+  it('ArrowDown durante o arrasto por teclado atravessa para o degrau vizinho, e soltar move o elemento para lá', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau' }))
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const origem = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+
+    origem.focus()
+    await usuario.keyboard(' ')
+    await usuario.keyboard('{ArrowDown}')
+    await usuario.keyboard(' ')
+
+    expect(screen.getByRole('button', { name: 'Degrau 2, coluna 1, contato NA sem variável' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toHaveLength(0)
+    expect(final.rungs[1].elementos).toHaveLength(1)
+  })
+
+  it('ArrowUp devolve o alvo ao degrau anterior', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau' }))
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), screen.getByRole('button', { name: 'Degrau 2, coluna 8, vazia' }))
+    const origem = screen.getByRole('button', { name: 'Degrau 2, coluna 8, bobina sem variável' })
+
+    origem.focus()
+    await usuario.keyboard(' ')
+    await usuario.keyboard('{ArrowUp}')
+    await usuario.keyboard(' ')
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 2, coluna 8, vazia' })).toBeInTheDocument()
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toHaveLength(1)
+    expect(final.rungs[1].elementos).toHaveLength(0)
+  })
+})
+
+describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13)', () => {
+  it('CA-9: duas bobinas simples com a mesma variável mostram erro nas duas células', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'x', tipo: 'BOOL' }],
+      rungs: [
+        { id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: 'x' }], ramos: [] },
+        { id: 'r2', elementos: [{ id: 'e2', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: 'x' }], ramos: [] },
+      ],
+    }
+    const problemas = validarDiagrama(diagrama)
+    render(<EditorLadder diagrama={diagrama} aoMudar={() => {}} problemas={problemas} />)
+
+    const celula1 = screen.getByRole('button', { name: /^Degrau 1, coluna 8, bobina x, erro:/ })
+    const celula2 = screen.getByRole('button', { name: /^Degrau 2, coluna 8, bobina x, erro:/ })
+    expect(celula1).toHaveAttribute('data-problema', 'erro')
+    expect(celula2).toHaveAttribute('data-problema', 'erro')
+  })
+
+  it('um aviso passado à mão é visualmente distinto do erro (aria-label e ícone diferentes)', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'x', tipo: 'BOOL' }],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina_set', celula: { linha: 0, coluna: 7 }, variavel: 'x' }], ramos: [] }],
+    }
+    const problemas: Problema[] = [
+      {
+        codigo: 'set_reset_autodependente',
+        severidade: 'aviso',
+        rungId: 'r1',
+        elementoId: 'e1',
+        mensagem: "depende da própria variável 'x'",
+      },
+    ]
+    render(<EditorLadder diagrama={diagrama} aoMudar={() => {}} problemas={problemas} />)
+
+    const celula = screen.getByRole('button', { name: /aviso: depende da própria variável 'x'/i })
+    expect(celula).toHaveAttribute('data-problema', 'aviso')
+    expect(screen.queryByRole('button', { name: /erro:/i })).not.toBeInTheDocument()
+  })
+
+  it('rung_incompleto (contato sem bobina) marca o cabeçalho do degrau, visível e sem alterar a marcação de outras células', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: null }], ramos: [] }],
+    }
+    const problemas = validarDiagrama(diagrama)
+    expect(problemas.some((p) => p.codigo === 'rung_incompleto')).toBe(true)
+
+    render(<EditorLadder diagrama={diagrama} aoMudar={() => {}} problemas={problemas} />)
+
+    expect(screen.getByText(/sem nenhuma bobina/i)).toBeInTheDocument()
+  })
+})
+
+describe('EditorLadder — foco programático (contrato com quem monta a IDE)', () => {
+  function HarnessFoco({ inicial }: { inicial: Diagrama }) {
+    const [diagrama, setDiagrama] = useState(inicial)
+    const [foco, setFoco] = useState<{ rungId: string; elementoId: string | null; token: number } | null>(null)
+    return (
+      <div>
+        <button type="button" onClick={() => setFoco((atual) => ({ rungId: 'r1', elementoId: 'e1', token: (atual?.token ?? 0) + 1 }))}>
+          focar elemento
+        </button>
+        <button type="button" onClick={() => setFoco((atual) => ({ rungId: 'r1', elementoId: null, token: (atual?.token ?? 0) + 1 }))}>
+          focar degrau
+        </button>
+        <EditorLadder diagrama={diagrama} aoMudar={setDiagrama} foco={foco} />
+      </div>
+    )
+  }
+
+  it('mudar foco.token leva o foco à célula do elemento pedido', async () => {
+    const usuario = userEvent.setup()
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 3 }, variavel: null }], ramos: [] }],
+    }
+    render(<HarnessFoco inicial={diagrama} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'focar elemento' }))
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Degrau 1, coluna 4, contato NA sem variável' }))
+  })
+
+  it('elementoId null leva o foco à primeira célula do degrau', async () => {
+    const usuario = userEvent.setup()
+    render(<HarnessFoco inicial={diagramaVazio()} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'focar degrau' }))
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+  })
+
+  it('um segundo clique com token diferente refoca mesmo alvo (o efeito roda de novo)', async () => {
+    const usuario = userEvent.setup()
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 3 }, variavel: null }], ramos: [] }],
+    }
+    render(<HarnessFoco inicial={diagrama} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'focar elemento' }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 4, contato NA sem variável' })
+    expect(document.activeElement).toBe(celula)
+
+    // move o foco para outro lugar, então pede o mesmo elemento de novo (token muda)
+    celula.blur()
+    document.body.focus()
+    await usuario.click(screen.getByRole('button', { name: 'focar elemento' }))
+
+    expect(document.activeElement).toBe(celula)
   })
 })

@@ -136,8 +136,8 @@ export default function BarraSuperior({
         <button
           type="button"
           aria-pressed={consoleAberto}
-          title="Alternar console"
-          aria-label="Alternar console"
+          title="Alternar painel inferior (Problemas/Console)"
+          aria-label="Alternar painel inferior"
           onClick={aoAlternarConsole}
           className={
             consoleAberto
@@ -146,7 +146,7 @@ export default function BarraSuperior({
           }
         >
           <SquareTerminal aria-hidden="true" size={TAMANHO_ICONE} />
-          <span className="hidden lg:inline">Console</span>
+          <span className="hidden lg:inline">Painel</span>
         </button>
 
         <Separador />

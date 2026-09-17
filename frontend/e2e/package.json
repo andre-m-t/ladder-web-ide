@@ -1,0 +1,13 @@
+{
+  "name": "ladderflow-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Testes ponta a ponta (Playwright) da spec 002, tarefa #14 — CA-8. Fora do pacote de depósito do INPI (scripts/build-deposito.sh só inclui frontend/src).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}

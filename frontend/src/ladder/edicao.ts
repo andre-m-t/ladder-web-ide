@@ -35,6 +35,50 @@ export function diagramaVazio(): Diagrama {
   }
 }
 
+/** Menor `r<N>` (N inteiro positivo) ainda não usado como id de degrau em
+ * `diagrama` (mesmo esquema de `proximoIdElemento`, com prefixo `r`). */
+function proximoIdRung(diagrama: Diagrama): string {
+  const usados = new Set(diagrama.rungs.map((rung) => rung.id))
+  let n = 1
+  while (usados.has(`r${n}`)) n++
+  return `r${n}`
+}
+
+/** Insere um degrau vazio em `posicao` (0-based, índice entre os degraus
+ * existentes — `rungs.length` insere ao final). Recusa se `posicao` não for
+ * um inteiro em `0..rungs.length` (CA-6, CA-10 parte de #9). */
+export function inserirDegrau(diagrama: Diagrama, posicao: number): ResultadoEdicao {
+  if (!Number.isInteger(posicao) || posicao < 0 || posicao > diagrama.rungs.length) {
+    return recusa(
+      `posição de degrau inválida: '${posicao}' — use um número inteiro entre 0 e ${diagrama.rungs.length}`,
+    )
+  }
+
+  const novoDiagrama = structuredClone(diagrama)
+  const novoRung: Rung = { id: proximoIdRung(diagrama), elementos: [], ramos: [] }
+  novoDiagrama.rungs.splice(posicao, 0, novoRung)
+
+  return sucesso(novoDiagrama)
+}
+
+/** Remove um degrau inteiro (com seus elementos e ramos), sem alterar os
+ * demais. Recusa se o degrau não existir ou se for o último — o diagrama
+ * sempre precisa de pelo menos um degrau editável (CA-6). Variáveis
+ * declaradas permanecem intactas: o vínculo mora no elemento removido, não
+ * na variável. */
+export function removerDegrau(diagrama: Diagrama, rungId: string): ResultadoEdicao {
+  const rung = encontrarRung(diagrama, rungId)
+  if (rung === undefined) return recusa(`degrau '${rungId}' inexistente`)
+  if (diagrama.rungs.length <= 1) {
+    return recusa('o diagrama precisa de pelo menos um degrau')
+  }
+
+  const novoDiagrama = structuredClone(diagrama)
+  novoDiagrama.rungs = novoDiagrama.rungs.filter((r) => r.id !== rungId)
+
+  return sucesso(novoDiagrama)
+}
+
 /** Menor `e<N>` (N inteiro positivo) ainda não usado como id de elemento em `diagrama`. */
 function proximoIdElemento(diagrama: Diagrama): string {
   const usados = new Set<string>()

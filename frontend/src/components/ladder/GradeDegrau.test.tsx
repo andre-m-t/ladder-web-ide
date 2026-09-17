@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { IO_ESPELHO } from '../../ladder/fixtures'
 import type { Ramo } from '../../ladder/modelo'
+import type { Problema } from '../../ladder/validacao'
 import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 
 /** Props obrigatórias que a maioria dos testes não usa — mantém as chamadas
@@ -455,5 +456,137 @@ describe('GradeDegrau — alça do ramo, geometria do arrasto por ponteiro (D-14
 
     expect(container.innerHTML).toMatch(/stroke-ide-perigo/)
     expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
+  })
+})
+
+describe('GradeDegrau — problemas na grade (tarefa #13, CA-4/CA-9)', () => {
+  it('problema de erro na célula: aria-label "erro: <mensagem>" e um círculo (não triângulo) no canto', () => {
+    const rung = {
+      id: 'r1',
+      elementos: [{ id: 'e1', tipo: 'bobina' as const, celula: { linha: 0, coluna: 7 }, variavel: 'saida' }],
+      ramos: [],
+    }
+    const problemas: Problema[] = [
+      {
+        codigo: 'bobina_duplicada',
+        severidade: 'erro',
+        rungId: 'r1',
+        elementoId: 'e1',
+        mensagem: "bobina 'e1' escreve em 'saida', já escrita por outra bobina",
+      },
+    ]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
+
+    const celula = screen.getByRole('button', { name: /erro: bobina 'e1' escreve em 'saida'/i })
+    expect(celula).toHaveAttribute('data-problema', 'erro')
+    expect(celula.querySelector('circle[class*="fill-ide-perigo"]')).not.toBeNull()
+    expect(celula.querySelector('polygon[class*="fill-ide-aviso"]')).toBeNull()
+  })
+
+  it('problema de aviso na célula é visualmente distinto do erro: triângulo, aria-label "aviso: <mensagem>"', () => {
+    const rung = {
+      id: 'r1',
+      elementos: [{ id: 'e1', tipo: 'bobina_set' as const, celula: { linha: 0, coluna: 7 }, variavel: 'x' }],
+      ramos: [],
+    }
+    const problemas: Problema[] = [
+      {
+        codigo: 'set_reset_autodependente',
+        severidade: 'aviso',
+        rungId: 'r1',
+        elementoId: 'e1',
+        mensagem: "bobina SET 'e1' depende da própria variável 'x'",
+      },
+    ]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
+
+    const celula = screen.getByRole('button', { name: /aviso: bobina SET 'e1' depende da própria variável 'x'/i })
+    expect(celula).toHaveAttribute('data-problema', 'aviso')
+    expect(celula.querySelector('polygon[class*="fill-ide-aviso"]')).not.toBeNull()
+    expect(celula.querySelector('circle[class*="fill-ide-perigo"]')).toBeNull()
+  })
+
+  it('problema com elementoId null (ex.: rung_incompleto) marca o cabeçalho do degrau, com texto acessível', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    const problemas: Problema[] = [
+      {
+        codigo: 'rung_incompleto',
+        severidade: 'erro',
+        rungId: 'r1',
+        elementoId: null,
+        mensagem: 'degrau 1 sem nenhuma bobina — todo degrau precisa terminar numa bobina',
+      },
+    ]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
+
+    expect(screen.getByText(/degrau 1 sem nenhuma bobina/i)).toBeInTheDocument()
+  })
+
+  it('problema de aviso com elementoId null é visualmente distinto do erro no cabeçalho', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    const problemas: Problema[] = [
+      { codigo: 'rung_incompleto', severidade: 'aviso', rungId: 'r1', elementoId: null, mensagem: 'aviso de exemplo no degrau' },
+    ]
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
+
+    expect(screen.getByText(/aviso de exemplo no degrau/i)).toBeInTheDocument()
+    expect(container.querySelector('figcaption .text-ide-aviso, figcaption [class*="text-ide-aviso"]')).not.toBeNull()
+  })
+
+  it('não apaga a marcação de recusa nem a seleção já existentes na célula (precedência preservada)', () => {
+    const rung = {
+      id: 'r1',
+      elementos: [{ id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: null }],
+      ramos: [],
+    }
+    const problemas: Problema[] = [
+      { codigo: 'variavel_nao_atribuida', severidade: 'erro', rungId: 'r1', elementoId: 'e1', mensagem: 'sem variável vinculada' },
+    ]
+    render(
+      <GradeDegrau
+        rung={rung}
+        indice={0}
+        {...propsBase()}
+        marcado="e1"
+        recusa={{ celula: { linha: 0, coluna: 0 }, motivo: 'motivo qualquer de outra jogada' }}
+        problemas={problemas}
+      />,
+    )
+
+    const celula = screen.getByRole('button', { name: /erro: sem variável vinculada/i })
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+    expect(celula).toHaveAttribute('aria-invalid', 'true')
+    expect(celula).toHaveAttribute('data-problema', 'erro')
+  })
+
+  it('sem problemas, nenhuma célula ganha data-problema nem o cabeçalho ganha selo', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    expect(container.querySelector('[data-problema]')).toBeNull()
+  })
+})
+
+describe('GradeDegrau — ações de degrau no cabeçalho (tarefa #10, CA-6)', () => {
+  it('botão "Inserir degrau abaixo" tem aria-label com o número do degrau (1-based) e chama o callback', async () => {
+    const usuario = userEvent.setup()
+    const aoInserirDegrauAbaixo = vi.fn()
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    render(<GradeDegrau rung={rung} indice={2} {...propsBase()} aoInserirDegrauAbaixo={aoInserirDegrauAbaixo} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Inserir degrau abaixo do degrau 3' }))
+
+    expect(aoInserirDegrauAbaixo).toHaveBeenCalledTimes(1)
+  })
+
+  it('botão "Remover degrau" tem aria-label com o número do degrau (1-based) e chama o callback', async () => {
+    const usuario = userEvent.setup()
+    const aoRemoverDegrau = vi.fn()
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} aoRemoverDegrau={aoRemoverDegrau} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+
+    expect(aoRemoverDegrau).toHaveBeenCalledTimes(1)
   })
 })

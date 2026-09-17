@@ -13,9 +13,12 @@
  * O que este arquivo não faz: simular o circuito. Uma célula vazia na linha 0
  * é fio — conduz — então um degrau com contato na coluna 0 e bobina na coluna
  * `COLUNA_TERMINAL` está estruturalmente completo, mesmo com colunas vazias
- * entre os dois. Os códigos da Q-6 (`bobina_duplicada`,
- * `set_reset_autodependente`) e a checagem de ramo aberto entram na tarefa
- * #11/#15; a união abaixo fica pronta para crescer.
+ * entre os dois.
+ *
+ * Regras da Q-6 (D-10, tarefa #11): `bobina_duplicada` (erro) e
+ * `set_reset_autodependente` (aviso) — ver JSDoc de cada função abaixo para a
+ * definição exata. A checagem de ramo aberto (CTU) entra na tarefa #15; a
+ * união abaixo fica pronta para crescer.
  */
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX, ehBobina, ehContato } from './modelo'
@@ -31,6 +34,8 @@ export type CodigoProblema =
   | 'posicao_invalida'
   | 'endereco_invalido'
   | 'bobina_escreve_entrada'
+  | 'bobina_duplicada'
+  | 'set_reset_autodependente'
 
 export interface Problema {
   codigo: CodigoProblema
@@ -207,12 +212,136 @@ function validarElemento(indiceDegrau: number, rung: Rung, elemento: Elemento, d
   return problemas
 }
 
+// -- Q-6 (D-10): bobina_duplicada e set_reset_autodependente -------------
+
+/** Todo elemento do diagrama, junto do índice do degrau (1-based nas
+ * mensagens) e do `Rung` a que pertence — usado pelas duas checagens da Q-6,
+ * que precisam olhar o diagrama inteiro, não um rung por vez. */
+function todosElementos(diagrama: Diagrama): Array<{ indiceDegrau: number; rung: Rung; elemento: Elemento }> {
+  const resultado: Array<{ indiceDegrau: number; rung: Rung; elemento: Elemento }> = []
+  diagrama.rungs.forEach((rung, indiceDegrau) => {
+    for (const elemento of rung.elementos) {
+      resultado.push({ indiceDegrau, rung, elemento })
+    }
+  })
+  return resultado
+}
+
+/**
+ * `bobina_duplicada` (erro, D-10/Q-6): duas ou mais bobinas **simples**
+ * (`tipo: 'bobina'`) vinculadas à mesma variável, em qualquer degrau do
+ * diagrama — a decisão de Q-6 trata isso como erro estrutural (a última
+ * escrita do ciclo prevalece, e a spec recusa a ambiguidade por objetivo
+ * didático). SET e RESET não contam como duplicata: são o idioma normal de
+ * trava e é esperado que apareçam repetidos para a mesma variável.
+ *
+ * Gera um `Problema` para **cada** bobina do grupo (não um só para o grupo
+ * inteiro), com a mensagem apontando as demais posições envolvidas.
+ */
+function validarBobinasDuplicadas(diagrama: Diagrama): Problema[] {
+  const problemas: Problema[] = []
+  const bobinasSimples = todosElementos(diagrama).filter(
+    ({ elemento }) => elemento.tipo === 'bobina' && elemento.variavel !== null,
+  )
+
+  const porVariavel = new Map<string, typeof bobinasSimples>()
+  for (const item of bobinasSimples) {
+    const nome = item.elemento.variavel as string
+    const grupo = porVariavel.get(nome)
+    if (grupo) grupo.push(item)
+    else porVariavel.set(nome, [item])
+  }
+
+  for (const [nome, grupo] of porVariavel) {
+    if (grupo.length < 2) continue
+    for (const item of grupo) {
+      const outras = grupo
+        .filter((outro) => outro.elemento.id !== item.elemento.id)
+        .map((outro) => descreverCelula(outro.indiceDegrau, outro.elemento.celula))
+        .join('; ')
+      problemas.push({
+        codigo: 'bobina_duplicada',
+        severidade: 'erro',
+        rungId: item.rung.id,
+        elementoId: item.elemento.id,
+        mensagem: `bobina '${item.elemento.id}' em ${descreverCelula(item.indiceDegrau, item.elemento.celula)} escreve em '${nome}', já escrita por outra bobina simples em ${outras} — bobinas simples duplicadas na mesma variável são erro estrutural (Q-6)`,
+      })
+    }
+  }
+
+  return problemas
+}
+
+/**
+ * `set_reset_autodependente` (aviso, D-10/Q-6): existe um SET e um RESET da
+ * mesma variável no diagrama, e pelo menos um dos dois tem, no seu próprio
+ * caminho até a bobina, um contato (NA ou NF) vinculado a essa mesma
+ * variável.
+ *
+ * **Leitura adotada para "caminho"** (D-10 não define o termo — a leitura
+ * abaixo é a mais abrangente que não exige simular o circuito, fora do escopo
+ * deste arquivo, ver cabeçalho): como todo degrau tem no máximo uma bobina, e
+ * ela só existe em (linha 0, `COLUNA_TERMINAL` — `posicaoValida`), qualquer
+ * elemento do degrau (trilho principal ou ramo) faz parte da mesma rede que
+ * decide aquela bobina. "Caminho até a bobina" é, portanto, **o degrau
+ * inteiro** que contém o SET ou o RESET: um contato da própria variável em
+ * qualquer posição desse degrau já conta como autodependência — sem
+ * distinguir, dentro do degrau, se esse contato está de fato em série com a
+ * bobina ou isolado num ramo sem ligação nenhuma. É deliberadamente mais
+ * abrangente do que uma análise exata de circuito, para não deixar passar um
+ * caso real por falta de simulação.
+ *
+ * Caso negativo obrigatório (exigido pela tarefa #11): um par SET/RESET cuja
+ * condição não cita a própria variável (ex.: acionados por um botão) não gera
+ * aviso nenhum.
+ */
+function validarSetResetAutodependente(diagrama: Diagrama): Problema[] {
+  const problemas: Problema[] = []
+  const todos = todosElementos(diagrama)
+
+  const nomesComSet = new Set(
+    todos
+      .filter(({ elemento }) => elemento.tipo === 'bobina_set' && elemento.variavel !== null)
+      .map(({ elemento }) => elemento.variavel as string),
+  )
+  const nomesComReset = new Set(
+    todos
+      .filter(({ elemento }) => elemento.tipo === 'bobina_reset' && elemento.variavel !== null)
+      .map(({ elemento }) => elemento.variavel as string),
+  )
+
+  for (const { indiceDegrau, rung, elemento } of todos) {
+    if (elemento.tipo !== 'bobina_set' && elemento.tipo !== 'bobina_reset') continue
+    if (elemento.variavel === null) continue
+    const nome = elemento.variavel
+    if (!nomesComSet.has(nome) || !nomesComReset.has(nome)) continue
+
+    const contatoDaVariavel = rung.elementos.find((outro) => ehContato(outro.tipo) && outro.variavel === nome)
+    if (contatoDaVariavel === undefined) continue
+
+    const rotulo = elemento.tipo === 'bobina_set' ? 'SET' : 'RESET'
+    problemas.push({
+      codigo: 'set_reset_autodependente',
+      severidade: 'aviso',
+      rungId: rung.id,
+      elementoId: elemento.id,
+      mensagem: `bobina ${rotulo} '${elemento.id}' em ${descreverCelula(indiceDegrau, elemento.celula)} depende da própria variável '${nome}': há um contato de '${nome}' no mesmo degrau, em ${descreverCelula(indiceDegrau, contatoDaVariavel.celula)} — SET/RESET que leem a variável que eles mesmos escrevem podem se anular no mesmo ciclo`,
+    })
+  }
+
+  return problemas
+}
+
 /**
  * Varre um `Diagrama` montado e devolve todos os problemas encontrados. Não
  * para no primeiro: um diagrama em edição costuma ter vários ao mesmo tempo.
  */
 export function validarDiagrama(diagrama: Diagrama): Problema[] {
-  const problemas: Problema[] = [...validarEnderecosDasVariaveis(diagrama)]
+  const problemas: Problema[] = [
+    ...validarEnderecosDasVariaveis(diagrama),
+    ...validarBobinasDuplicadas(diagrama),
+    ...validarSetResetAutodependente(diagrama),
+  ]
 
   diagrama.rungs.forEach((rung, indiceDegrau) => {
     for (const elemento of rung.elementos) {

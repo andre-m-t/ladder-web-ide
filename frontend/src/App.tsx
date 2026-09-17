@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
-import AreaEditor from './components/ide/AreaEditor'
+import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
 import BarraSuperior, { type Aba } from './components/ide/BarraSuperior'
-import Console from './components/ide/Console'
 import PainelInferior from './components/ide/PainelInferior'
+import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
 import PainelLateral from './components/ide/PainelLateral'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
 import { diagramaVazio } from './ladder/edicao'
 import type { Diagrama } from './ladder/modelo'
+import { carregarDiagrama, salvarDiagrama, type ResultadoCarga } from './ladder/persistencia'
+import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
   ErroCompilacao,
@@ -44,6 +46,7 @@ type EstadoGravacao =
 // padrões abaixo sem quebrar.
 
 const CHAVE_ABA = 'ladderflow.aba'
+const CHAVE_ABA_INFERIOR = 'ladderflow.abaInferior'
 const CHAVE_PAINEL_ABERTO = 'ladderflow.painelAberto'
 const CHAVE_PAINEL_LARGURA = 'ladderflow.painelLargura'
 const CHAVE_CONSOLE_ABERTO = 'ladderflow.consoleAberto'
@@ -78,6 +81,13 @@ function lerAba(): Aba {
   return lerPreferencia(CHAVE_ABA, (bruto) => (bruto === 'ladder' || bruto === 'st' ? bruto : null), 'ladder')
 }
 
+/** Aba do painel inferior (tarefa #13): "console" é o padrão — os testes e o
+ * fluxo de compilação/gravação já esperam o console visível sem precisar
+ * trocar de aba. */
+function lerAbaInferior(): AbaInferior {
+  return lerPreferencia(CHAVE_ABA_INFERIOR, (bruto) => (bruto === 'problemas' || bruto === 'console' ? bruto : null), 'console')
+}
+
 function lerBooleano(chave: string, padrao: boolean): boolean {
   return lerPreferencia(chave, (bruto) => (bruto === 'true' ? true : bruto === 'false' ? false : null), padrao)
 }
@@ -97,6 +107,19 @@ function lerNumero(chave: string, padrao: number): number {
 function alturaMaximaConsole(): number {
   if (typeof window === 'undefined') return 480
   return Math.round(window.innerHeight * 0.6)
+}
+
+/** Carga inicial do diagrama (tarefa #12, CA-8): `carregarDiagrama` já nunca
+ * lança, mas o próprio acesso à propriedade `window.localStorage` pode
+ * lançar em alguns navegadores (modo privado) antes mesmo de chegar a
+ * `getItem` — protegido aqui do mesmo jeito que `lerPreferencia` protege as
+ * preferências de layout. */
+function carregarDiagramaInicial(): ResultadoCarga {
+  try {
+    return carregarDiagrama(window.localStorage)
+  } catch {
+    return { diagrama: diagramaVazio(), aviso: 'diagrama salvo descartado: não foi possível acessar o armazenamento local' }
+  }
 }
 
 /**
@@ -119,8 +142,15 @@ function alturaMaximaConsole(): number {
 export default function App() {
   const [tema, setTema] = useState<Tema>(() => temaInicial())
   const [aba, setAba] = useState<Aba>(() => lerAba())
-  const [diagrama, setDiagrama] = useState<Diagrama>(() => diagramaVazio())
+  const [abaInferior, setAbaInferior] = useState<AbaInferior>(() => lerAbaInferior())
+
+  // Carga inicial do diagrama (CA-8): uma única leitura do `localStorage` no
+  // mount, guardada aqui para o efeito de log abaixo reaproveitar o mesmo
+  // resultado (diagrama e aviso nascem juntos, de uma só leitura).
+  const [cargaInicial] = useState<ResultadoCarga>(() => carregarDiagramaInicial())
+  const [diagrama, setDiagrama] = useState<Diagrama>(() => cargaInicial.diagrama)
   const [fonte, setFonte] = useState(BLINK_ST)
+  const [foco, setFoco] = useState<FocoLadder | null>(null)
 
   const [painelAberto, setPainelAberto] = useState(() => lerBooleano(CHAVE_PAINEL_ABERTO, true))
   const [painelLargura, setPainelLargura] = useState(() =>
@@ -135,7 +165,15 @@ export default function App() {
   const [gravacao, setGravacao] = useState<EstadoGravacao>({ fase: 'ocioso' })
   const [entradasConsole, setEntradasConsole] = useState<EntradaConsole[]>([])
 
+  const problemas = useMemo(() => validarDiagrama(diagrama), [diagrama])
+
   const cargaInicialRegistrada = useRef(false)
+  /** Falha de `salvarDiagrama` já registrada no console: evita inundar o
+   * console a cada tecla enquanto o armazenamento continuar recusando —
+   * registra de novo só quando a gravação volta a falhar depois de um
+   * sucesso (tarefa #12). */
+  const falhaSalvarRegistrada = useRef(false)
+  const focoToken = useRef(0)
 
   function log(nivel: EntradaConsole['nivel'], mensagem: string) {
     setEntradasConsole((atual) => registrar(atual, nivel, mensagem))
@@ -146,8 +184,32 @@ export default function App() {
     cargaInicialRegistrada.current = true
     document.title = '🔧 LadderFlow'
     log('info', 'LadderFlow iniciado.')
+    if (cargaInicial.aviso) log('aviso', cargaInicial.aviso)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Salva o diagrama a cada mudança (tarefa #12, D-5). Roda também no mount
+  // (reescreve o que acabou de ser carregado — inofensivo) para cobrir o
+  // caso comum: primeiro diagrama nunca salvo ainda. `window.localStorage`
+  // pode lançar ao ser acessado (não só nos métodos) em alguns navegadores;
+  // protegido do mesmo jeito que a carga inicial.
+  useEffect(() => {
+    let erro: string | null
+    try {
+      erro = salvarDiagrama(window.localStorage, diagrama)
+    } catch {
+      erro = 'não foi possível salvar o diagrama no armazenamento local'
+    }
+    if (erro) {
+      if (!falhaSalvarRegistrada.current) {
+        falhaSalvarRegistrada.current = true
+        log('aviso', erro)
+      }
+    } else {
+      falhaSalvarRegistrada.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagrama])
 
   useEffect(() => {
     let cancelado = false
@@ -180,6 +242,7 @@ export default function App() {
   }
 
   useEffect(() => gravarPreferencia(CHAVE_ABA, aba), [aba])
+  useEffect(() => gravarPreferencia(CHAVE_ABA_INFERIOR, abaInferior), [abaInferior])
   useEffect(() => gravarPreferencia(CHAVE_PAINEL_ABERTO, String(painelAberto)), [painelAberto])
   useEffect(() => gravarPreferencia(CHAVE_PAINEL_LARGURA, String(painelLargura)), [painelLargura])
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ABERTO, String(consoleAberto)), [consoleAberto])
@@ -260,6 +323,16 @@ export default function App() {
     setTema(novoTema)
   }
 
+  /** Clicar num problema (tarefa #13, item 4): troca para a aba Ladder (se
+   * estiver em ST) e pede ao `EditorLadder` para focar a célula do
+   * problema — `token` incrementa a cada escolha para repetir o mesmo alvo
+   * duas vezes seguidas ainda disparar o foco. */
+  function aoEscolherProblema(problema: Problema) {
+    if (aba !== 'ladder') setAba('ladder')
+    focoToken.current += 1
+    setFoco({ rungId: problema.rungId, elementoId: problema.elementoId, token: focoToken.current })
+  }
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-ide-fundo text-ide-texto">
       <BarraSuperior
@@ -291,6 +364,8 @@ export default function App() {
           aba={aba}
           diagrama={diagrama}
           aoMudarDiagrama={setDiagrama}
+          problemas={problemas}
+          foco={foco}
           fonte={fonte}
           aoMudarFonte={setFonte}
           compilando={compilando}
@@ -315,7 +390,14 @@ export default function App() {
         alturaMax={alturaMaximaConsole()}
         aoRedimensionar={setConsoleAltura}
       >
-        <Console entradas={entradasConsole} aoLimpar={() => setEntradasConsole([])} />
+        <PainelInferiorConteudo
+          aba={abaInferior}
+          aoMudarAba={setAbaInferior}
+          problemas={problemas}
+          aoEscolherProblema={aoEscolherProblema}
+          entradasConsole={entradasConsole}
+          aoLimparConsole={() => setEntradasConsole([])}
+        />
       </PainelInferior>
     </div>
   )
