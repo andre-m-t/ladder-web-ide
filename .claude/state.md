@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-17 (spec 002 — #26: projeto de linguagem única, cabeçalho novo, aba Variáveis e painel inferior em 3 abas) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-17 (Fase 1 da spec 003 — Serializador Ladder → ST; Fatia 4 da spec 002 adiada por decisão do autor) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -40,7 +40,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F5 | Gravação via navegador | servidor + navegador | 🟡 |
 | F6 | Tela mínima (fatia vertical) | navegador | ✅ |
 | F7 | Editor Ladder visual | navegador | 🟡 |
-| F8 | Serializador Ladder → ST | navegador | 🔒 |
+| F8 | Serializador Ladder → ST | navegador | 🟡 |
 | F9 | Simulador de ciclo de varredura | navegador | ⬜ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
@@ -321,15 +321,41 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 
 **Falta:** Fatia 4 (#15 SET/RESET, #16 CTU e `BLINK`, #17 `blink_ladder.st`, #18 SET/RESET/CTU no editor, #19 manifesto, #20 fechamento).
 
+> **Adiada por decisão do autor (2026-09-17).** A Fatia 4 sai da frente da fila e
+> a **F8 entra antes**. Razão: o editor já constrói e valida diagramas, mas
+> Compilar e Gravar seguem desabilitados em projeto Ladder — a Fatia 4
+> acrescenta elementos ao editor sem mover essa agulha, enquanto a F8 fecha o
+> caminho editar → serializar → compilar → gravar. Consequência registrada: a
+> **#17** (`blink_ladder.st` escrito à mão) perde o motivo de existir, porque o
+> ST deixa de ser escrito por uma pessoa e passa a sair do serializador — é
+> exatamente o elo manual que o plano 002 registrou como risco em D-8/R-1. A
+> tarefa não é apagada; será revista quando a Fatia 4 for retomada, já com o
+> serializador disponível. O CTU (#16) continua sendo pré-requisito para
+> estender o serializador a contadores.
+
 ---
 
-## F8 — Serializador Ladder → ST 🔒
+## F8 — Serializador Ladder → ST 🟡
 
-**Camada:** navegador · **Autoral:** sim · **Bloqueada por:** F7 (depende do modelo de dados da grade)
+**Camada:** navegador · **Autoral:** sim
 
 Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, central em importância — é a tradução que dá sentido à arquitetura inteira.
 
 **Ferramentas:** nenhuma. TypeScript puro.
+
+**Spec em rascunho:** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 concluída em 2026-09-17, **aguardando aprovação do autor**. `plan.md`/`tasks.md` são placeholders. Nenhuma linha de código escrita.
+
+**Destravada.** Deixou de estar 🔒: o modelo de dados que ela consome (`frontend/src/ladder/modelo.ts`) já tem os cinco tipos de elemento — contato NA/NF, bobina simples, bobina SET, bobina RESET — e o ramo paralelo, desde as fatias 1–3 da spec 002. A dependência é sobre o **modelo**, não sobre a interface que o constrói; por isso a F8 não espera a Fatia 4.
+
+**Escopo da spec 003**
+- Traduz o subconjunto acima; **CTU fica fora** — não existe no modelo ainda (entra na #16 da spec 002), e a extensão do serializador para contadores é trabalho novo, não dívida desta spec
+- Habilita Compilar e Gravar em projeto Ladder, fechando a pendência da revisão aditiva da Q-2 da spec 002
+- Reusa o serviço de compilação da spec 001 sem mudar contrato; a serialização roda inteiramente no navegador
+- 12 RF e 9 CA; CA-1 a CA-4 **medidos** pelo arcabouço diferencial (`backend/tests/diferencial/`) contra o compilador e o runtime reais
+
+**Por que importa para o TCC:** quita a ressalva R-1 do plano 002. Até aqui a equivalência diagrama ↔ ST era **assumida** — o único ST de referência foi escrito à mão, provando que aquele texto se comporta como o `blink.st`, nunca que o diagrama produz aquele texto. A partir da F8 o texto comparado é o que a serialização realmente gera: suposição de projeto vira número medido.
+
+**Q-1 a Q-6 em aberto** (§9 da spec, para o autor decidir antes da Fase 2): visibilidade do ST gerado na tela; serializar diagrama com erro de validação; rastreio diagnóstico ↔ degrau; nomes de programa/recurso e intervalo da TASK fixos ou por projeto; semântica de SET/RESET no texto; diagrama e degrau vazios.
 
 ---
 
@@ -344,6 +370,8 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 **Ponto de atenção:** é implementação independente do runtime em C do F3. A divergência entre os dois é **métrica do TCC**, não bug a esconder — deve ser medida e reportada.
 
 **Escopo inicial:** contatos NA/NF e bobinas. Temporizadores e contadores (TON/TOF/CTU/CTD) em iteração posterior.
+
+**Alvo decidido pelo autor (2026-09-17), para a spec futura:** a F9 entrega o simulador **e** o segundo executor que o pluga ao teste diferencial. O ponto de extensão já está pronto e documentado (`backend/tests/diferencial/README.md`): basta uma classe que implemente o `Executor` — `runner.py`, `comparador.py` e as fixtures TOML não mudam. O `docs/validacao/contrato-runtime-host.md` já fixa que o protocolo fala em endereço IEC (`%QX0.0`), não em GPIO, justamente porque o simulador não deve conhecer pinagem. É o que fecha a métrica "divergência simulação ↔ hardware" do F10.
 
 ---
 
@@ -401,9 +429,11 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-2. `/implementar 002` — Fatia 4 (#15 SET/RESET → #16 CTU ∥ #17 `blink_ladder.st` → #18 editor → #19 → #20) → **F7**; depois **F8**, que destrava Compilar/Gravar em projeto Ladder
-3. **F9** e início da coleta sistemática de métricas (**F10**)
+1. **Decidir Q-1 a Q-6 da spec 003** e aprovar a spec — é o portão que libera a Fase 2
+2. `/planejar 003` → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002
+3. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**, e o CTU permite estender o serializador a contadores
+4. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
+5. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
 
 ## Bloqueado aguardando hardware
 
@@ -442,4 +472,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-17 | #24 da spec 002 — degrau responsivo, pinos, ícones, ramo | Ajustes do autor sobre a #23: degrau na largura do contêiner, variável Memória explícita e pino GPIO no seletor, mapa de pinos em duas tabelas, header e paleta com `lucide-react`, MATIEC/toolchain só no console, e ramo paralelo por arrasto com alça (antecipado da #15). Frentes N, L, V, I em paralelo; revisão visual devolveu dois defeitos do painel à frente V. 344 testes vitest; contato de selo montado com mouse real no Chromium |
 | 2026-09-17 | Fatias 2 e 3 da spec 002 (#9–#14) | Commit da #24 antes de começar. Autor escolheu executar as duas fatias juntas e a lista de problemas numa aba do painel inferior (D-15). Levas: N1 (degraus) ∥ N2 (Q-6, persistência) → L (editor) ∥ I (IDE) → E (e2e Playwright). Revisão corrigiu JSDoc que chamava de "mais restrita" a leitura mais abrangente de `set_reset_autodependente`; o vitest passou a pegar o spec do Playwright e foi restrito a `src/`. 410 testes vitest, e2e 2 passed, Chromium com mouse real (degraus, duplicada, foco, mover entre degraus) |
 | 2026-09-17 | #25 da spec 002 — ajustes de UX | Commit e push das fatias 2–3 (`3ab1307`). Autor: degrau vazio não é erro, "caminho" mantido como limitação, aba inicial pelo erro carregado, mensagens fora do editor (barra de status + Console, escolhida após comparar com toast e aba própria), escada contínua no padrão dos editores Ladder, bobina solta vai à coluna 8. Frentes N ∥ L ∥ I. Revisão pegou recusa da alça a cada `pointermove` e vão entre trilhos; corrigidos. 435 testes vitest, e2e verde, Chromium nos dois temas |
+| 2026-09-17 | Fase 1 da spec 003 — Serializador Ladder → ST | Rodada da #26 fechada e empurrada (`dc0bb6e`). Autor reordenou a fila: **F8 antes da Fatia 4**, porque o editor já constrói e valida mas Compilar/Gravar seguem desabilitados em projeto Ladder, e porque a #17 (ST escrito à mão) perde o motivo de existir quando o serializador existir. `docs/specs/003-serializador-ladder-st/spec.md` escrita por frente de especificação: 12 RF, 9 CA (CA-1 a CA-4 medidos pelo arcabouço diferencial contra compilador e runtime reais), subconjunto sem CTU, Q-1 a Q-6 em aberto. F8 sai de 🔒 — a dependência é o modelo de dados, não a Fatia 4. Nenhuma linha de código; aguardando aprovação do autor para liberar a Fase 2 |
 | 2026-09-17 | #26 da spec 002 — projeto e IDE reorganizada | Autor trouxe referências visuais: cabeçalho defasado, variáveis como aba e painel inferior mais dividido. Q-2 revista: um projeto por linguagem, criado por Novo projeto (descarte confirmado, título e linguagem), isolando a compilação. Frentes P (projeto) ∥ M (modais) ∥ H (cabeçalho/painel) ∥ L (variáveis) → A (integração) → E (e2e); a primeira tentativa das quatro caiu por limite de sessão antes de escrever e foi redespachada. Esqueleto ST validado no iec2c. 499 testes vitest, e2e com 4 cenários, Chromium nos dois temas |
