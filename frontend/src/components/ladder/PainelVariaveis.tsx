@@ -1,13 +1,19 @@
 /**
- * Painel de variáveis — container (spec 002, plano D-13, tarefa #23, frente V).
+ * Painel de variáveis — container (spec 002, plano D-13, tarefa #23, frente V;
+ * revisão tarefa #26, frente L).
  *
  * É quem fala com o núcleo (`ladder/edicao.ts`): chama `declararVariavel`,
  * `atualizarVariavel` e `removerVariavel` puros sobre `diagrama`, aplica
  * `aoMudar` no sucesso e guarda a recusa para exibir (limpa no próximo
- * sucesso). O conteúdo visual — cabeçalho, abas, formulário, lista, mapa de
- * pinos — é todo de `TabelaVariaveis.tsx`; este componente só orquestra e
- * ocupa a altura inteira do painel lateral da IDE (`PainelLateral`, D-13),
- * que decide a largura.
+ * sucesso). O conteúdo visual — cabeçalho, abas, tabela, linha de adicionar,
+ * mapa de pinos — é todo de `TabelaVariaveis.tsx`; este componente só
+ * orquestra.
+ *
+ * Tarefa #26: deixou de ser o conteúdo de um painel lateral estreito
+ * (`PainelLateral`, D-13) para ser o conteúdo da aba "Variáveis", de largura
+ * inteira, ao lado de "Lógica" (só em projeto Ladder) — quem monta as abas e
+ * decide a largura é `components/ide/**`, fora desta frente. A assinatura de
+ * props não muda: continua `{ diagrama, aoMudar, aoRecusar? }`, controlado.
  *
  * Substitui o antigo `PainelVariaveis.tsx` da tarefa #22 (apagado quando o
  * vínculo elemento↔variável migrou para o clique/`ModalVariavel`): este é um

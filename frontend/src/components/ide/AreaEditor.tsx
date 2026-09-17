@@ -1,23 +1,31 @@
 /**
- * Área central da IDE (spec 002, plano D-13): mostra a aba ativa — Ladder
- * (editor controlado, sem tabela dentro; a tabela de variáveis mora no
- * painel lateral) ou ST (editor de texto + painel de erro). O diagrama e o
- * texto ST moram em `App` — trocar de aba só troca a apresentação, nunca
- * perde estado.
+ * Área central da IDE (spec 002, tarefa #26): mostra o conteúdo da sub-aba de
+ * edição ativa para o `projeto` atual — LD tem duas sub-abas ("Lógica":
+ * `EditorLadder`; "Variáveis": `PainelVariaveis`), ST tem só uma ("Lógica":
+ * `EditorST` + `PainelErro`). O `projeto` inteiro mora em `App`; este
+ * componente só decide o que mostrar e traduz a edição de volta para
+ * `aoMudarProjeto` (sempre o projeto completo, imutável — nunca um `Diagrama`
+ * ou uma `fonte` soltos, para não vazar o formato de armazenamento de volta
+ * pra fora de `projeto/projeto.ts`).
  *
- * `problemas`/`foco` (tarefa #13): `App` calcula `validarDiagrama` a cada
- * mudança e repassa aqui; `foco` é o pedido de "ir até a célula" que nasce de
- * um clique em `ListaProblemas` (token incremental para repetir o mesmo alvo
- * duas vezes seguidas). Contrato fixado com a frente que faz `EditorLadder`
- * — ver `EditorLadderProps`.
+ * Os `id`/`aria-labelledby` de cada painel casam com o que `BarraSuperior`
+ * emite nas sub-abas (`aba-edicao-logica`/`aba-edicao-variaveis`): o projeto
+ * ST só usa `painel-edicao-logica`, porque não tem sub-aba Variáveis
+ * (`BarraSuperior` não a mostra para `linguagem !== 'ld'`) — por isso
+ * `abaEdicao` só importa mesmo em projeto LD.
+ *
+ * `problemas`/`foco` (herdado da tarefa #13): `App` calcula `validarDiagrama`
+ * (só faz sentido em LD; ST não tem diagrama) e repassa aqui; `foco` é o
+ * pedido de "ir até a célula" que nasce de um clique em `ListaProblemas`.
  */
 import EditorST from '../EditorST'
 import PainelErro from '../PainelErro'
 import EditorLadder from '../ladder/EditorLadder'
+import PainelVariaveis from '../ladder/PainelVariaveis'
 import type { ErroCompilacao, ErroHttpCompilacao, ErroRedeCompilacao } from '../../lib/api'
-import type { Diagrama } from '../../ladder/modelo'
 import type { Problema } from '../../ladder/validacao'
-import type { Aba } from './BarraSuperior'
+import type { Projeto } from '../../projeto/projeto'
+import type { AbaEdicao } from './BarraSuperior'
 
 type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
 
@@ -31,44 +39,60 @@ export interface FocoLadder {
 }
 
 export interface AreaEditorProps {
-  aba: Aba
-  diagrama: Diagrama
-  aoMudarDiagrama: (diagrama: Diagrama) => void
+  projeto: Projeto
+  /** Sub-aba ativa (`BarraSuperior`, tarefa #26) — só distingue algo em
+   * projeto LD; em ST sempre mostra o editor de texto (única sub-aba). */
+  abaEdicao: AbaEdicao
+  /** Recebe o projeto inteiro já atualizado (diagrama ou fonte trocados,
+   * conforme a linguagem) — quem decide como persistir é `App`. */
+  aoMudarProjeto: (projeto: Projeto) => void
   problemas: Problema[]
   foco: FocoLadder | null
-  fonte: string
-  aoMudarFonte: (fonte: string) => void
   compilando: boolean
   erroCompilacao: ErroDeCompilacao | null
-  /** Recusa de uma jogada do editor Ladder (tarefa #25, contrato fixado com a
-   * frente L): a IDE mostra o motivo na `BarraStatus` e no Console, em vez do
-   * editor mostrar o texto sozinho. Repassado cru a `EditorLadder`. */
+  /** Recusa de uma jogada do editor Ladder ou do painel de variáveis (tarefas
+   * #25/#26): a IDE mostra o motivo na aba Mensagens, em vez do editor
+   * mostrar o texto sozinho. Repassado cru a `EditorLadder`/`PainelVariaveis`. */
   aoRecusar: (motivo: string) => void
 }
 
 export default function AreaEditor({
-  aba,
-  diagrama,
-  aoMudarDiagrama,
+  projeto,
+  abaEdicao,
+  aoMudarProjeto,
   problemas,
   foco,
-  fonte,
-  aoMudarFonte,
   compilando,
   erroCompilacao,
   aoRecusar,
 }: AreaEditorProps) {
   return (
     <div className="min-w-0 flex-1 overflow-auto bg-ide-fundo p-4">
-      {aba === 'ladder' && (
-        <div id="painel-ladder" role="tabpanel" aria-labelledby="aba-ladder" className="h-full">
-          <EditorLadder diagrama={diagrama} aoMudar={aoMudarDiagrama} problemas={problemas} foco={foco} aoRecusar={aoRecusar} />
+      {projeto.linguagem === 'ld' && abaEdicao === 'logica' && (
+        <div id="painel-edicao-logica" role="tabpanel" aria-labelledby="aba-edicao-logica" className="h-full">
+          <EditorLadder
+            diagrama={projeto.diagrama}
+            aoMudar={(diagrama) => aoMudarProjeto({ ...projeto, diagrama })}
+            problemas={problemas}
+            foco={foco}
+            aoRecusar={aoRecusar}
+          />
         </div>
       )}
 
-      {aba === 'st' && (
-        <div id="painel-st" role="tabpanel" aria-labelledby="aba-st" className="flex h-full flex-col gap-4">
-          <EditorST value={fonte} onChange={aoMudarFonte} disabled={compilando} />
+      {projeto.linguagem === 'ld' && abaEdicao === 'variaveis' && (
+        <div id="painel-edicao-variaveis" role="tabpanel" aria-labelledby="aba-edicao-variaveis" className="h-full">
+          <PainelVariaveis
+            diagrama={projeto.diagrama}
+            aoMudar={(diagrama) => aoMudarProjeto({ ...projeto, diagrama })}
+            aoRecusar={aoRecusar}
+          />
+        </div>
+      )}
+
+      {projeto.linguagem === 'st' && (
+        <div id="painel-edicao-logica" role="tabpanel" aria-labelledby="aba-edicao-logica" className="flex h-full flex-col gap-4">
+          <EditorST value={projeto.fonte} onChange={(fonte) => aoMudarProjeto({ ...projeto, fonte })} disabled={compilando} />
           {erroCompilacao && <PainelErro erro={erroCompilacao} />}
         </div>
       )}

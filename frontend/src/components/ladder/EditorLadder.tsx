@@ -41,7 +41,7 @@
  * visual (`role="alert"`) que mostrava o motivo de uma recusa abaixo do
  * degrau saiu — toda recusa (soltar/mover/criar ramo/alça/remover degrau)
  * agora só é repassada à prop `aoRecusar`, para quem monta a IDE decidir onde
- * mostrar (barra de status, Console). O anúncio `sr-only` (`aria-live`) e a
+ * mostrar (na tarefa #26, a aba Mensagens do painel inferior). O anúncio `sr-only` (`aria-live`) e a
  * marcação `aria-invalid` momentânea da célula recusada continuam — são para
  * leitor de tela e destaque visual, não texto solto no editor.
  *
@@ -134,6 +134,9 @@ interface PointerPendente {
 }
 
 const LIMIAR_ARRASTO_PX = 4
+
+/** Quanto a célula recusada fica marcada antes de a marca sumir (#26). */
+const DURACAO_MARCA_RECUSA_MS = 3000
 
 const NOME_TIPO: Record<Elemento['tipo'], string> = {
   contato_na: 'contato NA',
@@ -317,6 +320,14 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   const [arrasto, setArrasto] = useState<EstadoArrasto | null>(null)
   const [posGhost, setPosGhost] = useState<{ x: number; y: number } | null>(null)
   const [recusa, setRecusa] = useState<RecusaCelula | null>(null)
+  /** Timer da marca de recusa (limpo na próxima recusa e na desmontagem). */
+  const timerRecusaRef = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (timerRecusaRef.current !== null) window.clearTimeout(timerRecusaRef.current)
+    },
+    [],
+  )
   const [anuncio, setAnuncio] = useState('')
   /** Prévia (ponteiro ou teclado) da alça de redimensionamento de um ramo
    * (D-14) — `null` quando nenhuma alça está sendo manipulada. `valido`
@@ -348,10 +359,20 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   /** Registra uma recusa (marcação visual momentânea, `RecusaCelula`) e
    * repassa o motivo a `aoRecusar` (tarefa #25) — ponto único por onde toda
    * recusa de jogada passa, para que a prop nunca fique dessincronizada da
-   * marcação visual. */
+   * marcação visual.
+   *
+   * A marcação é **momentânea** de fato: desde a #25 ela não tem mais texto ao
+   * lado, e uma célula vermelha parada na tela até a próxima jogada era lida
+   * como estado do diagrama, não como resposta ao gesto. O motivo em texto
+   * permanece na aba Mensagens (#26), que não expira. */
   function reportarRecusa(nova: RecusaCelula) {
     setRecusa(nova)
     aoRecusarRef.current?.(nova.motivo)
+    if (timerRecusaRef.current !== null) window.clearTimeout(timerRecusaRef.current)
+    timerRecusaRef.current = window.setTimeout(() => {
+      timerRecusaRef.current = null
+      setRecusa((atual) => (atual === nova ? null : atual))
+    }, DURACAO_MARCA_RECUSA_MS)
   }
 
   function focarAlvo(alvo: AlvoArrasto) {

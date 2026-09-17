@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -6,66 +6,108 @@ import BarraSuperior, { type BarraSuperiorProps } from './BarraSuperior'
 
 function propsBase(): BarraSuperiorProps {
   return {
-    aba: 'ladder',
-    aoMudarAba: vi.fn(),
+    titulo: 'Sem título',
+    linguagem: 'ld',
+    abaEdicao: 'logica',
+    aoMudarAbaEdicao: vi.fn(),
+    aoNovoProjeto: vi.fn(),
     compilando: false,
     aoCompilar: vi.fn(),
     gravando: false,
     podeGravar: false,
     aoGravar: vi.fn(),
-    painelVariaveisAberto: true,
-    aoAlternarPainelVariaveis: vi.fn(),
-    consoleAberto: true,
-    aoAlternarConsole: vi.fn(),
+    painelInferiorAberto: true,
+    aoAlternarPainelInferior: vi.fn(),
     tema: 'escuro',
     aoAlternarTema: vi.fn(),
   }
 }
 
 describe('BarraSuperior', () => {
-  it('mostra as abas Ladder e ST, com Ladder selecionada por padrão', () => {
-    render(<BarraSuperior {...propsBase()} />)
+  it('mostra o título do projeto (truncado, com atributo title) e o chip da linguagem', () => {
+    render(<BarraSuperior {...propsBase()} titulo="Esteira 1" linguagem="ld" />)
 
-    const abas = screen.getAllByRole('tab')
-    expect(abas.map((a) => a.textContent)).toEqual(['Ladder', 'ST'])
-    expect(screen.getByRole('tab', { name: 'Ladder' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'ST' })).toHaveAttribute('aria-selected', 'false')
+    const tituloEl = screen.getByText('Esteira 1')
+    expect(tituloEl).toHaveAttribute('title', 'Esteira 1')
+    expect(screen.getByText('ld')).toBeInTheDocument()
   })
 
-  it('clicar na aba ST chama aoMudarAba com "st"', async () => {
+  it('mostra a aba Variáveis só em projeto Ladder', () => {
+    const { rerender } = render(<BarraSuperior {...propsBase()} linguagem="ld" />)
+    expect(screen.getByRole('tab', { name: /variáveis/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /lógica/i })).toBeInTheDocument()
+
+    rerender(<BarraSuperior {...propsBase()} linguagem="st" />)
+    expect(screen.queryByRole('tab', { name: /variáveis/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /lógica/i })).toBeInTheDocument()
+  })
+
+  it('clicar em "Novo projeto" chama aoNovoProjeto', async () => {
     const usuario = userEvent.setup()
     const props = propsBase()
     render(<BarraSuperior {...props} />)
 
-    await usuario.click(screen.getByRole('tab', { name: 'ST' }))
-    expect(props.aoMudarAba).toHaveBeenCalledWith('st')
+    await usuario.click(screen.getByRole('button', { name: /novo projeto/i }))
+    expect(props.aoNovoProjeto).toHaveBeenCalledTimes(1)
   })
 
-  it('não mostra mais MATIEC/toolchain no header (foram para o console, D-14)', () => {
-    render(<BarraSuperior {...propsBase()} />)
+  it('clicar na aba Variáveis chama aoMudarAbaEdicao com "variaveis"', async () => {
+    const usuario = userEvent.setup()
+    const props = propsBase()
+    render(<BarraSuperior {...props} />)
 
-    expect(screen.queryByText(/MATIEC/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/toolchain/i)).not.toBeInTheDocument()
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    expect(props.aoMudarAbaEdicao).toHaveBeenCalledWith('variaveis')
+
+    await usuario.click(screen.getByRole('tab', { name: /lógica/i }))
+    expect(props.aoMudarAbaEdicao).toHaveBeenCalledWith('logica')
   })
 
-  it('todo botão do header tem um ícone svg marcado aria-hidden', () => {
-    render(<BarraSuperior {...propsBase()} />)
+  it('setas alternam entre as abas Lógica e Variáveis (WAI-ARIA tablist)', () => {
+    const aoMudarAbaEdicao = vi.fn()
+    const { rerender } = render(<BarraSuperior {...propsBase()} abaEdicao="logica" aoMudarAbaEdicao={aoMudarAbaEdicao} />)
 
-    for (const botao of screen.getAllByRole('button')) {
-      expect(botao.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
-    }
-    for (const aba of screen.getAllByRole('tab')) {
-      expect(aba.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
-    }
+    fireEvent.keyDown(screen.getByRole('tab', { name: /lógica/i }), { key: 'ArrowRight' })
+    expect(aoMudarAbaEdicao).toHaveBeenCalledWith('variaveis')
+
+    aoMudarAbaEdicao.mockClear()
+    rerender(<BarraSuperior {...propsBase()} abaEdicao="variaveis" aoMudarAbaEdicao={aoMudarAbaEdicao} />)
+    fireEvent.keyDown(screen.getByRole('tab', { name: /variáveis/i }), { key: 'ArrowLeft' })
+    expect(aoMudarAbaEdicao).toHaveBeenCalledWith('logica')
   })
 
-  it('Gravar fica desabilitado quando podeGravar é falso', () => {
-    render(<BarraSuperior {...propsBase()} podeGravar={false} />)
+  it('não navega por setas quando só há a aba Lógica (projeto ST)', () => {
+    const aoMudarAbaEdicao = vi.fn()
+    render(<BarraSuperior {...propsBase()} linguagem="st" aoMudarAbaEdicao={aoMudarAbaEdicao} />)
+
+    fireEvent.keyDown(screen.getByRole('tab', { name: /lógica/i }), { key: 'ArrowRight' })
+    expect(aoMudarAbaEdicao).not.toHaveBeenCalled()
+  })
+
+  it('motivoIndisponivel desabilita Compilar e Gravar juntos, com o motivo no title e em aria-describedby', () => {
+    render(<BarraSuperior {...propsBase()} podeGravar={true} motivoIndisponivel="Nenhum projeto aberto" />)
+
+    const botaoCompilar = screen.getByRole('button', { name: /compilar/i })
+    const botaoGravar = screen.getByRole('button', { name: /gravar no esp32/i })
+
+    expect(botaoCompilar).toBeDisabled()
+    expect(botaoGravar).toBeDisabled()
+    expect(botaoCompilar).toHaveAttribute('title', 'Nenhum projeto aberto')
+    expect(botaoGravar).toHaveAttribute('title', 'Nenhum projeto aberto')
+
+    const idDescricaoCompilar = botaoCompilar.getAttribute('aria-describedby')
+    const idDescricaoGravar = botaoGravar.getAttribute('aria-describedby')
+    expect(idDescricaoCompilar).toBeTruthy()
+    expect(idDescricaoGravar).toBeTruthy()
+    expect(document.getElementById(idDescricaoCompilar!)).toHaveTextContent('Nenhum projeto aberto')
+    expect(document.getElementById(idDescricaoGravar!)).toHaveTextContent('Nenhum projeto aberto')
+  })
+
+  it('sem motivoIndisponivel, Gravar segue as regras de sempre (podeGravar)', () => {
+    const { rerender } = render(<BarraSuperior {...propsBase()} podeGravar={false} />)
     expect(screen.getByRole('button', { name: /gravar no esp32/i })).toBeDisabled()
-  })
 
-  it('Gravar fica habilitado quando podeGravar é verdadeiro', () => {
-    render(<BarraSuperior {...propsBase()} podeGravar={true} />)
+    rerender(<BarraSuperior {...propsBase()} podeGravar={true} />)
     expect(screen.getByRole('button', { name: /gravar no esp32/i })).not.toBeDisabled()
   })
 
@@ -91,21 +133,27 @@ describe('BarraSuperior', () => {
     expect(props.aoAlternarTema).toHaveBeenCalledTimes(1)
   })
 
-  it('alternadores de painel de variáveis e console têm aria-pressed e chamam seus alternadores', async () => {
+  it('alternador do painel inferior tem aria-pressed e chama aoAlternarPainelInferior', async () => {
     const usuario = userEvent.setup()
     const props = propsBase()
-    render(<BarraSuperior {...props} painelVariaveisAberto={true} consoleAberto={false} />)
+    render(<BarraSuperior {...props} painelInferiorAberto={false} />)
 
-    const botaoVariaveis = screen.getByRole('button', { name: /alternar painel de variáveis/i })
-    const botaoConsole = screen.getByRole('button', { name: /alternar painel inferior/i })
-    expect(botaoVariaveis).toHaveAttribute('aria-pressed', 'true')
-    expect(botaoConsole).toHaveAttribute('aria-pressed', 'false')
+    const botao = screen.getByRole('button', { name: /alternar painel inferior/i })
+    expect(botao).toHaveAttribute('aria-pressed', 'false')
 
-    await usuario.click(botaoVariaveis)
-    expect(props.aoAlternarPainelVariaveis).toHaveBeenCalledTimes(1)
+    await usuario.click(botao)
+    expect(props.aoAlternarPainelInferior).toHaveBeenCalledTimes(1)
+  })
 
-    await usuario.click(botaoConsole)
-    expect(props.aoAlternarConsole).toHaveBeenCalledTimes(1)
+  it('todo botão e aba do header tem um ícone svg marcado aria-hidden', () => {
+    render(<BarraSuperior {...propsBase()} />)
+
+    for (const botao of screen.getAllByRole('button')) {
+      expect(botao.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    }
+    for (const aba of screen.getAllByRole('tab')) {
+      expect(aba.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    }
   })
 
   it('não usa cores fixas (só classes de tokens ide-*)', () => {

@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { IO_ESPELHO } from './ladder/fixtures'
 import { COLUNA_TERMINAL, type Diagrama } from './ladder/modelo'
 import { CHAVE_DIAGRAMA } from './ladder/persistencia'
+import { CHAVE_PROJETO, ESQUELETO_ST, type Projeto } from './projeto/projeto'
 
 function respostaJson(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
@@ -20,9 +21,9 @@ const HEALTH_OK = {
   esp_idf: { available: true, path: '/opt/esp-idf/idf.py', version: 'v5.1.2' },
 }
 
-/** Diagrama com um contato sem bobina — `rung_incompleto` (erro), tarefa #13
- * e #25. Reaproveitado pelo teste de contagem de problemas e pelo teste da
- * aba inicial do painel inferior. */
+/** Diagrama com um contato sem bobina — `rung_incompleto` (erro), herdado da
+ * tarefa #13/#25. Reaproveitado pelo teste de contagem de problemas, pelo
+ * teste da aba inicial do painel inferior e pelo teste de clique num problema. */
 const DIAGRAMA_COM_ERRO: Diagrama = {
   versao: 1,
   variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
@@ -38,7 +39,7 @@ const DIAGRAMA_COM_ERRO: Diagrama = {
 /** Diagrama só com `set_reset_autodependente` (aviso, Q-6/D-10) — SET de `x`
  * num degrau com um contato de `x`, e RESET de `x` em outro, também com
  * contato de `x`. Sem erros: variáveis declaradas, cada degrau termina numa
- * bobina, nenhuma posição inválida (tarefa #25). */
+ * bobina, nenhuma posição inválida (herdado da tarefa #25). */
 const DIAGRAMA_SO_COM_AVISO: Diagrama = {
   versao: 1,
   variaveis: [{ nome: 'x', tipo: 'BOOL' }],
@@ -62,21 +63,28 @@ const DIAGRAMA_SO_COM_AVISO: Diagrama = {
   ],
 }
 
+function projetoLD(diagrama: Diagrama, titulo = 'Sem título'): Projeto {
+  return { versao: 1, titulo, linguagem: 'ld', diagrama }
+}
+
 function urlDaRequisicao(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input
   if (input instanceof URL) return input.toString()
   return input.url
 }
 
-/** Simula um arrasto completo por Pointer Events (mesmos helpers de
- * `EditorLadder.test.tsx`, tarefa #22/#23): pointerdown na origem,
- * pointermove além do limiar (em `window`, onde o editor escuta),
- * pointerenter no alvo e pointerup em `window`. */
-function arrastar(origem: Element, alvo: Element) {
-  fireEvent.pointerDown(origem, { pointerId: 1, clientX: 0, clientY: 0 })
-  fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 30 })
-  fireEvent.pointerEnter(alvo, { pointerId: 1, clientX: 30, clientY: 30 })
-  fireEvent.pointerUp(window, { pointerId: 1, clientX: 30, clientY: 30 })
+/** Fluxo completo de "Novo projeto" → projeto ST, pela UI (sem tocar o
+ * núcleo direto): abre o modal, digita o título por cima do pré-preenchido,
+ * escolhe "Texto Estruturado (ST)" e confirma. Assume projeto atual vazio
+ * (senão o modal de descarte aparece antes) — testes que chamam isto a partir
+ * de um projeto com conteúdo devem confirmar o descarte primeiro. */
+async function criarProjetoST(usuario: UserEvent, titulo = 'Programa ST') {
+  await usuario.click(screen.getByRole('button', { name: /novo projeto/i }))
+  const campoTitulo = await screen.findByLabelText('Título do projeto')
+  await usuario.clear(campoTitulo)
+  await usuario.type(campoTitulo, titulo)
+  await usuario.click(screen.getByRole('radio', { name: /texto estruturado/i }))
+  await usuario.click(screen.getByRole('button', { name: 'Criar projeto' }))
 }
 
 describe('App', () => {
@@ -102,14 +110,15 @@ describe('App', () => {
     vi.unstubAllGlobals()
   })
 
-  it('mostra a IDE com a aba Ladder ativa por padrão, paleta e console visíveis', async () => {
+  it('mostra a IDE com o projeto Ladder "Sem título" por padrão, paleta e console visíveis', async () => {
     render(<App />)
 
-    expect(screen.getByRole('tab', { name: 'Ladder' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTitle('Sem título')).toBeInTheDocument()
+    expect(screen.getByText('ld')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: /^contato na$/i })).toBeInTheDocument()
     expect(await screen.findByLabelText(/Degrau 1, coluna 1/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Console' })).toBeInTheDocument()
-    expect(screen.getByRole('log')).toBeInTheDocument()
+    expect(screen.getByRole('log', { name: 'Console' })).toBeInTheDocument()
   })
 
   it('desabilita o botão Gravar e mostra o aviso quando o navegador não tem Web Serial', async () => {
@@ -123,7 +132,7 @@ describe('App', () => {
   it('registra a carga inicial e uma linha por ferramenta (MATIEC, toolchain ESP32) a partir de /health, com versão', async () => {
     render(<App />)
 
-    const log = screen.getByRole('log')
+    const log = screen.getByRole('log', { name: 'Console' })
     expect(within(log).getByText(/LadderFlow iniciado/)).toBeInTheDocument()
 
     await within(log).findByText(/MATIEC/)
@@ -149,50 +158,23 @@ describe('App', () => {
 
     render(<App />)
 
-    const log = screen.getByRole('log')
+    const log = screen.getByRole('log', { name: 'Console' })
     const linhas = await within(log).findAllByText(/Servidor de compilação indisponível/)
     expect(linhas).toHaveLength(1)
     expect(within(log).queryByText(/MATIEC/)).not.toBeInTheDocument()
     expect(within(log).queryByText(/Toolchain ESP32/)).not.toBeInTheDocument()
   })
 
-  it('CA-1 ponta a ponta: variáveis pelo painel, elementos pela grade, vínculo pelo modal (segundo clique)', async () => {
+  it('alternar o tema chama aplicarTema e atualiza o rótulo do botão', async () => {
     const usuario = userEvent.setup()
     render(<App />)
-    await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    // painel de variáveis (aberto por padrão): declara entrada %IX0.1 (classe Entrada é o padrão) e saída %QX0.1
-    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
-    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), '%IX0.1')
-    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
-
-    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'saida')
-    await usuario.click(screen.getByRole('radio', { name: 'Saída' }))
-    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), '%QX0.1')
-    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
-
-    // arrasta o NA para a coluna 1: soltar marca, não abre o modal (D-13)
-    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-
-    // a IDE integra a lista de problemas ao vivo (tarefa #13): um elemento
-    // sem variável já tem `variavel_nao_atribuida` (erro), então o rótulo
-    // acessível da célula ganha o motivo como sufixo — daí o match parcial.
-    const celulaNA = screen.getByRole('button', { name: /^Degrau 1, coluna 1, contato NA sem variável/ })
-    await usuario.click(celulaNA)
-    const dialogoNA = screen.getByRole('dialog')
-    await usuario.click(within(dialogoNA).getByRole('button', { name: /^entrada/i }))
-
-    // arrasta a bobina para a coluna 8
-    arrastar(screen.getByRole('button', { name: /^bobina$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
-    const celulaBobina = screen.getByRole('button', { name: /^Degrau 1, coluna 8, bobina sem variável/ })
-    await usuario.click(celulaBobina)
-    const dialogoBobina = screen.getByRole('dialog')
-    await usuario.click(within(dialogoBobina).getByRole('button', { name: /^saida/i }))
-
-    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina saida' })).toBeInTheDocument()
+    const botao = screen.getByRole('button', { name: /usar tema claro/i })
+    await usuario.click(botao)
+    expect(screen.getByRole('button', { name: /usar tema escuro/i })).toBeInTheDocument()
   })
+
+  // -- Compilação/gravação (só existem em projeto ST) ----------------------
 
   it('compilar com sucesso registra início e sucesso (com as imagens) no console', async () => {
     const pacote = {
@@ -210,16 +192,17 @@ describe('App', () => {
 
     const usuario = userEvent.setup()
     render(<App />)
+    await criarProjetoST(usuario)
 
     await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
 
-    const log = screen.getByRole('log')
+    const log = screen.getByRole('log', { name: 'Console' })
     expect(within(log).getByText(/Compilação iniciada/)).toBeInTheDocument()
     expect(await within(log).findByText(/Compilação concluída/)).toBeInTheDocument()
     expect(within(log).getByText(/bootloader\.bin: offset 0x1000, 2\.0 KB/)).toBeInTheDocument()
   })
 
-  it('erro de compilação com diagnóstico aparece no console e no PainelErro da aba ST', async () => {
+  it('erro de compilação com diagnóstico aparece no console e no painel de erro', async () => {
     const envelope = {
       stage: 'matiec',
       code: 'compile_error',
@@ -238,128 +221,186 @@ describe('App', () => {
 
     const usuario = userEvent.setup()
     render(<App />)
+    await criarProjetoST(usuario)
 
     await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
 
-    const log = screen.getByRole('log')
+    const log = screen.getByRole('log', { name: 'Console' })
     expect(await within(log).findByText(/12:5 — token inesperado/)).toBeInTheDocument()
     expect(within(log).getByText(/matiec/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /gravar no esp32/i })).toBeDisabled()
 
-    // o diagnóstico também aparece no PainelErro, dentro da aba ST — escopado
-    // por role="alert" porque o mesmo texto já está no console (log, acima).
-    await usuario.click(screen.getByRole('tab', { name: 'ST' }))
     const painelErro = screen.getByRole('alert')
     expect(within(painelErro).getByText(/token inesperado/i)).toBeInTheDocument()
     expect(within(painelErro).getByText(/12:5/)).toBeInTheDocument()
   })
 
-  it('alternar para a aba ST mostra o editor de texto, sem perder o diagrama Ladder', async () => {
-    const usuario = userEvent.setup()
+  it('em projeto LD, Compilar e Gravar ficam desabilitados com o motivo', async () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: 'ST' }))
-    expect(screen.getByLabelText(/structured text/i)).toBeInTheDocument()
-
-    await usuario.click(screen.getByRole('tab', { name: 'Ladder' }))
-    expect(screen.getByLabelText(/Degrau 1, coluna 1/)).toBeInTheDocument()
+    const botaoCompilar = screen.getByRole('button', { name: /^compilar$/i })
+    const botaoGravar = screen.getByRole('button', { name: /gravar no esp32/i })
+    expect(botaoCompilar).toBeDisabled()
+    expect(botaoGravar).toBeDisabled()
+    expect(botaoCompilar.getAttribute('title')).toMatch(/convertido em ST/i)
+    expect(botaoGravar.getAttribute('title')).toMatch(/convertido em ST/i)
   })
 
-  // -- Persistência (tarefa #12, CA-8) ------------------------------------
+  it('criar projeto ST remove a aba Variáveis, mostra o editor com o esqueleto e habilita Compilar', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario, 'Programa 1')
 
-  it('CA-8: um diagrama salvo em localStorage é carregado na montagem', async () => {
+    expect(screen.getByTitle('Programa 1')).toBeInTheDocument()
+    expect(screen.getByText('st')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /variáveis/i })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/structured text/i)).toHaveValue(ESQUELETO_ST)
+    expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
+  })
+
+  // -- Persistência (herdado da tarefa #12/#25, revisado na #26) -----------
+
+  it('migração: só ladderflow:diagrama salvo abre em projeto Ladder "Sem título" com aquele diagrama', async () => {
     window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: IO_ESPELHO }))
 
     render(<App />)
 
     expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina saida' })).toBeInTheDocument()
+    expect(screen.getByTitle('Sem título')).toBeInTheDocument()
+    expect(screen.getByText('ld')).toBeInTheDocument()
   })
 
-  it('CA-8: uma mudança do diagrama grava no localStorage', async () => {
+  it('um projeto salvo em localStorage é reaberto', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO, 'Esteira 1')))
+
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })).toBeInTheDocument()
+    expect(screen.getByTitle('Esteira 1')).toBeInTheDocument()
+  })
+
+  it('projeto corrompido no localStorage abre vazio com aviso no Console', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, '{ isso não é json')
+
+    render(<App />)
+
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(await within(log).findByText(/projeto salvo descartado/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  it('diagrama antigo corrompido (chave anterior à tarefa #26) também abre vazio com aviso', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, '{ isso não é json')
+
+    render(<App />)
+
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(await within(log).findByText(/diagrama salvo descartado/i)).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  it('uma mudança do projeto (declarar variável) grava no localStorage', async () => {
     const usuario = userEvent.setup()
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
     await usuario.click(screen.getByRole('radio', { name: 'Memória' }))
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     await waitFor(() => {
-      const bruto = window.localStorage.getItem(CHAVE_DIAGRAMA)
+      const bruto = window.localStorage.getItem(CHAVE_PROJETO)
       expect(bruto).not.toBeNull()
-      const envelope = JSON.parse(bruto as string) as { versao: number; diagrama: Diagrama }
-      expect(envelope.versao).toBe(1)
-      expect(envelope.diagrama.variaveis.some((v) => v.nome === 'contador')).toBe(true)
+      const salvo = JSON.parse(bruto as string) as Projeto
+      expect(salvo.linguagem).toBe('ld')
+      expect(salvo.linguagem === 'ld' && salvo.diagrama.variaveis.some((v) => v.nome === 'contador')).toBe(true)
     })
   })
 
-  it('CA-8: JSON corrompido no localStorage gera um aviso no console e abre com editor vazio', async () => {
-    window.localStorage.setItem(CHAVE_DIAGRAMA, '{ isso não é json')
+  // -- Aba Variáveis (herdado das tarefas #22/#23, revisado na #26) --------
 
+  it('aba Variáveis mostra a tabela de variáveis', async () => {
+    const usuario = userEvent.setup()
     render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    const log = screen.getByRole('log')
-    expect(await within(log).findByText(/diagrama salvo descartado/i)).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    expect(screen.getByRole('table', { name: 'Variáveis declaradas' })).toBeInTheDocument()
   })
 
-  // -- Problemas (tarefa #13) ----------------------------------------------
+  // -- Problemas (herdado da tarefa #13) ------------------------------------
 
-  it('a contagem "Problemas (N)" reflete validarDiagrama (contato sem bobina)', async () => {
+  it('a contagem "Problemas N" reflete validarDiagrama (contato sem bobina)', async () => {
     const usuario = userEvent.setup()
-    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_COM_ERRO }))
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
 
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    const abaProblemas = screen.getByRole('tab', { name: /problemas \(\d+\)/i })
-    expect(abaProblemas).toHaveTextContent(/Problemas \([1-9]\d*\)/)
+    const abaProblemas = screen.getByRole('tab', { name: /^problemas \d+/i })
+    expect(abaProblemas).toHaveTextContent(/Problemas [1-9]\d*/)
 
     await usuario.click(abaProblemas)
-    // A grade também marca a célula com problema (tarefa #13, frente D) — a
-    // mesma mensagem pode aparecer ali também; escopada em `ListaProblemas`
-    // (seu grupo de erros é o `role="alert"`) para não colidir com isso.
     const grupoErros = screen.getByRole('alert')
     expect(grupoErros).toBeInTheDocument()
     expect(within(grupoErros).getByText(/sem nenhuma bobina/)).toBeInTheDocument()
   })
 
-  // -- Aba inicial do painel inferior (tarefa #25) -------------------------
+  it('um problema clicado troca a sub-aba de volta para Lógica', async () => {
+    const usuario = userEvent.setup()
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
 
-  it('IDE limpa (localStorage vazio) abre com a aba Console selecionada e "Problemas (0)"', async () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    // Diagrama vazio (sem elementos, sem ramos) não gera problema algum —
-    // regra da frente N (validação): um degrau em branco não é "incompleto".
-    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Problemas (0)' })).toHaveAttribute('aria-selected', 'false')
+    // o diagrama já veio do armazenamento com erro: a aba Problemas já nasce
+    // selecionada (regra herdada da tarefa #25) — troca para Variáveis antes,
+    // para provar que o clique no problema é quem volta para Lógica.
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'false')
+
+    await usuario.click(screen.getByRole('tab', { name: /^problemas \d+/i }))
+    await usuario.click(screen.getByRole('button', { name: /sem nenhuma bobina/i }))
+
+    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('diagrama salvo com erro (um contato sem bobina) abre com a aba Problemas selecionada', async () => {
-    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_COM_ERRO }))
+  // -- Aba inicial do painel inferior (herdado da tarefa #25) ---------------
+
+  it('IDE limpa (localStorage vazio) abre com a aba Console selecionada e "Problemas 0"', async () => {
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    // Diagrama vazio (sem elementos, sem ramos) não gera problema algum.
+    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Problemas 0' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('projeto salvo com erro (um contato sem bobina) abre com a aba Problemas selecionada', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
 
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    expect(screen.getByRole('tab', { name: /problemas \(\d+\)/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^problemas \d+/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'false')
   })
 
-  it('diagrama salvo só com aviso (SET/RESET autodependente) abre no Console', async () => {
-    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_SO_COM_AVISO }))
+  it('projeto salvo só com aviso (SET/RESET autodependente) abre no Console', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_SO_COM_AVISO)))
 
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
     expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /problemas \(\d+\)/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: /^problemas \d+/i })).toHaveAttribute('aria-selected', 'false')
   })
 
-  it('CA-8 (JSON corrompido): diagrama descartado com aviso abre no Console, não em Problemas', async () => {
-    window.localStorage.setItem(CHAVE_DIAGRAMA, '{ isso não é json')
+  it('projeto corrompido abre no Console, não em Problemas', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, '{ isso não é json')
 
     render(<App />)
     await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
@@ -367,9 +408,62 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  // -- Recusas do editor na BarraStatus (tarefa #25) -----------------------
+  // -- Fluxo "Novo projeto" (tarefa #26) ------------------------------------
 
-  it('uma recusa vinda do editor (remover o único degrau) aparece na barra de status e no Console', async () => {
+  it('"Novo projeto" com projeto vazio vai direto ao modal de título', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: /novo projeto/i }))
+    expect(screen.getByRole('dialog', { name: 'Novo projeto' })).toBeInTheDocument()
+  })
+
+  it('"Novo projeto" com conteúdo abre primeiro o modal de descarte, e confirmar leva ao de título', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    await usuario.click(screen.getByRole('button', { name: /novo projeto/i }))
+    expect(screen.getByRole('dialog', { name: /descartar projeto atual/i })).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: /descartar e continuar/i }))
+    expect(screen.getByRole('dialog', { name: 'Novo projeto' })).toBeInTheDocument()
+  })
+
+  it('cancelar o modal de descarte não muda o projeto atual', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    await usuario.click(screen.getByRole('button', { name: /novo projeto/i }))
+    await usuario.click(screen.getByRole('button', { name: /^cancelar$/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    expect(screen.getByText('entrada')).toBeInTheDocument()
+  })
+
+  it('criar um projeto novo registra a criação no Console', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario, 'Programa 2')
+
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(within(log).getByText(/Projeto «Programa 2» \(ST\) criado\./)).toBeInTheDocument()
+  })
+
+  // -- Mensagens (recusas do editor, tarefa #26) ----------------------------
+
+  it('uma recusa (Remover degrau 1 com um degrau só) aparece na aba Mensagens com contador, que zera ao abrir a aba', async () => {
     const usuario = userEvent.setup()
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
@@ -378,10 +472,12 @@ describe('App', () => {
     // menos um degrau") — gesto realista pela UI, sem chamar o núcleo direto.
     await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
 
-    const barra = screen.getByRole('status')
-    expect(within(barra).getByText(/pelo menos um degrau/i)).toBeInTheDocument()
+    const abaMensagens = screen.getByRole('tab', { name: /mensagens/i })
+    expect(abaMensagens).toHaveTextContent('Mensagens 1')
 
-    const log = screen.getByRole('log')
+    await usuario.click(abaMensagens)
+    const log = screen.getByRole('log', { name: 'Mensagens' })
     expect(within(log).getByText(/pelo menos um degrau/i)).toBeInTheDocument()
+    expect(abaMensagens).not.toHaveTextContent('Mensagens 1')
   })
 })

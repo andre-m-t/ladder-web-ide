@@ -174,6 +174,24 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     célula do degrau (inclusive ramo) vai para a coluna 8, recusa se ocupada;
     verificação em Chromium com mouse real nos dois temas.
 
+- [x] **#26 — [P][M][H][L][A][E] Projeto de linguagem única, cabeçalho novo, aba Variáveis e painel inferior em 3 abas (plano §17, D-17)**
+  - Arquivos: `frontend/src/projeto/projeto.ts` (novo) e teste;
+    `ladder/persistencia.ts` (export do validador de forma);
+    `components/ide/{Modal,ModalConfirmarDescarte,ModalNovoProjeto,ListaMensagens}.tsx` (novos),
+    `{BarraSuperior,PainelInferiorConteudo,Console,AreaEditor}.tsx`,
+    remoção de `BarraStatus.tsx` e `PainelLateral.tsx`;
+    `components/ladder/{PainelVariaveis,TabelaVariaveis}.tsx`;
+    `App.tsx`; `frontend/e2e/recarga.spec.ts`; `scripts/build-deposito.sh`; testes
+  - Depende de: #25
+  - Pronto quando: a IDE abre o último projeto (migrando `ladderflow:diagrama`);
+    "Novo projeto" confirma descarte quando há conteúdo e pede título e
+    linguagem; projeto Ladder tem abas Lógica e Variáveis, ST só Lógica;
+    Compilar e Gravar desabilitados em Ladder com o motivo da F8; painel
+    inferior com Problemas, Mensagens (contador de não lidas) e Console, sem
+    barra de status; variáveis em tabela de largura inteira; esqueleto ST
+    compila no `iec2c`; e2e cobre projeto LD, criação de ST, corrompido e
+    migração; verificação em Chromium nos dois temas.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [x] **#9 — [N] Degraus, mover e limite de colunas**
@@ -345,6 +363,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #23 | RF-9, RF-10, RF-12 (D-13) | CA-1, CA-2, CA-5, CA-7 |
 | #24 | RF-1, RF-4, RF-9, RF-10, RF-12 (D-14) | CA-2, CA-4, CA-10 |
 | #25 | RF-1, RF-8, RF-11, RF-12 (D-16) | CA-4, CA-5, CA-6 |
+| #26 | RF-9, RF-12, RF-13, Q-2 (D-17) | CA-8 |
 
 ## Paralelismo previsto
 

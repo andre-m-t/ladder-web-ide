@@ -46,8 +46,10 @@ function rungEstruturalmenteValido(rung: unknown): rung is Rung {
 /** Checa a forma mínima de um `Diagrama` recém-desserializado: `rungs` é um
  * array não vazio de rungs estruturalmente válidos, e `variaveis` é um array.
  * Não valida conteúdo (endereços, vínculos) — isso é papel de
- * `validarDiagrama`; aqui só se decide se dá para confiar na forma dos dados. */
-function diagramaEstruturalmenteValido(diagrama: unknown): diagrama is Diagrama {
+ * `validarDiagrama`; aqui só se decide se dá para confiar na forma dos dados.
+ * Exportada para que `projeto/projeto.ts` valide o campo `diagrama` de um
+ * projeto `ld` com a mesma regra, sem duplicá-la (spec 002, tarefa #26). */
+export function diagramaEstruturalmenteValido(diagrama: unknown): diagrama is Diagrama {
   if (typeof diagrama !== 'object' || diagrama === null) return false
   const d = diagrama as Record<string, unknown>
   if (!Array.isArray(d.variaveis)) return false

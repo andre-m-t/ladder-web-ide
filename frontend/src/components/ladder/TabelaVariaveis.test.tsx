@@ -23,18 +23,27 @@ function renderizar(variaveis: Variavel[], extra: Partial<Parameters<typeof Tabe
   )
 }
 
-describe('TabelaVariaveis — layout compacto (painel lateral entre 18 e 32rem)', () => {
-  it('usa table-fixed com largura total, para o select não espremer a coluna Nome', () => {
+describe('TabelaVariaveis — tabela de largura inteira (tarefa #26)', () => {
+  it('usa table-fixed com largura total', () => {
     renderizar([variavel('x')])
 
     const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
     expect(tabela).toHaveClass('table-fixed')
     expect(tabela).toHaveClass('w-full')
   })
+
+  it('mostra as colunas Nome, Tipo, Uso, Pino, Valor e uma coluna de ações (oculta) no cabeçalho', () => {
+    renderizar([])
+
+    const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
+    const cabecalhos = within(tabela).getAllByRole('columnheader').map((th) => th.textContent)
+
+    expect(cabecalhos).toEqual(['Nome', 'Tipo', 'Uso', 'Pino', 'Valor', 'Ações'])
+  })
 })
 
 describe('TabelaVariaveis — leitura', () => {
-  it('renderiza uma linha por variável com pino (GPIO + endereço) em modo texto, tipo fixo e valor', () => {
+  it('renderiza uma linha por variável com pino (GPIO + endereço) em modo texto, tipo fixo, uso por classe e valor', () => {
     const enderecoEntrada = ENTRADAS_LOCALIZADAS[0]
     const enderecoSaida = SAIDAS_LOCALIZADAS[0]
     const variaveis = [variavel('entrada', enderecoEntrada), variavel('saida', enderecoSaida), variavel('memoria')]
@@ -53,12 +62,38 @@ describe('TabelaVariaveis — leitura', () => {
     const linhaSaida = screen.getByLabelText('Nome da variável saida').closest('tr') as HTMLElement
     const linhaMemoria = screen.getByLabelText('Nome da variável memoria').closest('tr') as HTMLElement
 
+    // Coluna "Uso": classe por linha (Entrada/Saída/Memória).
+    expect(within(linhaEntrada).getByText('Entrada')).toBeInTheDocument()
+    expect(within(linhaSaida).getByText('Saída')).toBeInTheDocument()
+    expect(within(linhaMemoria).getByText('Memória')).toBeInTheDocument()
+
+    // Coluna "Pino": só hardware — GPIO + endereço, ou "—" para Memória.
     expect(within(linhaEntrada).getByText(`GPIO ${GPIO_DO_ENDERECO[enderecoEntrada]}`)).toBeInTheDocument()
     expect(within(linhaEntrada).getByText(enderecoEntrada)).toBeInTheDocument()
     expect(within(linhaSaida).getByText(`GPIO ${GPIO_DO_ENDERECO[enderecoSaida]}`)).toBeInTheDocument()
-    expect(within(linhaMemoria).getByText('Memória')).toBeInTheDocument()
+    expect(within(linhaMemoria).getByRole('button', { name: 'Alterar pino de memoria' })).toHaveTextContent('—')
 
-    expect(screen.getAllByText('BOOL')).toHaveLength(3)
+    expect(screen.getAllByText('BOOL')).toHaveLength(4) // 3 linhas existentes + a linha de adicionar
+  })
+
+  it('a coluna Uso usa uma cor diferente por classe', () => {
+    const variaveis = [
+      variavel('entrada', ENTRADAS_LOCALIZADAS[0]),
+      variavel('saida', SAIDAS_LOCALIZADAS[0]),
+      variavel('memoria'),
+    ]
+    renderizar(variaveis)
+
+    const linhaEntrada = screen.getByLabelText('Nome da variável entrada').closest('tr') as HTMLElement
+    const linhaSaida = screen.getByLabelText('Nome da variável saida').closest('tr') as HTMLElement
+    const linhaMemoria = screen.getByLabelText('Nome da variável memoria').closest('tr') as HTMLElement
+
+    const classes = [
+      within(linhaEntrada).getByText('Entrada').className,
+      within(linhaSaida).getByText('Saída').className,
+      within(linhaMemoria).getByText('Memória').className,
+    ]
+    expect(new Set(classes).size).toBe(3)
   })
 })
 
@@ -79,10 +114,22 @@ describe('TabelaVariaveis — contador', () => {
   })
 })
 
-describe('TabelaVariaveis — estado vazio', () => {
-  it('mostra a mensagem quando não há variáveis', () => {
+describe('TabelaVariaveis — estado vazio (tarefa #26: a linha de adicionar continua visível)', () => {
+  it('mostra um texto discreto quando não há variáveis, com a linha de adicionar logo abaixo', () => {
     renderizar([])
-    expect(screen.getByText('Nenhuma variável. Adicione acima.')).toBeInTheDocument()
+    expect(screen.getByText('Nenhuma variável declarada. Adicione abaixo.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nome da nova variável')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toBeInTheDocument()
+  })
+
+  it('filtrando uma categoria sem variáveis, mostra texto específico e a linha de adicionar continua visível', async () => {
+    const usuario = userEvent.setup()
+    renderizar([variavel('e1', ENTRADAS_LOCALIZADAS[0])])
+
+    await usuario.click(screen.getByRole('tab', { name: 'Saídas' }))
+
+    expect(screen.getByText('Nenhuma variável nesta categoria. Adicione abaixo.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nome da nova variável')).toBeInTheDocument()
   })
 })
 
@@ -432,16 +479,16 @@ describe('TabelaVariaveis — valor', () => {
 })
 
 describe('TabelaVariaveis — área rolável única', () => {
-  it('formulário, lista e mapa de pinos ficam dentro do mesmo contêiner overflow-y-auto', () => {
+  it('tabela (com a linha de adicionar) e mapa de pinos ficam dentro do mesmo contêiner overflow-y-auto', () => {
     const { container } = renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])
 
     const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
-    const formulario = screen.getByLabelText('Nome da nova variável').closest('form') as HTMLElement
+    const linhaAdicionar = screen.getByLabelText('Nome da nova variável').closest('tr') as HTMLElement
     const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLElement
 
     const rolavel = container.querySelector('.overflow-y-auto') as HTMLElement
     expect(rolavel).toBeInTheDocument()
-    expect(rolavel).toContainElement(formulario)
+    expect(rolavel).toContainElement(linhaAdicionar)
     expect(rolavel).toContainElement(tabela)
     expect(rolavel).toContainElement(detalhes)
 
@@ -450,6 +497,40 @@ describe('TabelaVariaveis — área rolável única', () => {
     const abas = screen.getByRole('tablist', { name: 'Filtrar variáveis por classe' })
     expect(rolavel).not.toContainElement(cabecalho)
     expect(rolavel).not.toContainElement(abas)
+  })
+})
+
+describe('TabelaVariaveis — linha de adicionar sempre visível (tarefa #26)', () => {
+  it('continua na tabela depois de declarar várias variáveis (última linha do corpo)', async () => {
+    const usuario = userEvent.setup()
+    renderizar([variavel('a'), variavel('b'), variavel('c')])
+
+    const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
+    const linhas = within(tabela).getAllByRole('row')
+    // 1 de cabeçalho + 3 de variáveis + 1 de adicionar
+    expect(linhas).toHaveLength(5)
+    expect(within(linhas[linhas.length - 1]).getByLabelText('Nome da nova variável')).toBeInTheDocument()
+
+    // Continua visível e utilizável após trocar de aba.
+    await usuario.click(screen.getByRole('tab', { name: 'Entradas' }))
+    expect(screen.getByLabelText('Nome da nova variável')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toBeInTheDocument()
+  })
+})
+
+describe('TabelaVariaveis — mapa de pinos recolhível (tarefa #26)', () => {
+  it('começa fechado e abre ao clicar no resumo, lado a lado (Entradas/Saídas) quando aberto', async () => {
+    const usuario = userEvent.setup()
+    renderizar([])
+
+    const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLDetailsElement
+    expect(detalhes).not.toHaveAttribute('open')
+
+    await usuario.click(screen.getByText('Mapa de pinos ESP32'))
+    expect(detalhes).toHaveAttribute('open')
+
+    const contentor = within(detalhes).getByText('Entradas').closest('div')?.parentElement as HTMLElement
+    expect(contentor).toHaveClass('md:flex-row')
   })
 })
 

@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
-import BarraStatus, { type MensagemStatus } from './components/ide/BarraStatus'
-import BarraSuperior, { type Aba } from './components/ide/BarraSuperior'
+import BarraSuperior, { type AbaEdicao } from './components/ide/BarraSuperior'
+import ModalConfirmarDescarte from './components/ide/ModalConfirmarDescarte'
+import ModalNovoProjeto from './components/ide/ModalNovoProjeto'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
-import PainelLateral from './components/ide/PainelLateral'
-import PainelVariaveis from './components/ladder/PainelVariaveis'
-import { diagramaVazio } from './ladder/edicao'
-import type { Diagrama } from './ladder/modelo'
-import { CHAVE_DIAGRAMA, carregarDiagrama, salvarDiagrama, type ResultadoCarga } from './ladder/persistencia'
 import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
@@ -21,9 +17,18 @@ import {
   type ToolInfo,
 } from './lib/api'
 import { registrar, type EntradaConsole } from './lib/console'
-import { BLINK_ST } from './lib/exemplos'
 import { ErroGravacao, gravar, webSerialDisponivel } from './lib/gravador'
 import { aplicarTema, temaInicial, type Tema } from './lib/tema'
+import {
+  carregarProjeto,
+  novoProjeto,
+  projetoTemConteudo,
+  salvarProjeto,
+  TITULO_PADRAO,
+  type Linguagem,
+  type Projeto,
+  type ResultadoCargaProjeto,
+} from './projeto/projeto'
 
 type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
 
@@ -39,22 +44,23 @@ type EstadoGravacao =
   | { fase: 'sucesso' }
   | { fase: 'erro'; erro: ErroGravacao }
 
-// --- Preferências de interface (localStorage) -------------------------------
-// Só o layout da IDE — aba ativa, tamanhos e recolhimentos dos painéis. O
-// tema tem seu próprio armazenamento em `lib/tema.ts`. O diagrama e o texto
-// ST em edição NUNCA entram aqui (persistência do diagrama é a tarefa #12).
-// Leitura e escrita em try/catch: sem `localStorage` disponível, a IDE usa os
-// padrões abaixo sem quebrar.
+/** Estado do fluxo "Novo projeto" (tarefa #26): `confirmarDescarte` só
+ * aparece quando o projeto atual já tem conteúdo (`projetoTemConteudo`);
+ * `novoProjeto` é o modal de título/linguagem em si. Cancelar em qualquer um
+ * dos dois volta direto para `'nenhum'`, sem tocar no projeto. */
+type EstadoModalNovoProjeto = 'nenhum' | 'confirmarDescarte' | 'novoProjeto'
 
-const CHAVE_ABA = 'ladderflow.aba'
-const CHAVE_PAINEL_ABERTO = 'ladderflow.painelAberto'
-const CHAVE_PAINEL_LARGURA = 'ladderflow.painelLargura'
+// --- Preferências de interface (localStorage) -------------------------------
+// Só o layout do painel inferior — aberto/altura. A aba ativa dentro dele
+// (Problemas/Mensagens/Console) e a sub-aba de edição (Lógica/Variáveis) não
+// persistem: nascem de novo a cada carga, conforme a regra da tarefa #25/#26.
+// O tema tem seu próprio armazenamento em `lib/tema.ts`. Leitura e escrita em
+// try/catch: sem `localStorage` disponível, a IDE usa os padrões abaixo sem
+// quebrar.
+
 const CHAVE_CONSOLE_ABERTO = 'ladderflow.consoleAberto'
 const CHAVE_CONSOLE_ALTURA = 'ladderflow.consoleAltura'
 
-const PAINEL_LARGURA_PADRAO = 320
-const PAINEL_LARGURA_MIN = 288 // 18rem
-const PAINEL_LARGURA_MAX = 640 // 40rem
 const CONSOLE_ALTURA_PADRAO = 192
 const CONSOLE_ALTURA_MIN = 96 // 6rem
 
@@ -75,10 +81,6 @@ function gravarPreferencia(chave: string, valor: string): void {
   } catch {
     // sem localStorage: a preferência de interface não persiste, sem quebrar a IDE.
   }
-}
-
-function lerAba(): Aba {
-  return lerPreferencia(CHAVE_ABA, (bruto) => (bruto === 'ladder' || bruto === 'st' ? bruto : null), 'ladder')
 }
 
 function lerBooleano(chave: string, padrao: boolean): boolean {
@@ -102,90 +104,69 @@ function alturaMaximaConsole(): number {
   return Math.round(window.innerHeight * 0.6)
 }
 
-type ResultadoCargaInicial = ResultadoCarga & {
-  /** True só quando havia algo salvo sob `CHAVE_DIAGRAMA` **e** a carga não
-   * caiu no vazio (não foi descartado por JSON corrompido, versão
-   * desconhecida etc. — tarefa #25). Decide a aba inicial do painel
-   * inferior: um diagrama digitado do zero (chave ausente) nunca abre em
-   * "Problemas", mesmo que o autor já tenha cometido um erro estrutural. */
-  veioDoArmazenamento: boolean
-}
-
-/** Carga inicial do diagrama (tarefa #12, CA-8; `veioDoArmazenamento` na
- * tarefa #25): `carregarDiagrama` já nunca lança, mas o próprio acesso à
+/** Carga inicial do projeto (tarefa #26; antes, tarefa #12/#25 para o
+ * diagrama solto): `carregarProjeto` já nunca lança, mas o próprio acesso à
  * propriedade `window.localStorage` pode lançar em alguns navegadores (modo
  * privado) antes mesmo de chegar a `getItem` — protegido aqui do mesmo jeito
- * que `lerPreferencia` protege as preferências de layout. A checagem da
- * chave é feita aqui, ao lado da carga, sem tocar `ladder/persistencia.ts`
- * (núcleo intocado, conforme a tarefa pede). */
-function carregarDiagramaInicial(): ResultadoCargaInicial {
-  let chavePresente: boolean
+ * que a carga inicial do diagrama fazia. */
+function carregarProjetoInicial(): ResultadoCargaProjeto {
   try {
-    chavePresente = window.localStorage.getItem(CHAVE_DIAGRAMA) !== null
-  } catch {
-    chavePresente = false
-  }
-
-  try {
-    const resultado = carregarDiagrama(window.localStorage)
-    return { ...resultado, veioDoArmazenamento: chavePresente && resultado.aviso === null }
+    return carregarProjeto(window.localStorage)
   } catch {
     return {
-      diagrama: diagramaVazio(),
-      aviso: 'diagrama salvo descartado: não foi possível acessar o armazenamento local',
+      projeto: novoProjeto(TITULO_PADRAO, 'ld'),
+      aviso: 'projeto salvo descartado: não foi possível acessar o armazenamento local',
       veioDoArmazenamento: false,
     }
   }
 }
 
-/** Aba inicial do painel inferior (tarefa #25): "console" é o padrão — só
- * abre em "problemas" quando o diagrama veio mesmo do armazenamento (não caiu
- * no vazio) **e** já nasce com pelo menos um erro (`validarDiagrama`). Um
- * aviso sozinho, ou um diagrama descartado com aviso, nunca muda a aba. */
-function abaInferiorInicial(diagrama: Diagrama, veioDoArmazenamento: boolean): AbaInferior {
+/** Aba inicial do painel inferior (tarefa #25, mantida na #26): "console" é o
+ * padrão — só abre em "problemas" quando o projeto veio mesmo do
+ * armazenamento (não caiu no vazio), é um projeto Ladder (ST não tem
+ * diagrama) **e** já nasce com pelo menos um erro (`validarDiagrama`). Um
+ * aviso sozinho, ou um projeto descartado com aviso, nunca muda a aba. */
+function abaInferiorInicial(projeto: Projeto, veioDoArmazenamento: boolean): AbaInferior {
   if (!veioDoArmazenamento) return 'console'
-  const temErro = validarDiagrama(diagrama).some((problema) => problema.severidade === 'erro')
+  if (projeto.linguagem !== 'ld') return 'console'
+  const temErro = validarDiagrama(projeto.diagrama).some((problema) => problema.severidade === 'erro')
   return temErro ? 'problemas' : 'console'
 }
 
 /**
- * Shell de IDE do LadderFlow (spec 002, tarefas #23/#24, plano
- * `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-13/D-14): tela inteira com
- * barra superior (abas, compilar/gravar, alternadores — ícones `lucide-react`,
- * sem chips de saúde), editor central por aba (Ladder controlado / ST),
- * painel de variáveis recolhível e redimensionável à direita, e console de
- * eventos do cliente recolhível e redimensionável embaixo. A saúde do
- * servidor de compilação (`/health`) não aparece mais na barra: uma linha por
- * ferramenta (MATIEC, toolchain ESP32) vai para o console na carga inicial.
+ * Shell de IDE do LadderFlow (spec 002, tarefas #23–#26): tela inteira com
+ * barra superior (título/linguagem do projeto, sub-abas Lógica/Variáveis,
+ * compilar/gravar, alternadores), editor central pela sub-aba ativa e console
+ * de eventos do cliente recolhível e redimensionável embaixo.
  *
- * O diagrama do editor Ladder já sobe para cá (`useState<Diagrama>`), como
- * preparação para a tarefa #12 (persistência) — aqui ele só vive em memória,
- * compartilhado entre o editor (aba Ladder) e `PainelVariaveis` (painel
- * lateral). O servidor de compilação continua síncrono (spec 001, Q-6): o
+ * A partir da tarefa #26 a IDE trabalha com um **projeto** de linguagem única
+ * (`projeto/projeto.ts`) em vez de manter Ladder e ST lado a lado nas mesmas
+ * abas: o autor escolhe a linguagem em "Novo projeto" e todo o resto —
+ * diagrama ou fonte, painel de variáveis, compilar/gravar — decorre dessa
+ * escolha. O painel lateral de variáveis também saiu: seu conteúdo virou a
+ * sub-aba "Variáveis", de largura inteira, ao lado de "Lógica".
+ *
+ * A saúde do servidor de compilação (`/health`) não aparece na barra: uma
+ * linha por ferramenta (MATIEC, toolchain ESP32) vai para o console na carga
+ * inicial. O servidor de compilação continua síncrono (spec 001, Q-6): o
  * console mostra os eventos que o próprio cliente observa (início/fim,
  * progresso), não um streaming da saída do `iec2c`/`idf.py`.
  */
 export default function App() {
   const [tema, setTema] = useState<Tema>(() => temaInicial())
-  const [aba, setAba] = useState<Aba>(() => lerAba())
 
-  // Carga inicial do diagrama (CA-8): uma única leitura do `localStorage` no
-  // mount, guardada aqui para o efeito de log abaixo e para a aba inicial do
-  // painel inferior (tarefa #25) reaproveitarem o mesmo resultado (diagrama,
-  // aviso e "veio do armazenamento" nascem juntos, de uma só leitura).
-  const [cargaInicial] = useState<ResultadoCargaInicial>(() => carregarDiagramaInicial())
-  const [diagrama, setDiagrama] = useState<Diagrama>(() => cargaInicial.diagrama)
+  // Carga inicial do projeto: uma única leitura do `localStorage` no mount,
+  // guardada aqui para o efeito de log abaixo e para a aba inicial do painel
+  // inferior reaproveitarem o mesmo resultado (projeto, aviso e "veio do
+  // armazenamento" nascem juntos, de uma só leitura).
+  const [cargaInicial] = useState<ResultadoCargaProjeto>(() => carregarProjetoInicial())
+  const [projeto, setProjeto] = useState<Projeto>(() => cargaInicial.projeto)
+  const [abaEdicao, setAbaEdicao] = useState<AbaEdicao>('logica')
   const [abaInferior, setAbaInferior] = useState<AbaInferior>(() =>
-    abaInferiorInicial(cargaInicial.diagrama, cargaInicial.veioDoArmazenamento),
+    abaInferiorInicial(cargaInicial.projeto, cargaInicial.veioDoArmazenamento),
   )
-  const [fonte, setFonte] = useState(BLINK_ST)
   const [foco, setFoco] = useState<FocoLadder | null>(null)
-  const [statusMensagem, setStatusMensagem] = useState<MensagemStatus | null>(null)
 
-  const [painelAberto, setPainelAberto] = useState(() => lerBooleano(CHAVE_PAINEL_ABERTO, true))
-  const [painelLargura, setPainelLargura] = useState(() =>
-    Math.min(PAINEL_LARGURA_MAX, Math.max(PAINEL_LARGURA_MIN, lerNumero(CHAVE_PAINEL_LARGURA, PAINEL_LARGURA_PADRAO))),
-  )
   const [consoleAberto, setConsoleAberto] = useState(() => lerBooleano(CHAVE_CONSOLE_ABERTO, true))
   const [consoleAltura, setConsoleAltura] = useState(() =>
     Math.max(CONSOLE_ALTURA_MIN, lerNumero(CHAVE_CONSOLE_ALTURA, CONSOLE_ALTURA_PADRAO)),
@@ -194,31 +175,39 @@ export default function App() {
   const [compilacao, setCompilacao] = useState<EstadoCompilacao>({ fase: 'ocioso' })
   const [gravacao, setGravacao] = useState<EstadoGravacao>({ fase: 'ocioso' })
   const [entradasConsole, setEntradasConsole] = useState<EntradaConsole[]>([])
+  const [mensagens, setMensagens] = useState<EntradaConsole[]>([])
+  const [naoLidasMensagens, setNaoLidasMensagens] = useState(0)
+  const [modalNovoProjeto, setModalNovoProjeto] = useState<EstadoModalNovoProjeto>('nenhum')
 
-  const problemas = useMemo(() => validarDiagrama(diagrama), [diagrama])
+  const problemas = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
 
   const cargaInicialRegistrada = useRef(false)
-  /** Falha de `salvarDiagrama` já registrada no console: evita inundar o
+  /** Falha de `salvarProjeto` já registrada no console: evita inundar o
    * console a cada tecla enquanto o armazenamento continuar recusando —
    * registra de novo só quando a gravação volta a falhar depois de um
-   * sucesso (tarefa #12). */
+   * sucesso (herdado da tarefa #12). */
   const falhaSalvarRegistrada = useRef(false)
   const focoToken = useRef(0)
-  const statusToken = useRef(0)
 
   function log(nivel: EntradaConsole['nivel'], mensagem: string) {
     setEntradasConsole((atual) => registrar(atual, nivel, mensagem))
   }
 
-  /** Recusa de uma jogada do editor Ladder ou do painel de variáveis (tarefa
-   * #25, `aoRecusar`, contrato fixado com as frentes L e V): registra no
-   * Console (mesmo nível `aviso` de sempre) e manda o motivo para a
-   * `BarraStatus`, com um `token` novo a cada chamada — mesmo que o texto se
-   * repita, a barra reinicia os 6s de exibição. */
+  /** Recusa de uma jogada do editor Ladder ou do painel de variáveis (tarefas
+   * #25/#26, `aoRecusar`): grava na lista de Mensagens (nível `aviso`) e
+   * incrementa o contador de não lidas, sem trocar de aba — quem decide ver o
+   * motivo abre a aba Mensagens por conta própria. */
   function recusar(motivo: string) {
-    log('aviso', motivo)
-    statusToken.current += 1
-    setStatusMensagem({ texto: motivo, nivel: 'aviso', token: statusToken.current })
+    setMensagens((atual) => registrar(atual, 'aviso', motivo))
+    setNaoLidasMensagens((atual) => atual + 1)
+  }
+
+  /** Troca a aba do painel inferior — abrir "mensagens" zera o contador de
+   * não lidas (tarefa #26): a contagem é "recusas desde a última vez que a
+   * aba foi aberta", então abrir já conta como "lida". */
+  function aoMudarAbaInferior(aba: AbaInferior) {
+    setAbaInferior(aba)
+    if (aba === 'mensagens') setNaoLidasMensagens(0)
   }
 
   useEffect(() => {
@@ -230,17 +219,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Salva o diagrama a cada mudança (tarefa #12, D-5). Roda também no mount
-  // (reescreve o que acabou de ser carregado — inofensivo) para cobrir o
-  // caso comum: primeiro diagrama nunca salvo ainda. `window.localStorage`
-  // pode lançar ao ser acessado (não só nos métodos) em alguns navegadores;
-  // protegido do mesmo jeito que a carga inicial.
+  // Salva o projeto a cada mudança (herdado da tarefa #12/#26, D-5). Roda
+  // também no mount (reescreve o que acabou de ser carregado — inofensivo)
+  // para cobrir o caso comum: primeiro projeto nunca salvo ainda.
+  // `window.localStorage` pode lançar ao ser acessado (não só nos métodos) em
+  // alguns navegadores; protegido do mesmo jeito que a carga inicial.
   useEffect(() => {
     let erro: string | null
     try {
-      erro = salvarDiagrama(window.localStorage, diagrama)
+      erro = salvarProjeto(window.localStorage, projeto)
     } catch {
-      erro = 'não foi possível salvar o diagrama no armazenamento local'
+      erro = 'não foi possível salvar o projeto no armazenamento local'
     }
     if (erro) {
       if (!falhaSalvarRegistrada.current) {
@@ -251,7 +240,7 @@ export default function App() {
       falhaSalvarRegistrada.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [diagrama])
+  }, [projeto])
 
   useEffect(() => {
     let cancelado = false
@@ -283,9 +272,6 @@ export default function App() {
     }
   }
 
-  useEffect(() => gravarPreferencia(CHAVE_ABA, aba), [aba])
-  useEffect(() => gravarPreferencia(CHAVE_PAINEL_ABERTO, String(painelAberto)), [painelAberto])
-  useEffect(() => gravarPreferencia(CHAVE_PAINEL_LARGURA, String(painelLargura)), [painelLargura])
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ABERTO, String(consoleAberto)), [consoleAberto])
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ALTURA, String(consoleAltura)), [consoleAltura])
 
@@ -295,7 +281,16 @@ export default function App() {
   const webSerialOk = webSerialDisponivel()
   const podeGravar = temPacoteValido && webSerialOk && !gravando
 
+  /** Compilação de Ladder só existe depois de convertido para ST (F8, futuro)
+   * — até lá, `motivoIndisponivel` desabilita Compilar/Gravar juntos na
+   * `BarraSuperior` para projeto LD. */
+  const motivoIndisponivel: string | undefined =
+    projeto.linguagem === 'ld' ? 'Compilação de Ladder disponível quando o diagrama for convertido em ST (F8)' : undefined
+
   async function aoCompilar() {
+    if (projeto.linguagem !== 'st') return
+    const fonte = projeto.fonte
+
     setCompilacao({ fase: 'compilando' })
     setGravacao({ fase: 'ocioso' })
     log('info', 'Compilação iniciada.')
@@ -364,31 +359,67 @@ export default function App() {
     setTema(novoTema)
   }
 
-  /** Clicar num problema (tarefa #13, item 4): troca para a aba Ladder (se
-   * estiver em ST) e pede ao `EditorLadder` para focar a célula do
-   * problema — `token` incrementa a cada escolha para repetir o mesmo alvo
-   * duas vezes seguidas ainda disparar o foco. */
+  /** Clicar num problema (herdado da tarefa #13, revisado na #26): troca para
+   * a sub-aba Lógica (se estiver em Variáveis) e pede ao `EditorLadder` para
+   * focar a célula do problema — `token` incrementa a cada escolha para
+   * repetir o mesmo alvo duas vezes seguidas ainda disparar o foco. */
   function aoEscolherProblema(problema: Problema) {
-    if (aba !== 'ladder') setAba('ladder')
+    setAbaEdicao('logica')
     focoToken.current += 1
     setFoco({ rungId: problema.rungId, elementoId: problema.elementoId, token: focoToken.current })
+  }
+
+  /** Primeiro passo do fluxo "Novo projeto" (tarefa #26): só pergunta antes
+   * de descartar quando há algo a perder (`projetoTemConteudo`) — projeto
+   * vazio (padrão logo após abrir, ou após o próprio "Novo projeto") vai
+   * direto ao modal de título. */
+  function aoNovoProjeto() {
+    setModalNovoProjeto(projetoTemConteudo(projeto) ? 'confirmarDescarte' : 'novoProjeto')
+  }
+
+  function aoConfirmarDescarte() {
+    setModalNovoProjeto('novoProjeto')
+  }
+
+  function aoCancelarModalNovoProjeto() {
+    setModalNovoProjeto('nenhum')
+  }
+
+  /** Segundo (ou único, se o projeto atual já estava vazio) passo do fluxo
+   * "Novo projeto": substitui o projeto, limpa o estado que só fazia sentido
+   * para o anterior (compilação, gravação, foco, sub-aba), fecha os modais,
+   * registra no Console e devolve o foco ao botão "Novo projeto" — ele não é
+   * referenciável por `ref` (mora em `BarraSuperior`, fora desta frente), daí
+   * a busca pelo `aria-label` fixo do próprio botão. */
+  function aoCriarProjeto(titulo: string, linguagem: Linguagem) {
+    const novo = novoProjeto(titulo, linguagem)
+    setProjeto(novo)
+    setCompilacao({ fase: 'ocioso' })
+    setGravacao({ fase: 'ocioso' })
+    setFoco(null)
+    setAbaEdicao('logica')
+    setModalNovoProjeto('nenhum')
+    log('info', `Projeto «${novo.titulo}» (${linguagem.toUpperCase()}) criado.`)
+    document.querySelector<HTMLButtonElement>('[aria-label="Novo projeto"]')?.focus()
   }
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-ide-fundo text-ide-texto">
       <BarraSuperior
-        aba={aba}
-        aoMudarAba={setAba}
+        titulo={projeto.titulo}
+        linguagem={projeto.linguagem}
+        abaEdicao={abaEdicao}
+        aoMudarAbaEdicao={setAbaEdicao}
+        aoNovoProjeto={aoNovoProjeto}
         compilando={compilando}
         aoCompilar={aoCompilar}
         gravando={gravando}
         progressoGravacao={gravacao.fase === 'gravando' ? gravacao.progresso : undefined}
         podeGravar={podeGravar}
         aoGravar={aoGravar}
-        painelVariaveisAberto={painelAberto}
-        aoAlternarPainelVariaveis={() => setPainelAberto((atual) => !atual)}
-        consoleAberto={consoleAberto}
-        aoAlternarConsole={() => setConsoleAberto((atual) => !atual)}
+        motivoIndisponivel={motivoIndisponivel}
+        painelInferiorAberto={consoleAberto}
+        aoAlternarPainelInferior={() => setConsoleAberto((atual) => !atual)}
         tema={tema}
         aoAlternarTema={aoAlternarTema}
       />
@@ -402,27 +433,15 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1">
         <AreaEditor
-          aba={aba}
-          diagrama={diagrama}
-          aoMudarDiagrama={setDiagrama}
+          projeto={projeto}
+          abaEdicao={abaEdicao}
+          aoMudarProjeto={setProjeto}
           problemas={problemas}
           foco={foco}
-          fonte={fonte}
-          aoMudarFonte={setFonte}
           compilando={compilando}
           erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
           aoRecusar={recusar}
         />
-
-        <PainelLateral
-          aberto={painelAberto}
-          largura={painelLargura}
-          larguraMin={PAINEL_LARGURA_MIN}
-          larguraMax={PAINEL_LARGURA_MAX}
-          aoRedimensionar={setPainelLargura}
-        >
-          <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} aoRecusar={recusar} />
-        </PainelLateral>
       </div>
 
       <PainelInferior
@@ -434,15 +453,25 @@ export default function App() {
       >
         <PainelInferiorConteudo
           aba={abaInferior}
-          aoMudarAba={setAbaInferior}
+          aoMudarAba={aoMudarAbaInferior}
           problemas={problemas}
           aoEscolherProblema={aoEscolherProblema}
+          mensagens={mensagens}
+          naoLidasMensagens={naoLidasMensagens}
+          aoLimparMensagens={() => setMensagens([])}
           entradasConsole={entradasConsole}
           aoLimparConsole={() => setEntradasConsole([])}
         />
       </PainelInferior>
 
-      <BarraStatus mensagem={statusMensagem} />
+      {modalNovoProjeto === 'confirmarDescarte' && (
+        <ModalConfirmarDescarte
+          tituloProjeto={projeto.titulo}
+          aoConfirmar={aoConfirmarDescarte}
+          aoCancelar={aoCancelarModalNovoProjeto}
+        />
+      )}
+      {modalNovoProjeto === 'novoProjeto' && <ModalNovoProjeto aoCriar={aoCriarProjeto} aoCancelar={aoCancelarModalNovoProjeto} />}
     </div>
   )
 }

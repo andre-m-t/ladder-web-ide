@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-17 (spec 002 — #25: degrau vazio, mensagens fora do editor, escada contínua e soltura da bobina) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-17 (spec 002 — #26: projeto de linguagem única, cabeçalho novo, aba Variáveis e painel inferior em 3 abas) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -304,9 +304,19 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - `celulaDeSoltura`: bobina solta em qualquer célula do degrau, inclusive linha de ramo, vai para a coluna 8; núcleo continua estrito
 - Verificação: `tsc` limpo, 435 testes vitest, e2e 2 passed, depósito ok; Chromium com mouse real: IDE limpa no Console, 3 degraus, bobina na coluna 2 e no ramo indo para a coluna 8, recusa por coluna ocupada na barra de status e no Console sem `role="alert"`, temas claro e escuro, reload de diagrama com erro abrindo em Problemas
 
+**Concluído — #26: projeto de linguagem única e IDE reorganizada (plano §17, D-17, 2026-09-17)**
+- **Projeto** (`frontend/src/projeto/projeto.ts`, autoral): `{ versao, titulo, linguagem: 'ld'|'st', diagrama|fonte }` em `ladderflow:projeto`; a IDE reabre o último projeto e **migra** `ladderflow:diagrama` (remove a chave antiga só depois de gravar a nova); corrompido abre vazio com aviso
+- **Novo projeto:** confirmação de descarte só quando há conteúdo, depois título (1–60) e linguagem em modal acessível; esqueleto ST **verificado no `iec2c` real** (exit 0) — o MATIEC recusa `VAR` vazio e corpo vazio, então o esqueleto traz uma variável e uma instrução de exemplo
+- **Cabeçalho em duas faixas:** Novo projeto, título + chip LD/ST, Compilar, Gravar, painel, tema; abaixo, abas **Lógica** e **Variáveis** (esta só em projeto Ladder). Em Ladder, Compilar e Gravar ficam desabilitados com o motivo ("depende da F8")
+- **Variáveis** em tabela de largura inteira (Nome | Tipo | Uso | Pino | Valor, linha "Adicionar variável" fixa, mapa de pinos recolhível); painel lateral e suas preferências removidos
+- **Painel inferior:** Problemas | **Mensagens** (recusas, com contador de não lidas que zera ao abrir) | Console; `BarraStatus` removida. A marca vermelha da célula recusada passa a sumir em 3 s (achado na verificação: sem texto ao lado, marca parada era lida como estado)
+- Verificação: `tsc` limpo, 499 testes vitest, e2e 4 cenários (LD com reload, criação de ST, corrompido, migração), depósito ok com `projeto/projeto.ts` no manifesto; Chromium com mouse real nos dois temas: cabeçalho, Lógica ↔ Variáveis, recusa em Mensagens com contador, Compilar desabilitado com motivo, fluxo de novo projeto com e sem conteúdo, foco devolvido ao botão
+
 **Pendências e limitações registradas**
 - **Limitação conhecida (D-15):** `set_reset_autodependente` usa o degrau inteiro como "caminho"; com ramo paralelo o aviso fica conservador demais em alguns casos. Reavaliar depois da fatia 4
 - Diagrama salvo descartado é sobrescrito na primeira gravação (o aviso já foi dado; não há cópia do conteúdo corrompido)
+- **Um projeto por vez:** não há biblioteca de projetos, nem abrir/salvar arquivo — "Novo projeto" substitui o atual. Fora do escopo da spec 002
+- Compilar e Gravar seguem indisponíveis em projeto Ladder até a **F8** existir
 - `carregarDiagrama` confere só a forma de degraus e variáveis, não cada elemento
 
 **Falta:** Fatia 4 (#15 SET/RESET, #16 CTU e `BLINK`, #17 `blink_ladder.st`, #18 SET/RESET/CTU no editor, #19 manifesto, #20 fechamento).
@@ -392,7 +402,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 ## Próximos passos, em ordem
 
 1. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-2. `/implementar 002` — Fatia 4 (#15 SET/RESET → #16 CTU ∥ #17 `blink_ladder.st` → #18 editor → #19 → #20) → **F7** → **F8**
+2. `/implementar 002` — Fatia 4 (#15 SET/RESET → #16 CTU ∥ #17 `blink_ladder.st` → #18 editor → #19 → #20) → **F7**; depois **F8**, que destrava Compilar/Gravar em projeto Ladder
 3. **F9** e início da coleta sistemática de métricas (**F10**)
 
 ## Bloqueado aguardando hardware
@@ -432,3 +442,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-17 | #24 da spec 002 — degrau responsivo, pinos, ícones, ramo | Ajustes do autor sobre a #23: degrau na largura do contêiner, variável Memória explícita e pino GPIO no seletor, mapa de pinos em duas tabelas, header e paleta com `lucide-react`, MATIEC/toolchain só no console, e ramo paralelo por arrasto com alça (antecipado da #15). Frentes N, L, V, I em paralelo; revisão visual devolveu dois defeitos do painel à frente V. 344 testes vitest; contato de selo montado com mouse real no Chromium |
 | 2026-09-17 | Fatias 2 e 3 da spec 002 (#9–#14) | Commit da #24 antes de começar. Autor escolheu executar as duas fatias juntas e a lista de problemas numa aba do painel inferior (D-15). Levas: N1 (degraus) ∥ N2 (Q-6, persistência) → L (editor) ∥ I (IDE) → E (e2e Playwright). Revisão corrigiu JSDoc que chamava de "mais restrita" a leitura mais abrangente de `set_reset_autodependente`; o vitest passou a pegar o spec do Playwright e foi restrito a `src/`. 410 testes vitest, e2e 2 passed, Chromium com mouse real (degraus, duplicada, foco, mover entre degraus) |
 | 2026-09-17 | #25 da spec 002 — ajustes de UX | Commit e push das fatias 2–3 (`3ab1307`). Autor: degrau vazio não é erro, "caminho" mantido como limitação, aba inicial pelo erro carregado, mensagens fora do editor (barra de status + Console, escolhida após comparar com toast e aba própria), escada contínua no padrão dos editores Ladder, bobina solta vai à coluna 8. Frentes N ∥ L ∥ I. Revisão pegou recusa da alça a cada `pointermove` e vão entre trilhos; corrigidos. 435 testes vitest, e2e verde, Chromium nos dois temas |
+| 2026-09-17 | #26 da spec 002 — projeto e IDE reorganizada | Autor trouxe referências visuais: cabeçalho defasado, variáveis como aba e painel inferior mais dividido. Q-2 revista: um projeto por linguagem, criado por Novo projeto (descarte confirmado, título e linguagem), isolando a compilação. Frentes P (projeto) ∥ M (modais) ∥ H (cabeçalho/painel) ∥ L (variáveis) → A (integração) → E (e2e); a primeira tentativa das quatro caiu por limite de sessão antes de escrever e foi redespachada. Esqueleto ST validado no iec2c. 499 testes vitest, e2e com 4 cenários, Chromium nos dois temas |

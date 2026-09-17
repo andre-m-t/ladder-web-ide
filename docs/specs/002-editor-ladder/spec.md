@@ -142,6 +142,9 @@ desligar com atraso) continuam fora** — ver §7.
   *Revisão aditiva (2026-09-17):* o controlador oferece **até 8 entradas e 8
   saídas** localizadas (pinagem revista na Q-5 da spec 001); o estado atual de
   cada variável será exibido ao vivo quando houver simulação (F9).
+  *Revisão aditiva (2026-09-17):* as variáveis de um projeto Ladder ficam numa
+  **aba "Variáveis"** ao lado da aba "Lógica", em largura inteira, em vez de um
+  painel lateral.
 - **RF-10.** O sistema deve permitir vincular um elemento a uma variável
   **interna**, sem endereço do controlador.
   *Revisão aditiva (2026-09-17):* na interface, a variável interna chama-se
@@ -299,6 +302,7 @@ data, decisão e justificativa; não apague o enunciado.
 - **Data da decisão:** 2026-09-16
 - **Decisão:** **Convivem**, em modos alternáveis ("Ladder" e "ST"). A caixa de ST da F6 permanece.
 - **Justificativa:** Até a serialização Ladder → ST (F8) existir, a caixa de ST é o único caminho que compila e grava; removê-la regrediria a fatia vertical da spec 001 (§2).
+- **Revisão aditiva (2026-09-17):** a convivência passa a ser **por projeto**, não por abas na mesma tela. A IDE trabalha com um **projeto de linguagem única** (Ladder ou ST), criado por "Novo projeto" (confirmação de descarte quando há conteúdo, depois título e linguagem). O editor de ST continua disponível — num projeto ST — e a fatia vertical da spec 001 segue intacta. **Justificativa:** com os dois modos abertos ao mesmo tempo não fica claro o que o botão Compilar envia; um projeto por linguagem isola os dois ambientes. Até a F8, Compilar e Gravar ficam desabilitados em projeto Ladder, com a explicação na interface.
 
 ### Q-3 — Limites de tamanho do diagrama
 - **Enunciado:** há um limite máximo de colunas por degrau e de degraus por

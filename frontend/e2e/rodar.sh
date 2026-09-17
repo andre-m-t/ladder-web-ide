@@ -1,21 +1,32 @@
 #!/usr/bin/env bash
 #
-# Roda o teste ponta a ponta (e2e) do editor Ladder — spec 002, tarefa #14,
-# CA-8 (RF-13, persistência do diagrama). Contra `vite preview`, num
-# contêiner Playwright avulso, SEM publicar porta nenhuma (Regra 5 do
-# CLAUDE.md: as portas 8000 e 5173 já estão ocupadas por outros projetos
-# nesta máquina; aqui a 4173 fica só dentro do contêiner, sem `-p`).
+# Roda o teste ponta a ponta (e2e) da IDE — spec 002, tarefa #26 (frente E).
+# Contra `vite preview`, num contêiner Playwright avulso, SEM publicar porta
+# nenhuma (Regra 5 do CLAUDE.md: as portas 8000 e 5173 já estão ocupadas por
+# outros projetos nesta máquina; aqui a 4173 fica só dentro do contêiner,
+# sem `-p`).
+#
+# A partir da tarefa #26 a IDE trabalha com um **projeto** de linguagem única
+# (`ladderflow:projeto`, `frontend/src/projeto/projeto.ts`), criado pelo botão
+# "Novo projeto" — não mais duas abas Ladder/ST lado a lado.
 #
 # O que é verificado:
-#   - CA-8: montar o diagrama IO_ESPELHO pela UI (arrastar contato NA e
-#     bobina, vincular às variáveis "entrada" %IX0.1 e "saida" %QX0.1),
-#     conferir "Problemas (0)", recarregar a página e confirmar que os
-#     mesmos elementos continuam nas mesmas células e que o localStorage
-#     guarda o envelope `{ versao: 1, diagrama }` (frontend/src/ladder/
-#     persistencia.ts); a aba ST continua com o programa de exemplo intacto.
-#   - Caminho de descarte: um `localStorage['ladderflow:diagrama']`
-#     corrompido volta, ao recarregar, a um diagrama vazio (um degrau em
-#     branco), com o aviso de descarte registrado no console da IDE.
+#   - CA-8 (RF-13), projeto Ladder: declarar "entrada" (%IX0.1) e "saida"
+#     (%QX0.1) pela aba Variáveis, montar o espelho na aba Lógica arrastando
+#     contato NA e bobina, conferir "Problemas 0", recarregar e confirmar que
+#     os mesmos elementos continuam nas mesmas células e que o localStorage
+#     guarda o envelope `{ versao: 1, linguagem: 'ld', diagrama }`.
+#   - "Novo projeto", a partir desse projeto com conteúdo: confirmar o
+#     descarte, criar um projeto "Semáforo" em Texto Estruturado e checar que
+#     o cabeçalho muda (título + chip "st"), a aba Variáveis desaparece, o
+#     editor de texto mostra o esqueleto ST, e que esse projeto novo também
+#     sobrevive a um reload.
+#   - Caminho de descarte: um `localStorage['ladderflow:projeto']` corrompido
+#     volta, ao recarregar, a um projeto Ladder "Sem título" vazio, com o
+#     aviso de descarte na aba Console (a barra de status saiu na tarefa #26).
+#   - Migração: só `localStorage['ladderflow:diagrama']` (formato anterior à
+#     tarefa #26) presente migra, ao recarregar, para um projeto Ladder "Sem
+#     título" com aquele diagrama, e a chave antiga é removida.
 #
 # O back-end fica FORA do ar de propósito: a chamada a `/health` falha e a
 # compilação não é exercida — isso é esperado, RF-13 não depende do

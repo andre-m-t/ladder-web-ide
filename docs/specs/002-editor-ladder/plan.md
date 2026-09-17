@@ -626,3 +626,40 @@ Pedido do autor após usar a IDE. Tarefa #25. D-15 continua, com os ajustes abai
   trocar de aba automaticamente na recusa; normalizar a célula dentro de
   `inserirElemento` (esconderia a regra de posição no núcleo).
 - **Requisito atendido:** RF-1, RF-8, RF-11, RF-12; CA-4, CA-5, CA-6.
+
+## 17. Revisão aditiva — projeto de linguagem única, cabeçalho, aba Variáveis e painel inferior (2026-09-17)
+
+Pedido do autor com referências visuais (`.claude/references/modelo_header.png`,
+`modelo_vars.png`, só como inspiração — nenhum código ou asset copiado). Tarefa
+#26. Revisa D-6 (modos Ladder/ST) e, em D-16, a barra de status.
+
+### D-17: projeto, cabeçalho em duas faixas, aba Variáveis e painel em três abas
+- **Escolha:**
+  - **Projeto** (`frontend/src/projeto/projeto.ts`): `{ versao: 1, titulo,
+    linguagem: 'ld' | 'st', diagrama | fonte }` em `localStorage["ladderflow:projeto"]`.
+    A carga reabre o último projeto; na primeira vez migra
+    `ladderflow:diagrama` para um projeto Ladder "Sem título" e remove a chave
+    antiga só depois de gravar a nova; corrompido vira projeto vazio com aviso.
+  - **Novo projeto:** se o projeto atual tem conteúdo, modal de confirmação de
+    descarte (foco inicial em Cancelar); depois modal de título (1–60 caracteres)
+    e linguagem. Projeto ST nasce com esqueleto `PROGRAM`/`CONFIGURATION` mínimo.
+  - **Cabeçalho em duas faixas:** (1) Novo projeto, título + chip LD/ST,
+    Compilar, Gravar, painel inferior, tema; (2) abas da área de edição
+    **Lógica** e **Variáveis** (esta só em projeto Ladder). Em projeto Ladder,
+    Compilar e Gravar ficam desabilitados com o motivo (dependem da F8).
+  - **Variáveis** em largura inteira (tabela Nome | Tipo | Uso | Pino | Valor,
+    linha "Adicionar variável…" no fim, mapa de pinos recolhível). Sai o painel
+    lateral direito e suas preferências de largura.
+  - **Painel inferior:** abas **Problemas** (diagnóstico persistente),
+    **Mensagens** (recusas de ação, com contador de não lidas até a aba ser
+    aberta) e **Console** (servidor, compilação, gravação). A `BarraStatus` da
+    D-16 sai; recusa não troca de aba sozinha.
+- **Por quê:** abas Ladder e ST lado a lado deixam ambíguo o que é compilado;
+  o painel lateral tirava largura da grade; misturar recusas com o log de
+  compilação e mostrá-las numa barra efêmera fazia o estudante perdê-las.
+- **Alternativas descartadas:** manter as abas LD/ST; painel inferior com
+  filtros por severidade (Todos/Erros/Avisos/Info), que misturaria diagnóstico
+  persistente com eventos transitórios; aba Variáveis também em projeto ST
+  (duas fontes de verdade com o `VAR ... END_VAR` do texto); esconder Compilar
+  em projeto Ladder.
+- **Requisito atendido:** RF-9, RF-12, RF-13; Q-2 (revisão aditiva).
