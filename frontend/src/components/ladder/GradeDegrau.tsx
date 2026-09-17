@@ -57,7 +57,30 @@
  * recusa/prévia/seleção continua tendo a palavra final sobre o preenchimento
  * da célula: o problema é só um selo por cima). Um problema com
  * `elementoId: null` (ex.: `rung_incompleto`) marca o degrau inteiro, com um
- * selo no cabeçalho (ícone + texto visível, não só `aria-hidden`).
+ * selo na calha (tarefa #25: ícone só, `role="img"` com `aria-label` — sem
+ * texto visível, ver nota abaixo).
+ *
+ * **Escada contínua, sem cartão por degrau (tarefa #25):** o antigo `figure`
+ * com borda/fundo/cabeçalho "Degrau 001" dá lugar a uma única escada: cada
+ * degrau é uma linha (calha + SVG) sem margem vertical entre blocos, e os
+ * trilhos de energia do próprio SVG vão de `y=0` até `y=altura` (não só ao
+ * redor da linha 0 como antes) — com blocos emendados (sem `my-*`), os
+ * trilhos de um degrau encontram os do seguinte e parecem uma escada única.
+ * A calha (coluna estreita à esquerda do SVG) leva o número do degrau em
+ * fonte monoespaçada discreta, o selo de problema do degrau (ícone só) e os
+ * botões de inserir/remover — visíveis no hover do bloco (`group-hover`) ou
+ * quando qualquer célula/botão dele tem foco (`group-focus-within`), mas
+ * sempre no fluxo de tabulação (nunca `display:none`/`disabled`). A separação
+ * visual entre degraus é uma borda tracejada sutil, mas só na calha — nunca
+ * sob o SVG — para não cortar os trilhos contínuos.
+ *
+ * **Nenhuma mensagem em texto dentro do editor (tarefa #25):** o parágrafo
+ * `role="alert"` que ficava abaixo da grade, e o `<title>` do motivo na
+ * célula de prévia inválida, saíram — quem decide o que fazer com uma recusa
+ * é `EditorLadder` via `aoRecusar` (prop dele, não deste componente). Este
+ * componente continua marcando a célula recusada com `aria-invalid` (sem
+ * `aria-describedby`, já que não há mais parágrafo para apontar) e a prévia
+ * inválida com a mesma cor de perigo — só a exposição em texto visível saiu.
  */
 import {
   useEffect,
@@ -161,8 +184,10 @@ export interface GradeDegrauProps {
   aoPassarCelula?: (rungId: string, celula: Celula | null) => void
   /** Última recusa de uma jogada sobre este degrau, ou null/ausente. `celula`
    * fica ausente quando a recusa não vem de uma célula específica (ex.:
-   * remover degrau, tarefa #10) — o alerta aparece do mesmo jeito, só sem
-   * marcar nenhuma célula como inválida. */
+   * remover degrau, tarefa #10) — sem marcar nenhuma célula como inválida
+   * nesse caso. Só marca `aria-invalid` na célula (tarefa #25): o motivo em
+   * texto não aparece mais aqui, `EditorLadder` é quem o repassa a
+   * `aoRecusar`. */
   recusa?: { celula?: Celula; motivo: string } | null
   /** pointerdown na alça de um ramo (D-14): início do arrasto geométrico local. */
   aoIniciarArrastoAlca?: (evento: ReactPointerEvent<SVGGElement>, rungId: string, ramoId: string) => void
@@ -406,7 +431,6 @@ export default function GradeDegrau({
   const y0 = yDaLinha(0)
   const xEsquerda = MARGEM_ESQUERDA
   const xDireita = MARGEM_ESQUERDA + COLUNAS_POR_DEGRAU * larguraCelula
-  const idAlerta = `recusa-${rung.id}`
 
   function aoEntrarNaCelula(celula: Celula) {
     aoPassarCelula?.(rung.id, celula)
@@ -449,7 +473,6 @@ export default function GradeDegrau({
         aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui)}
         aria-selected={ativo}
         aria-invalid={recusada ? 'true' : undefined}
-        aria-describedby={recusada ? idAlerta : undefined}
         data-terminal={ehTerminal ? 'true' : undefined}
         data-previa={previaAqui ? previaAqui.tipo : undefined}
         data-problema={problemaAqui ? problemaAqui.severidade : undefined}
@@ -465,7 +488,6 @@ export default function GradeDegrau({
         onBlur={() => aoSairDaCelula()}
         className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
       >
-        {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
         <rect
           x={cx}
           y={y - ALTURA_LINHA / 2}
@@ -554,35 +576,44 @@ export default function GradeDegrau({
   }
 
   return (
-    <figure className="my-4 overflow-hidden rounded-lg border border-ide-borda bg-ide-painel" aria-label={`Degrau ${indice + 1}`}>
-      <figcaption className="flex items-center gap-2 border-b border-ide-borda bg-ide-elevado px-3 py-1.5">
-        <span className="rounded bg-ide-destaque px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ide-destaque-texto">
+    <div className="group flex">
+      {/* Calha: número do degrau, selo de problema (ícone só) e ações de
+       * inserir/remover — tarefa #25. A borda tracejada (só aqui, nunca sob o
+       * SVG) separa visualmente este degrau do anterior sem cortar os
+       * trilhos, que são contínuos no SVG ao lado. */}
+      <div
+        className={`flex w-16 flex-none flex-col items-center gap-1 pt-6 ${
+          indice > 0 ? 'border-t border-dashed border-ide-borda/60' : ''
+        }`}
+      >
+        <span className="select-none whitespace-nowrap font-mono text-[10px] text-ide-suave">
           Degrau {numeroDegrau(indice)}
         </span>
 
         {problemaRung && (
           <span
-            className={
-              problemaRung.severidade === 'erro'
-                ? 'inline-flex items-center gap-1 rounded bg-ide-perigo/10 px-1.5 py-0.5 text-[11px] font-medium text-ide-perigo'
-                : 'inline-flex items-center gap-1 rounded bg-ide-aviso/10 px-1.5 py-0.5 text-[11px] font-medium text-ide-aviso'
-            }
+            role="img"
+            aria-label={`${problemaRung.severidade}: ${problemaRung.mensagem}`}
+            className={problemaRung.severidade === 'erro' ? 'text-ide-perigo' : 'text-ide-aviso'}
           >
-            {problemaRung.severidade === 'erro' ? <CircleAlert aria-hidden="true" size={12} /> : <TriangleAlert aria-hidden="true" size={12} />}
-            {problemaRung.severidade}: {problemaRung.mensagem}
+            {problemaRung.severidade === 'erro' ? <CircleAlert aria-hidden="true" size={13} /> : <TriangleAlert aria-hidden="true" size={13} />}
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
+        {/* opacity-0 por padrão: visível no hover do bloco (group-hover) ou
+         * quando qualquer célula/botão dele tem foco (group-focus-within) —
+         * nunca removida do fluxo de tabulação, então continua acessível por
+         * teclado mesmo antes de aparecer visualmente. */}
+        <div className="flex flex-col gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100">
           {aoInserirDegrauAbaixo && (
             <button
               type="button"
               onClick={aoInserirDegrauAbaixo}
               aria-label={`Inserir degrau abaixo do degrau ${indice + 1}`}
               title="Inserir degrau abaixo"
-              className="rounded p-1 text-ide-suave outline-none hover:bg-ide-painel hover:text-ide-texto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+              className="rounded p-0.5 text-ide-suave outline-none hover:bg-ide-elevado hover:text-ide-texto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
             >
-              <Plus aria-hidden="true" size={14} />
+              <Plus aria-hidden="true" size={12} />
             </button>
           )}
           {aoRemoverDegrau && (
@@ -591,19 +622,22 @@ export default function GradeDegrau({
               onClick={aoRemoverDegrau}
               aria-label={`Remover degrau ${indice + 1}`}
               title="Remover degrau"
-              className="rounded p-1 text-ide-suave outline-none hover:bg-ide-perigo/10 hover:text-ide-perigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+              className="rounded p-0.5 text-ide-suave outline-none hover:bg-ide-perigo/10 hover:text-ide-perigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
             >
-              <Trash2 aria-hidden="true" size={14} />
+              <Trash2 aria-hidden="true" size={12} />
             </button>
           )}
         </div>
-      </figcaption>
+      </div>
 
-      <div ref={wrapperRef} className="overflow-x-auto p-3">
-        <svg ref={svgRef} role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="overflow-visible">
-          {/* trilhos de energia esquerdo e direito, mais espessos que o fio */}
-          <line x1={xEsquerda} y1={y0 - ALTURA_LINHA / 2} x2={xEsquerda} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
-          <line x1={xDireita} y1={y0 - ALTURA_LINHA / 2} x2={xDireita} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
+      <div ref={wrapperRef} className="min-w-0 flex-1 overflow-x-auto">
+        <svg ref={svgRef} role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="block overflow-visible">
+          {/* trilhos de energia esquerdo e direito, mais espessos que o fio —
+           * do topo ao fim do bloco (não só ao redor da linha 0), para que,
+           * sem espaço vertical entre os blocos de cada degrau, os trilhos se
+           * emendem visualmente numa escada única (tarefa #25). */}
+          <line x1={xEsquerda} y1={0} x2={xEsquerda} y2={altura} strokeWidth={5} className="stroke-ide-trilho" />
+          <line x1={xDireita} y1={0} x2={xDireita} y2={altura} strokeWidth={5} className="stroke-ide-trilho" />
           {/* fio horizontal atravessando as células vazias */}
           <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-ide-fio" />
 
@@ -627,12 +661,6 @@ export default function GradeDegrau({
           {rung.ramos.map((ramo) => alcaDoRamo(ramo))}
         </svg>
       </div>
-
-      {recusa && (
-        <p id={idAlerta} role="alert" className="mx-3 mb-3 rounded border border-ide-perigo/40 bg-ide-perigo/10 p-2 text-sm text-ide-perigo">
-          {recusa.motivo}
-        </p>
-      )}
-    </figure>
+    </div>
   )
 }

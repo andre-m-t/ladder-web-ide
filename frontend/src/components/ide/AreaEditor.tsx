@@ -40,6 +40,10 @@ export interface AreaEditorProps {
   aoMudarFonte: (fonte: string) => void
   compilando: boolean
   erroCompilacao: ErroDeCompilacao | null
+  /** Recusa de uma jogada do editor Ladder (tarefa #25, contrato fixado com a
+   * frente L): a IDE mostra o motivo na `BarraStatus` e no Console, em vez do
+   * editor mostrar o texto sozinho. Repassado cru a `EditorLadder`. */
+  aoRecusar: (motivo: string) => void
 }
 
 export default function AreaEditor({
@@ -52,12 +56,13 @@ export default function AreaEditor({
   aoMudarFonte,
   compilando,
   erroCompilacao,
+  aoRecusar,
 }: AreaEditorProps) {
   return (
     <div className="min-w-0 flex-1 overflow-auto bg-ide-fundo p-4">
       {aba === 'ladder' && (
         <div id="painel-ladder" role="tabpanel" aria-labelledby="aba-ladder" className="h-full">
-          <EditorLadder diagrama={diagrama} aoMudar={aoMudarDiagrama} problemas={problemas} foco={foco} />
+          <EditorLadder diagrama={diagrama} aoMudar={aoMudarDiagrama} problemas={problemas} foco={foco} aoRecusar={aoRecusar} />
         </div>
       )}
 

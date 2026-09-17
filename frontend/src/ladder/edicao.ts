@@ -8,7 +8,7 @@
  * `role="alert"`, sem alterar o diagrama em edição).
  */
 
-import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX } from './modelo'
+import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX, ehBobina } from './modelo'
 import type { Celula, Diagrama, Elemento, Ramo, Rung, Variavel } from './modelo'
 import { descreverCelula, motivoPosicaoInvalida } from './validacao'
 import { enderecoValido } from './enderecos'
@@ -110,6 +110,28 @@ function encontrarElemento(diagrama: Diagrama, elementoId: string): { rung: Rung
 
 function celulaOcupada(rung: Rung, celula: Celula): boolean {
   return rung.elementos.some((e) => e.celula.linha === celula.linha && e.celula.coluna === celula.coluna)
+}
+
+/**
+ * Célula de destino que a UI deve usar ao soltar `tipo` sobre `celula`, antes
+ * de chamar `inserirElemento`/`moverElemento`. Decisão do autor (2026-09-17):
+ * soltar uma bobina em qualquer célula do degrau — trilho principal ou linha
+ * de ramo — a leva direto para a coluna terminal (`COLUNA_TERMINAL`, linha
+ * 0), em vez de a UI recusar o drop por a célula não ser a terminal. Para
+ * todo outro tipo (contato), a célula não muda: é devolvida como veio, sem
+ * cópia nem alteração.
+ *
+ * Esta função só decide PARA ONDE a UI deve tentar o drop — não valida nada.
+ * O núcleo continua estrito: `inserirElemento` e `moverElemento` não mudam e
+ * seguem recusando bobina fora da coluna terminal (célula ocupada, posição
+ * inválida etc. continuam recusa de `inserirElemento`/`moverElemento`, não
+ * desta função).
+ */
+export function celulaDeSoltura(tipo: Elemento['tipo'], celula: Celula): Celula {
+  if (ehBobina(tipo)) {
+    return { linha: 0, coluna: COLUNA_TERMINAL }
+  }
+  return celula
 }
 
 /** Insere um novo elemento (contato ou bobina) em `rungId`, na `celula` dada. */

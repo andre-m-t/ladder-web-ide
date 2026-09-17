@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-17 (spec 002 — fatias 2 e 3, #9–#14: vários degraus, regras da Q-6, persistência, aba Problemas e e2e) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-17 (spec 002 — #25: degrau vazio, mensagens fora do editor, escada contínua e soltura da bobina) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -297,8 +297,15 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Depósito: `persistencia.ts` e `ListaProblemas.tsx` em `REQUIRED_FILES`; `--verificar` ok
 - Verificação: `tsc` limpo, 410 testes vitest, `vite build` (JS 422 kB / 129 kB gzip), pytest `not slow` 63 passed, e2e 2 passed; Chromium com mouse real: dois degraus, bobina duplicada marcada nas duas células e listada, clique no problema a partir da aba ST foca a célula certa, contato movido do degrau 2 ao 1, remover degrau limpa a duplicada, recusa do último degrau visível
 
-**Pendências registradas nas fatias 2 e 3**
-- IDE recém-aberta já mostra **Problemas (1)** em vermelho ("degrau 1 sem nenhuma bobina"): correto pela validação, mas é o primeiro contato do estudante — decidir se degrau totalmente vazio deve ser erro, aviso ou ignorado
+**Concluído — #25: ajustes de UX do autor (plano §16, D-16, 2026-09-17)**
+- Degrau vazio (sem elemento nem ramo) não gera problema; IDE limpa abre no Console com "Problemas (0)"; diagrama salvo com erro abre em Problemas (aviso não muda a aba); preferência da aba inferior removida
+- Nenhum texto dentro do editor: recusa de ação vai à nova `BarraStatus` (rodapé, some em 6 s) e ao Console via `aoRecusar`; problemas só na aba; no degrau ficam ícones e prévia vermelha, com texto no nome acessível. A prévia da alça não reporta recusa a cada movimento — só ao soltar (achado na revisão)
+- Escada contínua: sem cartão por degrau, trilhos emendados, número e ações na calha. Revisão visual pegou vão entre os trilhos (espaçamento entre blocos e SVG *inline*) — corrigido
+- `celulaDeSoltura`: bobina solta em qualquer célula do degrau, inclusive linha de ramo, vai para a coluna 8; núcleo continua estrito
+- Verificação: `tsc` limpo, 435 testes vitest, e2e 2 passed, depósito ok; Chromium com mouse real: IDE limpa no Console, 3 degraus, bobina na coluna 2 e no ramo indo para a coluna 8, recusa por coluna ocupada na barra de status e no Console sem `role="alert"`, temas claro e escuro, reload de diagrama com erro abrindo em Problemas
+
+**Pendências e limitações registradas**
+- **Limitação conhecida (D-15):** `set_reset_autodependente` usa o degrau inteiro como "caminho"; com ramo paralelo o aviso fica conservador demais em alguns casos. Reavaliar depois da fatia 4
 - Diagrama salvo descartado é sobrescrito na primeira gravação (o aviso já foi dado; não há cópia do conteúdo corrompido)
 - `carregarDiagrama` confere só a forma de degraus e variáveis, não cada elemento
 
@@ -424,3 +431,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-17 | #23 da spec 002 — IDE, segundo clique, variáveis, 8/8 E/S | Autor pediu redesign estilo IDE (referência visual sem cópia), modal só no segundo clique e variáveis simplificadas com até 8 entradas/8 saídas. Frentes F (pinagem 8/8 no firmware + Q-5 da spec 001), L (editor), V (variáveis), I (casca de IDE, console, temas) em paralelo; as quatro caíram por limite de API antes de escrever e foram retomadas. 269 testes vitest, pytest completo com `slow` 70 passed, compilação real verificada no console da IDE em Chromium |
 | 2026-09-17 | #24 da spec 002 — degrau responsivo, pinos, ícones, ramo | Ajustes do autor sobre a #23: degrau na largura do contêiner, variável Memória explícita e pino GPIO no seletor, mapa de pinos em duas tabelas, header e paleta com `lucide-react`, MATIEC/toolchain só no console, e ramo paralelo por arrasto com alça (antecipado da #15). Frentes N, L, V, I em paralelo; revisão visual devolveu dois defeitos do painel à frente V. 344 testes vitest; contato de selo montado com mouse real no Chromium |
 | 2026-09-17 | Fatias 2 e 3 da spec 002 (#9–#14) | Commit da #24 antes de começar. Autor escolheu executar as duas fatias juntas e a lista de problemas numa aba do painel inferior (D-15). Levas: N1 (degraus) ∥ N2 (Q-6, persistência) → L (editor) ∥ I (IDE) → E (e2e Playwright). Revisão corrigiu JSDoc que chamava de "mais restrita" a leitura mais abrangente de `set_reset_autodependente`; o vitest passou a pegar o spec do Playwright e foi restrito a `src/`. 410 testes vitest, e2e 2 passed, Chromium com mouse real (degraus, duplicada, foco, mover entre degraus) |
+| 2026-09-17 | #25 da spec 002 — ajustes de UX | Commit e push das fatias 2–3 (`3ab1307`). Autor: degrau vazio não é erro, "caminho" mantido como limitação, aba inicial pelo erro carregado, mensagens fora do editor (barra de status + Console, escolhida após comparar com toast e aba própria), escada contínua no padrão dos editores Ladder, bobina solta vai à coluna 8. Frentes N ∥ L ∥ I. Revisão pegou recusa da alça a cada `pointermove` e vão entre trilhos; corrigidos. 435 testes vitest, e2e verde, Chromium nos dois temas |

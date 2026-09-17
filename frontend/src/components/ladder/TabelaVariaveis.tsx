@@ -43,6 +43,12 @@
  * da área rolável da lista, crescia por conta própria ao abrir e espremia o
  * cabeçalho da tabela — agora formulário, lista e mapa dividem uma única
  * área `overflow-y-auto`, com só o cabeçalho "Variáveis" e as abas fixos.
+ *
+ * **Nenhuma mensagem em texto (tarefa #25):** o `<p role="alert">` que
+ * mostrava a recusa do núcleo (nome duplicado, endereço em uso...) saiu —
+ * junto a prop `erro`. `PainelVariaveis` é quem decide o que fazer com uma
+ * recusa agora, via `aoRecusar`; este componente não sabe mais nada sobre
+ * recusa nenhuma.
  */
 import {
   useEffect,
@@ -70,8 +76,6 @@ export interface TabelaVariaveisProps {
   variaveis: Variavel[]
   /** Estado ao vivo por nome de variável (ainda sem fonte — estrutura para o simulador, F9). */
   valores?: Record<string, boolean>
-  /** Recusa do núcleo a exibir (`role="alert"`), preenchida por `PainelVariaveis`. */
-  erro?: string | null
   aoDeclarar: (v: { nome: string; endereco?: string }) => void
   aoAtualizar: (nomeAtual: string, v: { nome: string; endereco?: string }) => void
   aoRemover: (nome: string) => void
@@ -559,7 +563,7 @@ function MapaDePinos({ variaveis }: { variaveis: Variavel[] }) {
   )
 }
 
-export default function TabelaVariaveis({ variaveis, valores, erro, aoDeclarar, aoAtualizar, aoRemover }: TabelaVariaveisProps) {
+export default function TabelaVariaveis({ variaveis, valores, aoDeclarar, aoAtualizar, aoRemover }: TabelaVariaveisProps) {
   const [filtro, setFiltro] = useState<ClasseFiltro>('todas')
 
   const visiveis = filtro === 'todas' ? variaveis : variaveis.filter((v) => classeDaVariavel(v) === filtro)
@@ -647,12 +651,6 @@ export default function TabelaVariaveis({ variaveis, valores, erro, aoDeclarar, 
             </table>
           )}
         </div>
-
-        {erro && (
-          <p role="alert" className="mx-3 mb-2 rounded border border-ide-perigo bg-ide-elevado p-2 text-xs text-ide-perigo">
-            {erro}
-          </p>
-        )}
 
         <MapaDePinos variaveis={variaveis} />
       </div>

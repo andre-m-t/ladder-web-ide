@@ -151,11 +151,19 @@ desligar com atraso) continuam fora** — ver §7.
   exige, e elemento em posição inválida da grade. Também identifica duas
   bobinas simples vinculadas à mesma variável (erro) e SET/RESET da mesma
   variável acionados por condição que depende dela própria (aviso) — ver Q-6.
+  *Revisão aditiva (2026-09-17):* degrau **vazio** (sem elemento nem ramo) não
+  é degrau incompleto — é espaço em branco, e não gera problema. Degrau com ao
+  menos um elemento ou ramo e sem bobina continua incompleto (erro).
 - **RF-12.** Quando a validação de RF-11 encontrar um problema, o sistema deve
   sinalizar visualmente o erro, de forma distinguível do estado válido, e
   **nunca** aceitar a estrutura inválida em silêncio (cf. §3 da Constituição)
   — impedindo a ação que a causaria ou marcando-a como inválida até ser
   corrigida.
+  *Revisão aditiva (2026-09-17):* a sinalização textual sai de dentro do
+  editor. Problemas do diagrama aparecem na aba **Problemas**; a recusa de uma
+  ação aparece na **barra de status** da IDE e fica registrada no **Console**.
+  No degrau permanecem só sinais sem texto (ícone na célula ou no degrau com
+  problema, prévia vermelha durante o arrasto), com o texto no nome acessível.
 - **RF-13.** O sistema deve manter o diagrama em edição presente na sessão do
   navegador, sem envolver o servidor (cf. §6 da Constituição), sobrevivendo
   ao fechamento da aba e do navegador (Q-1, decidida).
@@ -185,6 +193,10 @@ desligar com atraso) continuam fora** — ver §7.
 - **CA-5 (RF-1/RF-11).** Dado um diagrama em edição, quando a pessoa tenta
   posicionar um elemento fora de uma posição válida da grade, então o sistema
   impede a ação ou sinaliza a posição como inválida.
+  *Revisão aditiva (2026-09-17):* soltar uma **bobina** em qualquer célula de um
+  degrau a posiciona na coluna terminal da linha principal (a única válida
+  para ela); a recusa ocorre quando essa coluna já está ocupada. Contato na
+  coluna terminal segue recusado.
 - **CA-6 (RF-8).** Dado um diagrama com um degrau, quando a pessoa insere um
   novo degrau, então o diagrama passa a ter dois degraus editáveis de forma
   independente; quando ela remove um deles, o outro permanece intacto.

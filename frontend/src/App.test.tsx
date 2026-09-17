@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { IO_ESPELHO } from './ladder/fixtures'
-import type { Diagrama } from './ladder/modelo'
+import { COLUNA_TERMINAL, type Diagrama } from './ladder/modelo'
 import { CHAVE_DIAGRAMA } from './ladder/persistencia'
 
 function respostaJson(corpo: unknown, status = 200): Response {
@@ -18,6 +18,48 @@ const HEALTH_OK = {
   status: 'ok',
   iec2c: { available: true, path: '/usr/local/bin/iec2c', version: 'v1.0.0' },
   esp_idf: { available: true, path: '/opt/esp-idf/idf.py', version: 'v5.1.2' },
+}
+
+/** Diagrama com um contato sem bobina — `rung_incompleto` (erro), tarefa #13
+ * e #25. Reaproveitado pelo teste de contagem de problemas e pelo teste da
+ * aba inicial do painel inferior. */
+const DIAGRAMA_COM_ERRO: Diagrama = {
+  versao: 1,
+  variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' }],
+      ramos: [],
+    },
+  ],
+}
+
+/** Diagrama só com `set_reset_autodependente` (aviso, Q-6/D-10) — SET de `x`
+ * num degrau com um contato de `x`, e RESET de `x` em outro, também com
+ * contato de `x`. Sem erros: variáveis declaradas, cada degrau termina numa
+ * bobina, nenhuma posição inválida (tarefa #25). */
+const DIAGRAMA_SO_COM_AVISO: Diagrama = {
+  versao: 1,
+  variaveis: [{ nome: 'x', tipo: 'BOOL' }],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'x' },
+        { id: 'e2', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'x' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r2',
+      elementos: [
+        { id: 'e3', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'x' },
+        { id: 'e4', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'x' },
+      ],
+      ramos: [],
+    },
+  ],
 }
 
 function urlDaRequisicao(input: RequestInfo | URL): string {
@@ -267,18 +309,7 @@ describe('App', () => {
 
   it('a contagem "Problemas (N)" reflete validarDiagrama (contato sem bobina)', async () => {
     const usuario = userEvent.setup()
-    const diagramaComContatoSemBobina: Diagrama = {
-      versao: 1,
-      variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
-      rungs: [
-        {
-          id: 'r1',
-          elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' }],
-          ramos: [],
-        },
-      ],
-    }
-    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: diagramaComContatoSemBobina }))
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_COM_ERRO }))
 
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
@@ -293,5 +324,64 @@ describe('App', () => {
     const grupoErros = screen.getByRole('alert')
     expect(grupoErros).toBeInTheDocument()
     expect(within(grupoErros).getByText(/sem nenhuma bobina/)).toBeInTheDocument()
+  })
+
+  // -- Aba inicial do painel inferior (tarefa #25) -------------------------
+
+  it('IDE limpa (localStorage vazio) abre com a aba Console selecionada e "Problemas (0)"', async () => {
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    // Diagrama vazio (sem elementos, sem ramos) não gera problema algum —
+    // regra da frente N (validação): um degrau em branco não é "incompleto".
+    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Problemas (0)' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('diagrama salvo com erro (um contato sem bobina) abre com a aba Problemas selecionada', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_COM_ERRO }))
+
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    expect(screen.getByRole('tab', { name: /problemas \(\d+\)/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('diagrama salvo só com aviso (SET/RESET autodependente) abre no Console', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: DIAGRAMA_SO_COM_AVISO }))
+
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /problemas \(\d+\)/i })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('CA-8 (JSON corrompido): diagrama descartado com aviso abre no Console, não em Problemas', async () => {
+    window.localStorage.setItem(CHAVE_DIAGRAMA, '{ isso não é json')
+
+    render(<App />)
+    await screen.findByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+
+    expect(screen.getByRole('tab', { name: 'Console' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  // -- Recusas do editor na BarraStatus (tarefa #25) -----------------------
+
+  it('uma recusa vinda do editor (remover o único degrau) aparece na barra de status e no Console', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    // único degrau do diagrama: `removerDegrau` recusa ("precisa de pelo
+    // menos um degrau") — gesto realista pela UI, sem chamar o núcleo direto.
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+
+    const barra = screen.getByRole('status')
+    expect(within(barra).getByText(/pelo menos um degrau/i)).toBeInTheDocument()
+
+    const log = screen.getByRole('log')
+    expect(within(log).getByText(/pelo menos um degrau/i)).toBeInTheDocument()
   })
 })

@@ -6,6 +6,7 @@ import { IO_ESPELHO } from './fixtures'
 import { validarDiagrama } from './validacao'
 import {
   atualizarVariavel,
+  celulaDeSoltura,
   criarRamo,
   declararVariavel,
   diagramaVazio,
@@ -37,6 +38,38 @@ describe('diagramaVazio', () => {
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [], ramos: [] }],
     })
+  })
+})
+
+describe('celulaDeSoltura', () => {
+  it('bobina solta na coluna 2 (índice 1) vai para a coluna terminal (índice 7)', () => {
+    expect(celulaDeSoltura('bobina', { linha: 0, coluna: 1 })).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+    expect(COLUNA_TERMINAL).toBe(7)
+  })
+
+  it('bobina_set solta numa linha de ramo também vai para (linha 0, coluna terminal)', () => {
+    expect(celulaDeSoltura('bobina_set', { linha: 1, coluna: 3 })).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+  })
+
+  it('contato: devolve a mesma célula, sem alterar', () => {
+    const celula = { linha: 1, coluna: 3 }
+    expect(celulaDeSoltura('contato_na', celula)).toEqual(celula)
+    expect(celulaDeSoltura('contato_na', celula)).toBe(celula) // mesma referência, não cópia
+  })
+
+  it('composição com inserirElemento: bobina solta em qualquer célula vai para o terminal, mas ainda recusa se ocupado', () => {
+    const comBobina = inserirElemento(diagramaVazio(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comBobina.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comBobina.diagrama)
+
+    // soltando uma segunda bobina em qualquer célula, a UI chamaria celulaDeSoltura primeiro
+    const destino = celulaDeSoltura('bobina_set', { linha: 0, coluna: 3 })
+    expect(destino).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+
+    const resultado = inserirElemento(diagrama, 'r1', 'bobina_set', destino)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('ocupada')
   })
 })
 

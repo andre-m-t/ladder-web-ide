@@ -19,6 +19,12 @@
  * `set_reset_autodependente` (aviso) — ver JSDoc de cada função abaixo para a
  * definição exata. A checagem de ramo aberto (CTU) entra na tarefa #15; a
  * união abaixo fica pronta para crescer.
+ *
+ * Degrau vazio não é erro (tarefa #25): um degrau com zero elementos e zero
+ * ramos ainda não foi tocado pelo autor, então `rung_incompleto` não se
+ * aplica a ele — ver `rungAindaNaoComecado`. Assim que o degrau ganha algum
+ * conteúdo (um elemento, ou um ramo mesmo vazio), a exigência de bobina volta
+ * a valer, como sempre valeu.
  */
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX, ehBobina, ehContato } from './modelo'
@@ -132,6 +138,19 @@ export function motivoPosicaoInvalida(
 /** True se algum elemento do rung é uma bobina (em qualquer posição). */
 function temBobina(rung: Rung): boolean {
   return rung.elementos.some((elemento) => ehBobina(elemento.tipo))
+}
+
+/**
+ * Degrau que ainda não foi tocado pelo autor: zero elementos e zero ramos
+ * (tarefa #25). Um diagrama recém-criado (`diagramaVazio()`, `inserirDegrau`)
+ * tem um ou mais desses degraus, e eles não são erro — "sem nenhuma bobina"
+ * só vira `rung_incompleto` a partir do momento em que o degrau ganha algum
+ * conteúdo (um elemento, ou um ramo, mesmo vazio) e ainda assim não termina
+ * numa bobina. Ramo vazio continua sendo `rung_incompleto` por si só, via
+ * `ramoVazio` abaixo — essa checagem não muda.
+ */
+function rungAindaNaoComecado(rung: Rung): boolean {
+  return rung.elementos.length === 0 && rung.ramos.length === 0
 }
 
 /** True se algum elemento do rung está na linha do ramo, dentro do intervalo
@@ -348,7 +367,7 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
       problemas.push(...validarElemento(indiceDegrau, rung, elemento, diagrama))
     }
 
-    if (!temBobina(rung)) {
+    if (!rungAindaNaoComecado(rung) && !temBobina(rung)) {
       problemas.push({
         codigo: 'rung_incompleto',
         severidade: 'erro',

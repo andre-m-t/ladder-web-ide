@@ -405,13 +405,8 @@ describe('TabelaVariaveis — remover', () => {
   })
 })
 
-describe('TabelaVariaveis — erro', () => {
-  it('mostra a recusa em role="alert"', () => {
-    renderizar([], { erro: "já existe uma variável chamada 'x'" })
-    expect(screen.getByRole('alert')).toHaveTextContent(/já existe uma variável/i)
-  })
-
-  it('não mostra alerta quando não há erro', () => {
+describe('TabelaVariaveis — sem recusa em texto (tarefa #25)', () => {
+  it('nunca mostra role="alert" (a recusa não é mais responsabilidade deste componente)', () => {
     renderizar([])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

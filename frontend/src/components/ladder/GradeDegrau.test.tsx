@@ -141,7 +141,7 @@ describe('GradeDegrau — prévia (plano D-11/D-12)', () => {
     )
   })
 
-  it('previa "invalida" marca a célula com data-previa="invalida" e expõe o motivo em <title>', () => {
+  it('previa "invalida" marca a célula com data-previa="invalida", sem <title> nem texto do motivo (tarefa #25)', () => {
     const previa: Previa = {
       celula: { linha: 0, coluna: 1 },
       tipo: 'invalida',
@@ -151,7 +151,8 @@ describe('GradeDegrau — prévia (plano D-11/D-12)', () => {
 
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
     expect(celula).toHaveAttribute('data-previa', 'invalida')
-    expect(celula.querySelector('title')).toHaveTextContent('posição inválida para bobina (linha=0, coluna=1)')
+    expect(celula.querySelector('title')).toBeNull()
+    expect(screen.queryByText(previa.motivo as string)).not.toBeInTheDocument()
   })
 
   it('sem previa, nenhuma célula tem data-previa', () => {
@@ -163,19 +164,19 @@ describe('GradeDegrau — prévia (plano D-11/D-12)', () => {
   })
 })
 
-describe('GradeDegrau — recusa (plano D-11)', () => {
+describe('GradeDegrau — recusa (plano D-11, sem texto desde a tarefa #25)', () => {
   const rung = IO_ESPELHO.rungs[0]
 
-  it('recusa marca a célula com aria-invalid/aria-describedby e mostra o alerta abaixo da grade', () => {
+  it('recusa marca a célula com aria-invalid, sem aria-describedby, role="alert" nem o texto do motivo no DOM', () => {
     const recusa = { celula: { linha: 0, coluna: 1 }, motivo: 'célula (linha=0, coluna=1) já ocupada' }
     render(<GradeDegrau rung={rung} indice={0} {...propsBase()} recusa={recusa} />)
 
-    const alerta = screen.getByRole('alert')
-    expect(alerta).toHaveTextContent(recusa.motivo)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(recusa.motivo)).not.toBeInTheDocument()
 
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
     expect(celula).toHaveAttribute('aria-invalid', 'true')
-    expect(celula).toHaveAttribute('aria-describedby', alerta.id)
+    expect(celula).not.toHaveAttribute('aria-describedby')
   })
 
   it('sem recusa, não há alerta', () => {
@@ -506,7 +507,7 @@ describe('GradeDegrau — problemas na grade (tarefa #13, CA-4/CA-9)', () => {
     expect(celula.querySelector('circle[class*="fill-ide-perigo"]')).toBeNull()
   })
 
-  it('problema com elementoId null (ex.: rung_incompleto) marca o cabeçalho do degrau, com texto acessível', () => {
+  it('problema com elementoId null (ex.: rung_incompleto) marca a calha do degrau com um ícone, sem texto visível, mas com aria-label com a mensagem', () => {
     const rung = { id: 'r1', elementos: [], ramos: [] }
     const problemas: Problema[] = [
       {
@@ -519,18 +520,21 @@ describe('GradeDegrau — problemas na grade (tarefa #13, CA-4/CA-9)', () => {
     ]
     render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
 
-    expect(screen.getByText(/degrau 1 sem nenhuma bobina/i)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /degrau 1 sem nenhuma bobina/i })).toBeInTheDocument()
+    expect(screen.queryByText(/degrau 1 sem nenhuma bobina/i)).not.toBeInTheDocument()
   })
 
-  it('problema de aviso com elementoId null é visualmente distinto do erro no cabeçalho', () => {
+  it('problema de aviso com elementoId null é visualmente distinto do erro na calha (token de cor diferente)', () => {
     const rung = { id: 'r1', elementos: [], ramos: [] }
     const problemas: Problema[] = [
       { codigo: 'rung_incompleto', severidade: 'aviso', rungId: 'r1', elementoId: null, mensagem: 'aviso de exemplo no degrau' },
     ]
-    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} />)
 
-    expect(screen.getByText(/aviso de exemplo no degrau/i)).toBeInTheDocument()
-    expect(container.querySelector('figcaption .text-ide-aviso, figcaption [class*="text-ide-aviso"]')).not.toBeNull()
+    const selo = screen.getByRole('img', { name: /aviso de exemplo no degrau/i })
+    expect(selo).toHaveClass('text-ide-aviso')
+    expect(selo).not.toHaveClass('text-ide-perigo')
+    expect(screen.queryByText(/aviso de exemplo no degrau/i)).not.toBeInTheDocument()
   })
 
   it('não apaga a marcação de recusa nem a seleção já existentes na célula (precedência preservada)', () => {

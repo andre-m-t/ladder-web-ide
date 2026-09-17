@@ -161,6 +161,19 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     ramo vazio sinalizado; verificação em Chromium.
   - Antecipa da #15: ramo paralelo e limite de linhas.
 
+- [x] **#25 — [N][L][I] Degrau vazio, mensagens fora do editor, escada contínua e soltura da bobina (plano §16, D-16)**
+  - Arquivos: `frontend/src/ladder/{validacao,edicao}.ts`;
+    `components/ladder/{EditorLadder,GradeDegrau,TabelaVariaveis,PainelVariaveis}.tsx`;
+    `components/ide/{BarraStatus,AreaEditor}.tsx` (novo `BarraStatus`), `App.tsx`; testes
+  - Depende de: #14
+  - Pronto quando: degrau sem elemento nem ramo não gera problema e IDE limpa
+    abre no Console com "Problemas (0)"; diagrama salvo com erro abre em
+    Problemas; nenhum texto de recusa ou problema dentro do editor (recusa na
+    barra de status por 6 s e no Console; só ícones e prévia na grade); degraus
+    numa escada com trilhos contínuos e ações na calha; bobina solta em qualquer
+    célula do degrau (inclusive ramo) vai para a coluna 8, recusa se ocupada;
+    verificação em Chromium com mouse real nos dois temas.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [x] **#9 — [N] Degraus, mover e limite de colunas**
@@ -331,6 +344,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #22 | RF-2, RF-6, RF-7, RF-9, RF-10, RF-12 (D-12) | CA-1, CA-2, CA-5, CA-7 |
 | #23 | RF-9, RF-10, RF-12 (D-13) | CA-1, CA-2, CA-5, CA-7 |
 | #24 | RF-1, RF-4, RF-9, RF-10, RF-12 (D-14) | CA-2, CA-4, CA-10 |
+| #25 | RF-1, RF-8, RF-11, RF-12 (D-16) | CA-4, CA-5, CA-6 |
 
 ## Paralelismo previsto
 

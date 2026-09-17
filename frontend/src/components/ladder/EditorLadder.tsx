@@ -35,13 +35,30 @@
  * `GradeDegrau` e reportada aqui como número de coluna, e por teclado
  * (Espaço pega, ←/→ ajustam, Espaço aplica, Esc cancela), inteiramente
  * decidido aqui. Prévia e recusa reaproveitam os mesmos mecanismos de D-11:
- * a operação do núcleo é chamada sem aplicar, e o motivo de uma recusa usa o
- * mesmo alerta (`role="alert"`) do resto do degrau.
+ * a operação do núcleo é chamada sem aplicar.
+ *
+ * **Nenhuma mensagem em texto dentro do editor (tarefa #25):** o alerta
+ * visual (`role="alert"`) que mostrava o motivo de uma recusa abaixo do
+ * degrau saiu — toda recusa (soltar/mover/criar ramo/alça/remover degrau)
+ * agora só é repassada à prop `aoRecusar`, para quem monta a IDE decidir onde
+ * mostrar (barra de status, Console). O anúncio `sr-only` (`aria-live`) e a
+ * marcação `aria-invalid` momentânea da célula recusada continuam — são para
+ * leitor de tela e destaque visual, não texto solto no editor.
+ *
+ * **Bobina sempre na coluna 8 (tarefa #25):** soltar (ou mover) uma bobina —
+ * de qualquer origem, sobre qualquer célula do degrau, mesmo numa linha de
+ * ramo — passa pelo núcleo (`ladder/edicao.ts#celulaDeSoltura`) antes de
+ * calcular prévia/aplicar, que redireciona o alvo para `{ linha: 0, coluna:
+ * COLUNA_TERMINAL }`. A célula sob o cursor/foco continua sendo o alvo do
+ * arrasto (`AlvoArrasto`) tal como está — só o cálculo de prévia e a jogada
+ * final usam a célula redirecionada. Contatos não mudam (a função devolve a
+ * própria célula).
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { GitBranch, Plus } from 'lucide-react'
 
 import {
+  celulaDeSoltura,
   criarRamo,
   inserirDegrau,
   inserirElemento,
@@ -76,12 +93,20 @@ export interface EditorLadderProps {
    * elemento que não existe mais, leva o foco à primeira célula do degrau
    * `rungId`. */
   foco?: { rungId: string; elementoId: string | null; token: number } | null
+  /** Chamado a cada recusa de uma jogada (soltar/mover/criar ramo/alça/
+   * remover degrau), com o motivo em português vindo do núcleo — tarefa #25:
+   * o editor não mostra mais texto de recusa por conta própria (nem
+   * `role="alert"`), quem monta a IDE decide onde exibir (barra de status,
+   * Console). Sem esta prop, a recusa fica só na marcação visual momentânea
+   * (célula `aria-invalid`, prévia vermelha) e no anúncio `sr-only`. */
+  aoRecusar?: (motivo: string) => void
 }
 
 /** Recusa de uma jogada, localizada no degrau (e, quando há, na célula)
- * afetados. `celula` fica ausente para recusas que não vêm de uma célula
- * específica — inserir/remover degrau (tarefa #10) — e o alerta aparece do
- * mesmo jeito, ancorado no degrau, sem marcar nenhuma célula como inválida. */
+ * afetados — estado interno que só marca a célula com `aria-invalid`
+ * momentâneo (tarefa #25: o motivo em texto não é mais exibido pelo editor,
+ * só repassado a `aoRecusar`). `celula` fica ausente para recusas que não
+ * vêm de uma célula específica — inserir/remover degrau (tarefa #10). */
 interface RecusaCelula {
   rungId: string
   celula?: Celula
@@ -181,7 +206,12 @@ function nomeOrigem(diagrama: Diagrama, origem: OrigemArrasto): string {
  * sem aplicar (D-11): origem paleta (contato/bobina) → `inserirElemento`;
  * origem paleta "Ramo" (D-14) → `criarRamo`, cuja linha o núcleo escolhe —
  * a prévia mostra o ramo inteiro, não uma célula; origem célula →
- * `moverElemento`. Nenhuma regra de posição é reimplementada aqui. */
+ * `moverElemento`. Nenhuma regra de posição é reimplementada aqui.
+ *
+ * Tarefa #25: para contato/bobina (não "ramo"), a célula passa antes por
+ * `celulaDeSoltura` — uma bobina sempre mira a coluna terminal, não importa
+ * onde o cursor estava; a `Previa` devolvida já traz a célula redirecionada
+ * (é ela que `GradeDegrau` destaca). */
 function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId: string, celula: Celula): Previa {
   if (origem.de === 'paleta') {
     if (origem.tipo === 'ramo') {
@@ -191,25 +221,32 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
       if (novoRamo === undefined) return { celula, tipo: 'invalida', motivo: 'não foi possível calcular a prévia do ramo' }
       return { tipo: 'ramo-criar', ramo: { linha: novoRamo.linha, colunaInicio: novoRamo.colunaInicio, colunaFim: novoRamo.colunaFim } }
     }
-    const resultado = inserirElemento(diagrama, rungId, origem.tipo, celula)
-    if (resultado.ok) return { celula, tipo: 'inserir', elemento: origem.tipo }
-    return { celula, tipo: 'invalida', motivo: resultado.motivo }
+    const alvo = celulaDeSoltura(origem.tipo, celula)
+    const resultado = inserirElemento(diagrama, rungId, origem.tipo, alvo)
+    if (resultado.ok) return { celula: alvo, tipo: 'inserir', elemento: origem.tipo }
+    return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
   }
-  const resultado = moverElemento(diagrama, origem.elementoId, rungId, celula)
+  const achadoOrigem = encontrarElementoPorId(diagrama, origem.elementoId)
+  const tipoOrigem = achadoOrigem?.elemento.tipo ?? 'contato_na'
+  const alvo = celulaDeSoltura(tipoOrigem, celula)
+  const resultado = moverElemento(diagrama, origem.elementoId, rungId, alvo)
   if (resultado.ok) {
-    const achado = encontrarElementoPorId(diagrama, origem.elementoId)
-    return { celula, tipo: 'inserir', elemento: achado?.elemento.tipo ?? 'contato_na' }
+    return { celula: alvo, tipo: 'inserir', elemento: tipoOrigem }
   }
-  return { celula, tipo: 'invalida', motivo: resultado.motivo }
+  return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
 }
 
-/** Mensagem do `aria-live` para o alvo atual do arrasto. */
+/** Mensagem do `aria-live` para o alvo atual do arrasto. Descreve a célula
+ * onde a jogada realmente cairia — para bobina (tarefa #25), é a coluna
+ * terminal redirecionada por `celulaDeSoltura`/`calcularPreviaArrasto`, não a
+ * célula bruta sob o cursor. */
 function mensagemAlvo(diagrama: Diagrama, origem: OrigemArrasto, alvo: AlvoArrasto): string {
   if (alvo === null) return 'fora de qualquer posição válida'
   if (alvo === 'lixeira') return 'sobre a lixeira — soltar remove o elemento'
   const indiceDegrau = diagrama.rungs.findIndex((r) => r.id === alvo.rungId)
-  const onde = descreverCelula(indiceDegrau, alvo.celula)
   const previa = calcularPreviaArrasto(diagrama, origem, alvo.rungId, alvo.celula)
+  const celulaDescrita = previa.tipo === 'ramo-criar' ? alvo.celula : previa.celula
+  const onde = descreverCelula(indiceDegrau, celulaDescrita)
   if (previa.tipo === 'invalida') return `sobre ${onde} — posição inválida: ${previa.motivo}`
   return `sobre ${onde} — posição válida`
 }
@@ -273,7 +310,7 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
   return alvo
 }
 
-export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: EditorLadderProps) {
+export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRecusar }: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
   const [ramoMarcado, setRamoMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
@@ -290,6 +327,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
   const diagramaRef = useRef(diagrama)
   const arrastoRef = useRef<EstadoArrasto | null>(null)
   const aoMudarRef = useRef(aoMudar)
+  const aoRecusarRef = useRef(aoRecusar)
   const pointerPendenteRef = useRef<PointerPendente | null>(null)
 
   useEffect(() => {
@@ -298,10 +336,22 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
   useEffect(() => {
     aoMudarRef.current = aoMudar
   }, [aoMudar])
+  useEffect(() => {
+    aoRecusarRef.current = aoRecusar
+  }, [aoRecusar])
 
   function atualizarArrasto(novo: EstadoArrasto | null) {
     arrastoRef.current = novo
     setArrasto(novo)
+  }
+
+  /** Registra uma recusa (marcação visual momentânea, `RecusaCelula`) e
+   * repassa o motivo a `aoRecusar` (tarefa #25) — ponto único por onde toda
+   * recusa de jogada passa, para que a prop nunca fique dessincronizada da
+   * marcação visual. */
+  function reportarRecusa(nova: RecusaCelula) {
+    setRecusa(nova)
+    aoRecusarRef.current?.(nova.motivo)
   }
 
   function focarAlvo(alvo: AlvoArrasto) {
@@ -374,14 +424,14 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
     }
 
     const indiceDegrau = diagramaRef.current.rungs.findIndex((r) => r.id === alvo.rungId)
-    const onde = descreverCelula(indiceDegrau, alvo.celula)
 
     if (origem.de === 'paleta') {
       if (origem.tipo === 'ramo') {
+        const onde = descreverCelula(indiceDegrau, alvo.celula)
         const resultado = criarRamo(diagramaRef.current, alvo.rungId, alvo.celula.coluna)
         if (!resultado.ok) {
           setMarcado(null)
-          setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
+          reportarRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
           setAnuncio(`recusado: ${resultado.motivo}`)
           return
         }
@@ -391,25 +441,33 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
         setAnuncio(`ramo criado em ${onde}`)
         return
       }
-      const resultado: ResultadoEdicao = inserirElemento(diagramaRef.current, alvo.rungId, origem.tipo, alvo.celula)
+      // Tarefa #25: bobina redireciona para a coluna terminal, não importa a
+      // célula sob o cursor/foco — `alvoReal` é onde a jogada de fato cai.
+      const alvoReal = celulaDeSoltura(origem.tipo, alvo.celula)
+      const onde = descreverCelula(indiceDegrau, alvoReal)
+      const resultado: ResultadoEdicao = inserirElemento(diagramaRef.current, alvo.rungId, origem.tipo, alvoReal)
       if (!resultado.ok) {
         setMarcado(null)
-        setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
+        reportarRecusa({ rungId: alvo.rungId, celula: alvoReal, motivo: resultado.motivo })
         setAnuncio(`recusado: ${resultado.motivo}`)
         return
       }
       setRecusa(null)
       aoMudarRef.current(resultado.diagrama)
-      const novoElemento = elementoNaCelula(resultado.diagrama, alvo.rungId, alvo.celula)
+      const novoElemento = elementoNaCelula(resultado.diagrama, alvo.rungId, alvoReal)
       setMarcado(novoElemento ? novoElemento.id : null)
       setAnuncio(`solto em ${onde}, marcado — clique ou Enter de novo para escolher a variável`)
       return
     }
 
     setMarcado(null)
-    const resultado = moverElemento(diagramaRef.current, origem.elementoId, alvo.rungId, alvo.celula)
+    const achadoOrigem = encontrarElementoPorId(diagramaRef.current, origem.elementoId)
+    const tipoOrigem = achadoOrigem?.elemento.tipo ?? 'contato_na'
+    const alvoReal = celulaDeSoltura(tipoOrigem, alvo.celula)
+    const onde = descreverCelula(indiceDegrau, alvoReal)
+    const resultado = moverElemento(diagramaRef.current, origem.elementoId, alvo.rungId, alvoReal)
     if (!resultado.ok) {
-      setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
+      reportarRecusa({ rungId: alvo.rungId, celula: alvoReal, motivo: resultado.motivo })
       setAnuncio(`recusado: ${resultado.motivo}`)
       return
     }
@@ -587,7 +645,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
         return
       }
       const achado = encontrarRamoPorId(diagrama, ramoMarcado)
-      setRecusa({
+      reportarRecusa({
         rungId: achado?.rungId ?? diagrama.rungs[0].id,
         celula: { linha: achado?.ramo.linha ?? 0, coluna: achado?.ramo.colunaInicio ?? 0 },
         motivo: resultado.motivo,
@@ -611,7 +669,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
     const resultado = inserirDegrau(diagrama, diagrama.rungs.length)
     if (!resultado.ok) {
       const ultimo = diagrama.rungs[diagrama.rungs.length - 1]
-      setRecusa({ rungId: ultimo.id, motivo: resultado.motivo })
+      reportarRecusa({ rungId: ultimo.id, motivo: resultado.motivo })
       setAnuncio(`recusado: ${resultado.motivo}`)
       return
     }
@@ -626,7 +684,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
     if (indice === -1) return
     const resultado = inserirDegrau(diagrama, indice + 1)
     if (!resultado.ok) {
-      setRecusa({ rungId, motivo: resultado.motivo })
+      reportarRecusa({ rungId, motivo: resultado.motivo })
       setAnuncio(`recusado: ${resultado.motivo}`)
       return
     }
@@ -647,7 +705,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
 
     const resultado = removerDegrau(diagrama, rungId)
     if (!resultado.ok) {
-      setRecusa({ rungId, motivo: resultado.motivo })
+      reportarRecusa({ rungId, motivo: resultado.motivo })
       setAnuncio(`recusado: ${resultado.motivo}`)
       return
     }
@@ -751,8 +809,8 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
   /** Recalcula a prévia da alça chamando `redimensionarRamo` sem aplicar
    * (D-14, mesma disciplina de D-11): usada tanto pelo arrasto por ponteiro
    * (coluna vem da geometria calculada em `GradeDegrau`) quanto por cada
-   * tecla de seta durante o arrasto por teclado. Inválida reaproveita o
-   * alerta de recusa do degrau, âncorado na linha do ramo. */
+   * tecla de seta durante o arrasto por teclado. Inválida repassa o motivo a
+   * `aoRecusar` (tarefa #25), âncorado na linha do ramo. */
   function atualizarPreviaAlca(rungId: string, ramoId: string, coluna: number) {
     const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
     setPreviaAlca({ rungId, ramoId, colunaFim: coluna, valido: resultado.ok })
@@ -761,6 +819,9 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
       setAnuncio(`alça em coluna ${coluna + 1} — posição válida`)
       return
     }
+    // Prévia, não jogada: só marca a célula. `aoRecusar` fica para o soltar
+    // (`aplicarAlca`), senão a barra de status e o Console recebem uma recusa
+    // a cada `pointermove`.
     const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
     setRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
     setAnuncio(`alça em coluna ${coluna + 1} — recusado: ${resultado.motivo}`)
@@ -776,7 +837,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco }: Edi
       setAnuncio('ramo redimensionado')
     } else {
       const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
-      setRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
+      reportarRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
       setAnuncio(`recusado: ${resultado.motivo}`)
     }
     setPreviaAlca(null)

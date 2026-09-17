@@ -13,19 +13,28 @@ import EditorLadder from './EditorLadder'
  * controlado — este componente guarda o `diagrama` em `useState`, repassa
  * `aoMudar` e também avisa um espião, para os testes lerem o último
  * diagrama sem reimplementar a lógica de estado do editor. */
-function Harness({ inicial, espiao }: { inicial: Diagrama; espiao: (d: Diagrama) => void }) {
+function Harness({
+  inicial,
+  espiao,
+  aoRecusar,
+}: {
+  inicial: Diagrama
+  espiao: (d: Diagrama) => void
+  aoRecusar?: (motivo: string) => void
+}) {
   const [diagrama, setDiagrama] = useState(inicial)
   function aoMudar(novo: Diagrama) {
     setDiagrama(novo)
     espiao(novo)
   }
-  return <EditorLadder diagrama={diagrama} aoMudar={aoMudar} />
+  return <EditorLadder diagrama={diagrama} aoMudar={aoMudar} aoRecusar={aoRecusar} />
 }
 
 function renderEditor(inicial: Diagrama = diagramaVazio()) {
   const aoMudar = vi.fn()
-  render(<Harness inicial={inicial} espiao={aoMudar} />)
-  return { aoMudar }
+  const aoRecusar = vi.fn()
+  render(<Harness inicial={inicial} espiao={aoMudar} aoRecusar={aoRecusar} />)
+  return { aoMudar, aoRecusar }
 }
 
 /** Diagrama de partida com variáveis já declaradas e nenhum elemento — a
@@ -138,18 +147,38 @@ describe('EditorLadder — CA-2: programa mínimo com variáveis internas (MINIM
   })
 })
 
-describe('EditorLadder — CA-5: recusa não altera o diagrama e mostra o motivo', () => {
-  it('soltar bobina na coluna 1: alerta abaixo do degrau, célula aria-invalid, diagrama intacto, modal não abre', () => {
-    const { aoMudar } = renderEditor()
+describe('EditorLadder — CA-5 (refeita, tarefa #25): recusa não altera o diagrama, chama aoRecusar, sem texto no DOM', () => {
+  it('soltar contato na coluna 8 (reservada a bobinas): aoRecusar com o motivo, célula aria-invalid, diagrama intacto, modal não abre, sem role="alert" nem o texto do motivo', () => {
+    const { aoMudar, aoRecusar } = renderEditor()
 
-    const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
-    arrastar(screen.getByRole('button', { name: /^bobina$/i }), celula1)
+    const celula8 = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), celula8)
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/posição inválida/i)
-    expect(celula1).toHaveAttribute('aria-invalid', 'true')
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/posição inválida/i))
+    expect(celula8).toHaveAttribute('aria-invalid', 'true')
     expect(aoMudar).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    const [[motivo]] = aoRecusar.mock.calls
+    expect(screen.queryByText(motivo)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })).toBeInTheDocument()
+  })
+
+  it('bobina com a coluna 8 já ocupada: soltar em qualquer célula recusa (mira sempre a coluna 8), aoRecusar chamado, diagrama intacto', () => {
+    const diagramaComBobina: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
+    }
+    const { aoMudar, aoRecusar } = renderEditor(diagramaComBobina)
+
+    // solta uma segunda bobina numa célula qualquer (coluna 4): celulaDeSoltura mira a coluna 8, já ocupada
+    const alvo = screen.getByRole('button', { name: 'Degrau 1, coluna 4, vazia' })
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), alvo)
+
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/célula ocupada/i))
+    expect(aoMudar).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
 
@@ -242,18 +271,41 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
     fireEvent.pointerUp(window, { pointerId: 1 })
   })
 
-  it('arrastar bobina sobre a coluna 1 mostra prévia inválida com o motivo do núcleo', () => {
+  it('arrastar bobina sobre a coluna 1 (célula qualquer) mostra a prévia na coluna 8, não na coluna sob o cursor (tarefa #25)', () => {
     renderEditor()
 
     const itemBobina = screen.getByRole('button', { name: /^bobina$/i })
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    const celula8 = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
 
     fireEvent.pointerDown(itemBobina, { pointerId: 1, clientX: 0, clientY: 0 })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 30 })
-    fireEvent.pointerEnter(celula, { pointerId: 1 })
+    fireEvent.pointerEnter(celula1, { pointerId: 1 })
 
-    expect(celula).toHaveAttribute('data-previa', 'invalida')
-    expect(celula.querySelector('title')).toHaveTextContent(/posição inválida/i)
+    expect(celula1).not.toHaveAttribute('data-previa')
+    expect(celula8).toHaveAttribute('data-previa', 'inserir')
+
+    fireEvent.pointerUp(window, { pointerId: 1 })
+  })
+
+  it('arrastar bobina sobre coluna 1 com a coluna 8 já ocupada mostra prévia inválida na coluna 8, sem <title> nem texto do motivo', () => {
+    const diagramaComBobina: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
+    }
+    renderEditor(diagramaComBobina)
+
+    const itemBobina = screen.getByRole('button', { name: /^bobina$/i })
+    const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    const celula8 = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })
+
+    fireEvent.pointerDown(itemBobina, { pointerId: 1, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 30 })
+    fireEvent.pointerEnter(celula1, { pointerId: 1 })
+
+    expect(celula8).toHaveAttribute('data-previa', 'invalida')
+    expect(celula8.querySelector('title')).toBeNull()
 
     fireEvent.pointerUp(window, { pointerId: 1 })
   })
@@ -274,9 +326,9 @@ describe('EditorLadder — mover elemento por arrasto', () => {
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
   })
 
-  it('mover para posição inválida recusa e mantém o elemento na origem', async () => {
+  it('mover para posição inválida recusa (aoRecusar) e mantém o elemento na origem', async () => {
     const usuario = userEvent.setup()
-    renderEditor()
+    const { aoRecusar } = renderEditor()
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -284,7 +336,8 @@ describe('EditorLadder — mover elemento por arrasto', () => {
     const destinoInvalido = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
     arrastar(origem, destinoInvalido)
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/posição inválida/i)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/posição inválida/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toBeInTheDocument()
   })
 })
@@ -531,11 +584,13 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
 
 describe('EditorLadder — cobertura adicional depois do ciclo modal', () => {
   it('depois de uma recusa, um novo arrasto (com pointerenter) funciona normalmente', () => {
-    renderEditor()
+    const { aoRecusar } = renderEditor()
 
     const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
-    arrastar(screen.getByRole('button', { name: /^bobina$/i }), celula1)
-    expect(screen.getByRole('alert')).toHaveTextContent(/posição inválida/i)
+    const celula8 = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
+    // contato na coluna terminal (reservada a bobinas) é sempre recusa, mesmo com o redirecionamento da #25 (que só vale para bobina)
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), celula8)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/posição inválida/i))
 
     arrastar(screen.getByRole('button', { name: /^contato na$/i }), celula1)
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toHaveAttribute('aria-selected', 'true')
@@ -620,12 +675,13 @@ describe('EditorLadder — criar ramo por arrasto (tarefa #24, D-14)', () => {
     expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, vazia' })).toBeInTheDocument()
   })
 
-  it('soltar "Ramo" na coluna terminal (reservada a bobinas) é recusado, com o motivo do núcleo', () => {
-    const { aoMudar } = renderEditor()
+  it('soltar "Ramo" na coluna terminal (reservada a bobinas) é recusado, com o motivo do núcleo em aoRecusar', () => {
+    const { aoMudar, aoRecusar } = renderEditor()
 
     arrastar(screen.getByRole('button', { name: /^ramo$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/ramo só cobre colunas de contato/i)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/ramo só cobre colunas de contato/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(aoMudar).not.toHaveBeenCalled()
   })
 
@@ -677,16 +733,17 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
     expect(final.rungs[0].ramos[0]).toMatchObject({ colunaInicio: 0, colunaFim: 0 })
   })
 
-  it('encolher deixando um contato fora do novo intervalo é recusado, e o diagrama não muda', () => {
+  it('encolher deixando um contato fora do novo intervalo é recusado (aoRecusar), e o diagrama não muda', () => {
     const diagrama = diagramaComRamo()
     diagrama.rungs[0].elementos.push({ id: 'e9', tipo: 'contato_na', celula: { linha: 1, coluna: 2 }, variavel: null })
-    const { aoMudar } = renderEditor(diagrama)
+    const { aoMudar, aoRecusar } = renderEditor(diagrama)
 
     const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
     fireEvent.pointerUp(window, { pointerId: 7, clientX: 60, clientY: 0 }) // coluna 0; contato está na coluna 2
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/fora do novo intervalo/i)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/fora do novo intervalo/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(aoMudar).not.toHaveBeenCalled()
   })
 
@@ -752,16 +809,17 @@ describe('EditorLadder — marcar e remover ramo (D-14)', () => {
     expect(final.rungs[0].ramos).toEqual([])
   })
 
-  it('remover um ramo com contato dentro é recusado, e o diagrama não muda', async () => {
+  it('remover um ramo com contato dentro é recusado (aoRecusar), e o diagrama não muda', async () => {
     const usuario = userEvent.setup()
     const diagrama = diagramaComRamo()
     diagrama.rungs[0].elementos.push({ id: 'e9', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: null })
-    const { aoMudar } = renderEditor(diagrama)
+    const { aoMudar, aoRecusar } = renderEditor(diagrama)
 
     fireEvent.click(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' }))
     await usuario.click(screen.getByRole('button', { name: /lixeira/i }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/remova os contatos do ramo antes/i)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/remova os contatos do ramo antes/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(aoMudar).not.toHaveBeenCalled()
   })
 })
@@ -825,13 +883,14 @@ describe('EditorLadder — CA-6: vários degraus (tarefa #10)', () => {
     expect(screen.getByRole('button', { name: 'Degrau 2, coluna 1, vazia' })).toBeInTheDocument()
   })
 
-  it('recusa remover o último degrau, sem alterar o diagrama, e mostra o motivo no alerta existente', async () => {
+  it('recusa remover o último degrau, sem alterar o diagrama, e repassa o motivo a aoRecusar', async () => {
     const usuario = userEvent.setup()
-    const { aoMudar } = renderEditor()
+    const { aoMudar, aoRecusar } = renderEditor()
 
     await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/pelo menos um degrau/i)
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/pelo menos um degrau/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(aoMudar).not.toHaveBeenCalled()
     // o único degrau continua lá, intacto
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
@@ -941,7 +1000,7 @@ describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13
     expect(screen.queryByRole('button', { name: /erro:/i })).not.toBeInTheDocument()
   })
 
-  it('rung_incompleto (contato sem bobina) marca o cabeçalho do degrau, visível e sem alterar a marcação de outras células', () => {
+  it('rung_incompleto (contato sem bobina) marca a calha do degrau com um ícone (role="img", aria-label com a mensagem), sem texto visível', () => {
     const diagrama: Diagrama = {
       versao: 1,
       variaveis: [],
@@ -952,7 +1011,8 @@ describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13
 
     render(<EditorLadder diagrama={diagrama} aoMudar={() => {}} problemas={problemas} />)
 
-    expect(screen.getByText(/sem nenhuma bobina/i)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /sem nenhuma bobina/i })).toBeInTheDocument()
+    expect(screen.queryByText(/sem nenhuma bobina/i)).not.toBeInTheDocument()
   })
 })
 
@@ -1015,5 +1075,94 @@ describe('EditorLadder — foco programático (contrato com quem monta a IDE)', 
     await usuario.click(screen.getByRole('button', { name: 'focar elemento' }))
 
     expect(document.activeElement).toBe(celula)
+  })
+})
+
+describe('EditorLadder — bobina sempre na coluna 8 (tarefa #25, celulaDeSoltura)', () => {
+  it('bobina solta na coluna 2 (ponteiro) fica na coluna 8, não na coluna 2', () => {
+    const { aoMudar } = renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' }))
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })).toBeInTheDocument()
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toEqual([{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }])
+  })
+
+  it('bobina solta numa célula de ramo vai para a coluna 8 da linha 0 (trilho principal), não para o ramo', () => {
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    arrastar(
+      screen.getByRole('button', { name: /^bobina$/i }),
+      screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' }),
+    )
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })).toBeInTheDocument()
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toEqual([{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }])
+  })
+
+  it('por teclado, bobina pega na paleta e solta em qualquer coluna também fica na coluna 8', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    const itemBobina = screen.getByRole('button', { name: /^bobina$/i })
+    itemBobina.focus()
+    await usuario.keyboard(' ')
+    await usuario.keyboard('{ArrowRight}{ArrowRight}') // vai para a coluna 3 — deveria terminar na coluna 8 mesmo assim
+    await usuario.keyboard(' ')
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toHaveAttribute('aria-selected', 'true')
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toEqual([{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }])
+  })
+
+  it('mover uma bobina já na coluna 8 para outra célula do mesmo degrau não muda nada: não é recusa, a posição continua igual', () => {
+    const diagramaComBobina: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
+    }
+    const { aoMudar, aoRecusar } = renderEditor(diagramaComBobina)
+
+    const origem = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })
+    const destino = screen.getByRole('button', { name: 'Degrau 1, coluna 3, vazia' })
+    arrastar(origem, destino)
+
+    expect(aoRecusar).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 3, vazia' })).toBeInTheDocument()
+    // moverElemento é um no-op bem-sucedido nesse caso (mesma célula final) — aoMudar pode ser chamado com um
+    // diagrama clonado, mas equivalente ao original.
+    if (aoMudar.mock.calls.length > 0) {
+      const final = ultimoDiagrama(aoMudar)
+      expect(final.rungs[0].elementos).toEqual([{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }])
+    }
+  })
+
+  it('bobina com a coluna 8 já ocupada: soltar uma nova bobina em qualquer célula é recusado (aoRecusar), sem alterar o diagrama', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
+    }
+    const { aoMudar, aoRecusar } = renderEditor(diagrama)
+
+    const alvo = screen.getByRole('button', { name: 'Degrau 1, coluna 4, vazia' })
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), alvo)
+
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/célula ocupada/i))
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+})
+
+describe('EditorLadder — botões da calha continuam acessíveis por nome (tarefa #25)', () => {
+  it('"Inserir degrau abaixo do degrau N" e "Remover degrau N" continuam localizáveis por getByRole, mesmo antes do hover/foco', () => {
+    renderEditor()
+
+    expect(screen.getByRole('button', { name: 'Inserir degrau abaixo do degrau 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remover degrau 1' })).toBeInTheDocument()
   })
 })

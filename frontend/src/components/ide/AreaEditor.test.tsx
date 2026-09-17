@@ -17,6 +17,7 @@ describe('AreaEditor', () => {
         aoMudarFonte={() => {}}
         compilando={false}
         erroCompilacao={null}
+        aoRecusar={() => {}}
       />,
     )
 
@@ -37,6 +38,7 @@ describe('AreaEditor', () => {
         aoMudarFonte={() => {}}
         compilando={false}
         erroCompilacao={null}
+        aoRecusar={() => {}}
       />,
     )
 
@@ -58,6 +60,7 @@ describe('AreaEditor', () => {
         aoMudarFonte={aoMudarFonte}
         compilando={false}
         erroCompilacao={null}
+        aoRecusar={() => {}}
       />,
     )
     expect(screen.queryByLabelText(/structured text/i)).not.toBeInTheDocument()
@@ -73,6 +76,7 @@ describe('AreaEditor', () => {
         aoMudarFonte={aoMudarFonte}
         compilando={false}
         erroCompilacao={null}
+        aoRecusar={() => {}}
       />,
     )
     expect(screen.getByLabelText(/structured text/i)).toHaveValue('conteudo st')

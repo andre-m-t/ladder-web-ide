@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
+import BarraStatus, { type MensagemStatus } from './components/ide/BarraStatus'
 import BarraSuperior, { type Aba } from './components/ide/BarraSuperior'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
@@ -8,7 +9,7 @@ import PainelLateral from './components/ide/PainelLateral'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
 import { diagramaVazio } from './ladder/edicao'
 import type { Diagrama } from './ladder/modelo'
-import { carregarDiagrama, salvarDiagrama, type ResultadoCarga } from './ladder/persistencia'
+import { CHAVE_DIAGRAMA, carregarDiagrama, salvarDiagrama, type ResultadoCarga } from './ladder/persistencia'
 import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
@@ -46,7 +47,6 @@ type EstadoGravacao =
 // padrões abaixo sem quebrar.
 
 const CHAVE_ABA = 'ladderflow.aba'
-const CHAVE_ABA_INFERIOR = 'ladderflow.abaInferior'
 const CHAVE_PAINEL_ABERTO = 'ladderflow.painelAberto'
 const CHAVE_PAINEL_LARGURA = 'ladderflow.painelLargura'
 const CHAVE_CONSOLE_ABERTO = 'ladderflow.consoleAberto'
@@ -81,13 +81,6 @@ function lerAba(): Aba {
   return lerPreferencia(CHAVE_ABA, (bruto) => (bruto === 'ladder' || bruto === 'st' ? bruto : null), 'ladder')
 }
 
-/** Aba do painel inferior (tarefa #13): "console" é o padrão — os testes e o
- * fluxo de compilação/gravação já esperam o console visível sem precisar
- * trocar de aba. */
-function lerAbaInferior(): AbaInferior {
-  return lerPreferencia(CHAVE_ABA_INFERIOR, (bruto) => (bruto === 'problemas' || bruto === 'console' ? bruto : null), 'console')
-}
-
 function lerBooleano(chave: string, padrao: boolean): boolean {
   return lerPreferencia(chave, (bruto) => (bruto === 'true' ? true : bruto === 'false' ? false : null), padrao)
 }
@@ -109,17 +102,50 @@ function alturaMaximaConsole(): number {
   return Math.round(window.innerHeight * 0.6)
 }
 
-/** Carga inicial do diagrama (tarefa #12, CA-8): `carregarDiagrama` já nunca
- * lança, mas o próprio acesso à propriedade `window.localStorage` pode
- * lançar em alguns navegadores (modo privado) antes mesmo de chegar a
- * `getItem` — protegido aqui do mesmo jeito que `lerPreferencia` protege as
- * preferências de layout. */
-function carregarDiagramaInicial(): ResultadoCarga {
+type ResultadoCargaInicial = ResultadoCarga & {
+  /** True só quando havia algo salvo sob `CHAVE_DIAGRAMA` **e** a carga não
+   * caiu no vazio (não foi descartado por JSON corrompido, versão
+   * desconhecida etc. — tarefa #25). Decide a aba inicial do painel
+   * inferior: um diagrama digitado do zero (chave ausente) nunca abre em
+   * "Problemas", mesmo que o autor já tenha cometido um erro estrutural. */
+  veioDoArmazenamento: boolean
+}
+
+/** Carga inicial do diagrama (tarefa #12, CA-8; `veioDoArmazenamento` na
+ * tarefa #25): `carregarDiagrama` já nunca lança, mas o próprio acesso à
+ * propriedade `window.localStorage` pode lançar em alguns navegadores (modo
+ * privado) antes mesmo de chegar a `getItem` — protegido aqui do mesmo jeito
+ * que `lerPreferencia` protege as preferências de layout. A checagem da
+ * chave é feita aqui, ao lado da carga, sem tocar `ladder/persistencia.ts`
+ * (núcleo intocado, conforme a tarefa pede). */
+function carregarDiagramaInicial(): ResultadoCargaInicial {
+  let chavePresente: boolean
   try {
-    return carregarDiagrama(window.localStorage)
+    chavePresente = window.localStorage.getItem(CHAVE_DIAGRAMA) !== null
   } catch {
-    return { diagrama: diagramaVazio(), aviso: 'diagrama salvo descartado: não foi possível acessar o armazenamento local' }
+    chavePresente = false
   }
+
+  try {
+    const resultado = carregarDiagrama(window.localStorage)
+    return { ...resultado, veioDoArmazenamento: chavePresente && resultado.aviso === null }
+  } catch {
+    return {
+      diagrama: diagramaVazio(),
+      aviso: 'diagrama salvo descartado: não foi possível acessar o armazenamento local',
+      veioDoArmazenamento: false,
+    }
+  }
+}
+
+/** Aba inicial do painel inferior (tarefa #25): "console" é o padrão — só
+ * abre em "problemas" quando o diagrama veio mesmo do armazenamento (não caiu
+ * no vazio) **e** já nasce com pelo menos um erro (`validarDiagrama`). Um
+ * aviso sozinho, ou um diagrama descartado com aviso, nunca muda a aba. */
+function abaInferiorInicial(diagrama: Diagrama, veioDoArmazenamento: boolean): AbaInferior {
+  if (!veioDoArmazenamento) return 'console'
+  const temErro = validarDiagrama(diagrama).some((problema) => problema.severidade === 'erro')
+  return temErro ? 'problemas' : 'console'
 }
 
 /**
@@ -142,15 +168,19 @@ function carregarDiagramaInicial(): ResultadoCarga {
 export default function App() {
   const [tema, setTema] = useState<Tema>(() => temaInicial())
   const [aba, setAba] = useState<Aba>(() => lerAba())
-  const [abaInferior, setAbaInferior] = useState<AbaInferior>(() => lerAbaInferior())
 
   // Carga inicial do diagrama (CA-8): uma única leitura do `localStorage` no
-  // mount, guardada aqui para o efeito de log abaixo reaproveitar o mesmo
-  // resultado (diagrama e aviso nascem juntos, de uma só leitura).
-  const [cargaInicial] = useState<ResultadoCarga>(() => carregarDiagramaInicial())
+  // mount, guardada aqui para o efeito de log abaixo e para a aba inicial do
+  // painel inferior (tarefa #25) reaproveitarem o mesmo resultado (diagrama,
+  // aviso e "veio do armazenamento" nascem juntos, de uma só leitura).
+  const [cargaInicial] = useState<ResultadoCargaInicial>(() => carregarDiagramaInicial())
   const [diagrama, setDiagrama] = useState<Diagrama>(() => cargaInicial.diagrama)
+  const [abaInferior, setAbaInferior] = useState<AbaInferior>(() =>
+    abaInferiorInicial(cargaInicial.diagrama, cargaInicial.veioDoArmazenamento),
+  )
   const [fonte, setFonte] = useState(BLINK_ST)
   const [foco, setFoco] = useState<FocoLadder | null>(null)
+  const [statusMensagem, setStatusMensagem] = useState<MensagemStatus | null>(null)
 
   const [painelAberto, setPainelAberto] = useState(() => lerBooleano(CHAVE_PAINEL_ABERTO, true))
   const [painelLargura, setPainelLargura] = useState(() =>
@@ -174,9 +204,21 @@ export default function App() {
    * sucesso (tarefa #12). */
   const falhaSalvarRegistrada = useRef(false)
   const focoToken = useRef(0)
+  const statusToken = useRef(0)
 
   function log(nivel: EntradaConsole['nivel'], mensagem: string) {
     setEntradasConsole((atual) => registrar(atual, nivel, mensagem))
+  }
+
+  /** Recusa de uma jogada do editor Ladder ou do painel de variáveis (tarefa
+   * #25, `aoRecusar`, contrato fixado com as frentes L e V): registra no
+   * Console (mesmo nível `aviso` de sempre) e manda o motivo para a
+   * `BarraStatus`, com um `token` novo a cada chamada — mesmo que o texto se
+   * repita, a barra reinicia os 6s de exibição. */
+  function recusar(motivo: string) {
+    log('aviso', motivo)
+    statusToken.current += 1
+    setStatusMensagem({ texto: motivo, nivel: 'aviso', token: statusToken.current })
   }
 
   useEffect(() => {
@@ -242,7 +284,6 @@ export default function App() {
   }
 
   useEffect(() => gravarPreferencia(CHAVE_ABA, aba), [aba])
-  useEffect(() => gravarPreferencia(CHAVE_ABA_INFERIOR, abaInferior), [abaInferior])
   useEffect(() => gravarPreferencia(CHAVE_PAINEL_ABERTO, String(painelAberto)), [painelAberto])
   useEffect(() => gravarPreferencia(CHAVE_PAINEL_LARGURA, String(painelLargura)), [painelLargura])
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ABERTO, String(consoleAberto)), [consoleAberto])
@@ -370,6 +411,7 @@ export default function App() {
           aoMudarFonte={setFonte}
           compilando={compilando}
           erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
+          aoRecusar={recusar}
         />
 
         <PainelLateral
@@ -379,7 +421,7 @@ export default function App() {
           larguraMax={PAINEL_LARGURA_MAX}
           aoRedimensionar={setPainelLargura}
         >
-          <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} />
+          <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} aoRecusar={recusar} />
         </PainelLateral>
       </div>
 
@@ -399,6 +441,8 @@ export default function App() {
           aoLimparConsole={() => setEntradasConsole([])}
         />
       </PainelInferior>
+
+      <BarraStatus mensagem={statusMensagem} />
     </div>
   )
 }

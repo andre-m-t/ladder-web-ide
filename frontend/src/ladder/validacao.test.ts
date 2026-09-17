@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
 import type { Diagrama, Rung } from './modelo'
+import { diagramaVazio } from './edicao'
 import { IO_ESPELHO, MINIMAL } from './fixtures'
 import { descreverCelula, motivoPosicaoInvalida, posicaoValida, validarDiagrama } from './validacao'
 
@@ -152,10 +153,29 @@ describe('validarDiagrama — um código por vez', () => {
     expect(problema?.mensagem).toContain('bobina')
   })
 
-  it('rung_incompleto: degrau vazio', () => {
+  it('degrau vazio (zero elementos, zero ramos) não é erro (tarefa #25)', () => {
     const rung: Rung = { id: 'r1', elementos: [], ramos: [] }
     const problemas = validarDiagrama(diagramaBase([rung]))
-    expect(problemas).toContainEqual(expect.objectContaining({ codigo: 'rung_incompleto', rungId: 'r1' }))
+    expect(problemas.filter((p) => p.codigo === 'rung_incompleto')).toEqual([])
+  })
+
+  it('diagrama com 3 degraus vazios: sem problemas (tarefa #25)', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [
+        { id: 'r1', elementos: [], ramos: [] },
+        { id: 'r2', elementos: [], ramos: [] },
+        { id: 'r3', elementos: [], ramos: [] },
+      ],
+    }
+    expect(validarDiagrama(diagrama)).toEqual([])
+  })
+
+  it('degrau com só um ramo vazio (sem elementos, sem bobina): ainda é rung_incompleto (tarefa #25)', () => {
+    const rung: Rung = { id: 'r1', elementos: [], ramos: [{ id: 'ramo1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    expect(problemas.filter((p) => p.codigo === 'rung_incompleto').length).toBeGreaterThan(0)
   })
 
   it('degrau com contato na coluna 0 e bobina em COLUNA_TERMINAL é completo, mesmo com colunas vazias entre eles', () => {
@@ -459,6 +479,10 @@ describe('validarDiagrama — Q-6 (D-10): set_reset_autodependente', () => {
 })
 
 describe('fixtures sem problemas', () => {
+  it('diagramaVazio() não tem problemas (tarefa #25)', () => {
+    expect(validarDiagrama(diagramaVazio())).toEqual([])
+  })
+
   it('IO_ESPELHO não tem problemas', () => {
     expect(validarDiagrama(IO_ESPELHO)).toEqual([])
   })

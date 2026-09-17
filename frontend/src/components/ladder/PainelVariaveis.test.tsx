@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ENTRADAS_LOCALIZADAS } from '../../ladder/enderecos'
 import { diagramaVazio } from '../../ladder/edicao'
@@ -33,10 +33,12 @@ const DIAGRAMA_COM_X: Diagrama = {
 
 /** Sobe o estado do diagrama, como a IDE faz de verdade: `PainelVariaveis` é
  * controlado, então o teste precisa aplicar `aoMudar` para observar o efeito
- * de uma operação bem-sucedida (variável nova na lista, recusa some...). */
-function Wrapper({ inicial }: { inicial: Diagrama }) {
+ * de uma operação bem-sucedida (variável nova na lista...). `aoRecusar` é
+ * opcional (tarefa #25) — o espião default é um `vi.fn()` descartável para
+ * os testes que não olham a recusa. */
+function Wrapper({ inicial, aoRecusar }: { inicial: Diagrama; aoRecusar?: (motivo: string) => void }) {
   const [diagrama, setDiagrama] = useState(inicial)
-  return <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} />
+  return <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} aoRecusar={aoRecusar} />
 }
 
 describe('PainelVariaveis — preenche a altura do painel', () => {
@@ -133,39 +135,44 @@ describe('PainelVariaveis — editar e remover via núcleo', () => {
   })
 })
 
-describe('PainelVariaveis — recusa do núcleo', () => {
-  it('nome duplicado: recusa aparece em role="alert" e some no próximo sucesso', async () => {
+describe('PainelVariaveis — recusa do núcleo chama aoRecusar, sem texto (tarefa #25)', () => {
+  it('nome duplicado: chama aoRecusar com o motivo, sem role="alert" nem o texto do motivo no DOM, e o diagrama não muda', async () => {
+    const usuario = userEvent.setup()
+    const aoRecusar = vi.fn()
+    render(<Wrapper inicial={DIAGRAMA_COM_X} aoRecusar={aoRecusar} />)
+
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'x')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/já existe uma variável/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/já existe uma variável/i)).not.toBeInTheDocument()
+    // continua só uma variável ('x') — a recusa não criou nada
+    expect(screen.getAllByLabelText(/^Nome da variável /)).toHaveLength(1)
+  })
+
+  it('remover variável em uso: chama aoRecusar com o motivo, sem texto no DOM, e a variável continua', async () => {
+    const usuario = userEvent.setup()
+    const aoRecusar = vi.fn()
+    render(<Wrapper inicial={DIAGRAMA_COM_VINCULO} aoRecusar={aoRecusar} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover variável entrada' }))
+
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/vinculada a 1 elemento/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/vinculada a 1 elemento/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Nome da variável entrada')).toBeInTheDocument()
+  })
+
+  it('sem aoRecusar, a recusa é só ignorada — sem alerta, sem erro, diagrama intacto', async () => {
     const usuario = userEvent.setup()
     render(<Wrapper inicial={DIAGRAMA_COM_X} />)
 
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'x')
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
-    expect(screen.getByRole('alert')).toHaveTextContent(/já existe uma variável/i)
-
-    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'novaVar')
-    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
-
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Nome da variável novaVar')).toBeInTheDocument()
-  })
-
-  it('remover variável em uso: recusa aparece e some no próximo sucesso', async () => {
-    const usuario = userEvent.setup()
-    render(<Wrapper inicial={DIAGRAMA_COM_VINCULO} />)
-
-    await usuario.click(screen.getByRole('button', { name: 'Remover variável entrada' }))
-
-    expect(screen.getByRole('alert')).toHaveTextContent(/vinculada a 1 elemento/i)
-    expect(screen.getByLabelText('Nome da variável entrada')).toBeInTheDocument()
-
-    const input = screen.getByLabelText('Nome da variável entrada')
-    await usuario.clear(input)
-    await usuario.type(input, 'renomeada')
-    await usuario.keyboard('{Enter}')
-
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Nome da variável renomeada')).toBeInTheDocument()
+    expect(screen.getAllByLabelText(/^Nome da variável /)).toHaveLength(1)
   })
 })
 

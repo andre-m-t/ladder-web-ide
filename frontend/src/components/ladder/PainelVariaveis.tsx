@@ -12,9 +12,16 @@
  * Substitui o antigo `PainelVariaveis.tsx` da tarefa #22 (apagado quando o
  * vínculo elemento↔variável migrou para o clique/`ModalVariavel`): este é um
  * componente novo, sem relação com aquele — não há mais vínculo aqui.
+ *
+ * **Nenhuma mensagem em texto (tarefa #25):** a recusa do núcleo (nome
+ * duplicado, endereço em uso, variável ainda vinculada a um elemento...) não
+ * é mais guardada em estado próprio nem exibida por `TabelaVariaveis`
+ * (`role="alert"` removido de lá) — este componente só repassa o motivo à
+ * prop `aoRecusar`, para quem monta a IDE decidir onde mostrar (barra de
+ * status, Console). Sem `aoRecusar`, a recusa é ignorada visualmente (o
+ * diagrama continua intacto do mesmo jeito, só não há mais para onde mandar
+ * o motivo).
  */
-import { useState } from 'react'
-
 import { atualizarVariavel, declararVariavel, removerVariavel, type ResultadoEdicao } from '../../ladder/edicao'
 import type { Diagrama } from '../../ladder/modelo'
 import TabelaVariaveis from './TabelaVariaveis'
@@ -22,17 +29,18 @@ import TabelaVariaveis from './TabelaVariaveis'
 export interface PainelVariaveisProps {
   diagrama: Diagrama
   aoMudar: (d: Diagrama) => void
+  /** Chamado a cada recusa do núcleo (nome duplicado, variável em uso...),
+   * com o motivo em português — tarefa #25. Sem esta prop, a recusa não
+   * aparece em lugar nenhum (não há mais estado/exibição interna). */
+  aoRecusar?: (motivo: string) => void
 }
 
-export default function PainelVariaveis({ diagrama, aoMudar }: PainelVariaveisProps) {
-  const [erro, setErro] = useState<string | null>(null)
-
+export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar }: PainelVariaveisProps) {
   function aplicar(resultado: ResultadoEdicao) {
     if (resultado.ok) {
-      setErro(null)
       aoMudar(resultado.diagrama)
     } else {
-      setErro(resultado.motivo)
+      aoRecusar?.(resultado.motivo)
     }
   }
 
@@ -50,13 +58,7 @@ export default function PainelVariaveis({ diagrama, aoMudar }: PainelVariaveisPr
 
   return (
     <div className="flex h-full flex-col">
-      <TabelaVariaveis
-        variaveis={diagrama.variaveis}
-        erro={erro}
-        aoDeclarar={aoDeclarar}
-        aoAtualizar={aoAtualizar}
-        aoRemover={aoRemover}
-      />
+      <TabelaVariaveis variaveis={diagrama.variaveis} aoDeclarar={aoDeclarar} aoAtualizar={aoAtualizar} aoRemover={aoRemover} />
     </div>
   )
 }

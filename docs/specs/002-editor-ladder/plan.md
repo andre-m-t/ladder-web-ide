@@ -582,6 +582,9 @@ esta seção só registra onde a interface mudou em relação à §8.
     o **degrau inteiro** do SET/RESET, porque cada degrau tem no máximo uma
     bobina. É a leitura mais abrangente que dispensa simular o circuito — pode
     avisar a mais (contato num ramo sem efeito real), nunca a menos.
+    *Nota (2026-09-17, autor):* mantida. Registrada como **limitação conhecida**:
+    com ramo paralelo, "mesmo caminho" passa a ter sentido preciso e o aviso fica
+    conservador demais em alguns casos. Reavaliar depois da fatia 4, se incomodar.
 - **Por quê:** a tela virou IDE na #23; lista abaixo dos degraus disputaria
   espaço com a grade, e o painel inferior já é o lugar de saída da ferramenta.
   Decisão do autor em 2026-09-17.
@@ -589,3 +592,37 @@ esta seção só registra onde a interface mudou em relação à §8.
   validar dentro do editor (duplicaria o cálculo que a lista também usa).
 - **Requisito atendido:** RF-6, RF-8, RF-11, RF-12, RF-13; CA-4, CA-6, CA-7,
   CA-8, CA-9, CA-10.
+
+## 16. Revisão aditiva — ajustes de UX após as fatias 2 e 3 (2026-09-17)
+
+Pedido do autor após usar a IDE. Tarefa #25. D-15 continua, com os ajustes abaixo.
+
+### D-16: degrau vazio, mensagens fora do editor, escada contínua e soltura da bobina
+- **Escolha:**
+  - **Vazio × incompleto:** degrau sem elemento e sem ramo não gera problema;
+    com ao menos um elemento ou ramo e sem bobina, `rung_incompleto` (erro).
+  - **Aba inicial do painel inferior:** Console; Problemas só quando o diagrama
+    carregado do armazenamento tem erro. Aviso não muda a aba. A preferência
+    salva da aba inferior deixa de existir.
+  - **Mensagens:** nenhum texto dentro do editor. Problemas → aba Problemas;
+    recusa de ação → `BarraStatus` (rodapé da IDE, some em 6 s) + Console, via
+    `aoRecusar` em `EditorLadder` e `PainelVariaveis`. No degrau ficam só sinais
+    sem texto (ícone de problema, prévia vermelha), com o texto no nome acessível
+    e o anúncio `aria-live` para leitor de tela.
+  - **Escada contínua:** sem cartão por degrau; trilhos contínuos, número do
+    degrau na calha à esquerda, separação por espaço e traço sutil, ações do
+    degrau na calha (hover/foco). Só estilo — geometria, gestos e nomes
+    acessíveis inalterados.
+  - **Soltura da bobina:** `celulaDeSoltura(tipo, celula)` no núcleo leva
+    qualquer bobina à coluna terminal da linha 0; a UI aplica antes da prévia e
+    de `inserirElemento`/`moverElemento`, que continuam estritos.
+- **Por quê:** IDE abrindo com erro ensina a ignorar o painel de problemas;
+  mensagens espalhadas pela grade quebram o padrão de IDE (VS Code, JetBrains,
+  TIA Portal separam diagnóstico persistente de feedback de ação); editores
+  Ladder desenham um único par de trilhos com degraus numerados à esquerda; a
+  bobina só tem uma posição válida, então exigir precisão no alvo é atrito puro.
+- **Alternativas descartadas:** toast (cobre a grade e empilha em tentativas
+  repetidas); aba própria para recusas (invisível se outra aba estiver aberta);
+  trocar de aba automaticamente na recusa; normalizar a célula dentro de
+  `inserirElemento` (esconderia a regra de posição no núcleo).
+- **Requisito atendido:** RF-1, RF-8, RF-11, RF-12; CA-4, CA-5, CA-6.
