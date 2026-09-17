@@ -13,8 +13,8 @@ function respostaJson(corpo: unknown, status = 200): Response {
 
 const HEALTH_OK = {
   status: 'ok',
-  iec2c: { available: true, path: '/usr/local/bin/iec2c', version: null },
-  esp_idf: { available: true, path: '/opt/esp-idf/idf.py', version: null },
+  iec2c: { available: true, path: '/usr/local/bin/iec2c', version: 'v1.0.0' },
+  esp_idf: { available: true, path: '/opt/esp-idf/idf.py', version: 'v5.1.2' },
 }
 
 function urlDaRequisicao(input: RequestInfo | URL): string {
@@ -75,12 +75,40 @@ describe('App', () => {
     expect(screen.getByText(/não tem suporte à Web Serial/i)).toBeInTheDocument()
   })
 
-  it('registra a carga inicial e o resultado de /health no console', async () => {
+  it('registra a carga inicial e uma linha por ferramenta (MATIEC, toolchain ESP32) a partir de /health, com versão', async () => {
     render(<App />)
 
     const log = screen.getByRole('log')
     expect(within(log).getByText(/LadderFlow iniciado/)).toBeInTheDocument()
-    expect(await within(log).findByText(/Servidor de compilação disponível/)).toBeInTheDocument()
+
+    await within(log).findByText(/MATIEC/)
+    const linhasMatiec = within(log).getAllByText(/MATIEC \(iec2c\)/)
+    expect(linhasMatiec).toHaveLength(1)
+    expect(linhasMatiec[0]).toHaveTextContent(/disponível — v1\.0\.0/)
+
+    const linhasToolchain = within(log).getAllByText(/Toolchain ESP32/)
+    expect(linhasToolchain).toHaveLength(1)
+    expect(linhasToolchain[0]).toHaveTextContent(/disponível — v5\.1\.2/)
+  })
+
+  it('quando /health falha, registra exatamente uma linha de erro no console', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (urlDaRequisicao(input).endsWith('/health')) {
+          return Promise.reject(new Error('falha de rede'))
+        }
+        return Promise.reject(new Error(`URL inesperada no teste: ${urlDaRequisicao(input)}`))
+      }),
+    )
+
+    render(<App />)
+
+    const log = screen.getByRole('log')
+    const linhas = await within(log).findAllByText(/Servidor de compilação indisponível/)
+    expect(linhas).toHaveLength(1)
+    expect(within(log).queryByText(/MATIEC/)).not.toBeInTheDocument()
+    expect(within(log).queryByText(/Toolchain ESP32/)).not.toBeInTheDocument()
   })
 
   it('CA-1 ponta a ponta: variáveis pelo painel, elementos pela grade, vínculo pelo modal (segundo clique)', async () => {
@@ -88,13 +116,14 @@ describe('App', () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    // painel de variáveis (aberto por padrão): declara entrada %IX0.1 e saída %QX0.1
+    // painel de variáveis (aberto por padrão): declara entrada %IX0.1 (classe Entrada é o padrão) e saída %QX0.1
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
-    await usuario.selectOptions(screen.getByLabelText('Endereço da nova variável'), '%IX0.1')
+    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), '%IX0.1')
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'saida')
-    await usuario.selectOptions(screen.getByLabelText('Endereço da nova variável'), '%QX0.1')
+    await usuario.click(screen.getByRole('radio', { name: 'Saída' }))
+    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), '%QX0.1')
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     // arrasta o NA para a coluna 1: soltar marca, não abre o modal (D-13)
@@ -134,7 +163,7 @@ describe('App', () => {
     const usuario = userEvent.setup()
     render(<App />)
 
-    await usuario.click(screen.getByRole('button', { name: /^compilar st$/i }))
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
 
     const log = screen.getByRole('log')
     expect(within(log).getByText(/Compilação iniciada/)).toBeInTheDocument()
@@ -162,7 +191,7 @@ describe('App', () => {
     const usuario = userEvent.setup()
     render(<App />)
 
-    await usuario.click(screen.getByRole('button', { name: /^compilar st$/i }))
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
 
     const log = screen.getByRole('log')
     expect(await within(log).findByText(/12:5 — token inesperado/)).toBeInTheDocument()

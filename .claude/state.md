@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (spec 002 — #23: IDE de tela inteira, segundo clique, variáveis e pinagem 8/8) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 — #24: degrau responsivo, variáveis por pino, ícones e ramo paralelo) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -280,9 +280,16 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 **Pendências registradas na #23**
 - Suíte `slow` falha com `--user` não-root: `ESP_BUILD_ROOT` na imagem é de root. Decidir entre `chown` no `Dockerfile` ou rodar como root
 - `ruff format --check` aponta 3 arquivos antigos (`tests/diferencial/executores.py`, `tests/test_deposito.py`, `tests/test_plc_runtime_host.py`)
-- Paleta mostra o símbolo duas vezes (glifo de texto e ícone SVG)
 
-**Falta:** Fatia 2 (#9 degraus e limite de colunas, #10 vários degraus na UI), Fatia 3 (#11 regras Q-6 e persistência, #12 persistência ligada, #13, #14), Fatia 4 (#15–#20).
+**Concluído — #24: degrau responsivo, variáveis por pino, ícones e ramo paralelo (plano §14, D-14, 2026-09-17)**
+- Degrau ocupa a largura do contêiner e acompanha redimensionamento e painel recolhido (célula mínima 56 px)
+- Variáveis: escolha explícita Entrada | Saída | Memória ("interna" virou "Memória"); pino exibido como `GPIO n` com endereço discreto, edição por botão; filtro com Memórias; mapa de pinos em duas tabelas (Entradas/Saídas: Endereço, GPIO, Variável); painel com área rolável única
+- Header com ícones `lucide-react` (dependência nova, ISC, em `THIRD_PARTY.md`) e sem MATIEC/toolchain; console registra uma linha por ferramenta na abertura
+- Paleta sem rótulo e sem SVG duplicado, com item **Ramo** e lixeira com ícone
+- **Ramo paralelo** (antecipado da #15): criar por arrasto, esticar/encolher pela alça (ponteiro e teclado), marcar e remover; ramo vazio é `rung_incompleto`; contato de selo construível pela UI
+- Verificação: `tsc` limpo, 344 testes vitest, `vite build`, depósito ok; Chromium com back-end real: degrau em 1024/1440/1920 e com painel recolhido, console na abertura, criação de Memória, seletor por GPIO, **contato de selo montado com mouse real** (ramo, contato no ramo, alça até coluna 3 e de volta), temas e mapa. Revisão visual pegou pino duplicado e mapa cobrindo a lista — corrigidos
+
+**Falta:** Fatia 2 (#9 degraus e limite de colunas, #10 vários degraus na UI), Fatia 3 (#11 regras Q-6 e persistência, #12 persistência ligada, #13, #14), Fatia 4 (#15 SET/RESET, #16–#20).
 
 ---
 
@@ -402,3 +409,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Ajuste de interação #21 (spec 002) | Pedido do autor antes da fatia 2: paleta com símbolo, prévia sob cursor/foco derivada do núcleo, recusa abaixo do degrau com célula marcada (plano §11, D-11). Frentes D1 (símbolos/paleta) e D2 (grade/editor) em paralelo; ambas caíram por limite de API e foram retomadas. Revisão do orquestrador pegou ícone invisível no botão pressionado e, na verificação visual, mensagens 0-based sem a regra — corrigidas (frente N), com a regra de posição tornada fonte única. 107 testes vitest, build verde |
 | 2026-09-16 | #22 da spec 002 — só arrastar-e-soltar | Autor reverteu D-4/R-2 após uso (plano §12, D-12): arrasto por Pointer Events com teclado, clique marca + lixeira/Delete, tabela de variáveis (tipo e endereço) ao lado dos degraus, modal de variável. Frentes N, D1, D2, T em paralelo. Verificação no Chromium real achou bug que os testes não pegavam (segundo arrasto cancelado por arrasto nativo de seleção); primeira correção do agente partiu de causa errada e foi refutada no navegador; causa isolada por log de eventos e corrigida. Tabela alargada após captura. 181 testes vitest, build verde |
 | 2026-09-17 | #23 da spec 002 — IDE, segundo clique, variáveis, 8/8 E/S | Autor pediu redesign estilo IDE (referência visual sem cópia), modal só no segundo clique e variáveis simplificadas com até 8 entradas/8 saídas. Frentes F (pinagem 8/8 no firmware + Q-5 da spec 001), L (editor), V (variáveis), I (casca de IDE, console, temas) em paralelo; as quatro caíram por limite de API antes de escrever e foram retomadas. 269 testes vitest, pytest completo com `slow` 70 passed, compilação real verificada no console da IDE em Chromium |
+| 2026-09-17 | #24 da spec 002 — degrau responsivo, pinos, ícones, ramo | Ajustes do autor sobre a #23: degrau na largura do contêiner, variável Memória explícita e pino GPIO no seletor, mapa de pinos em duas tabelas, header e paleta com `lucide-react`, MATIEC/toolchain só no console, e ramo paralelo por arrasto com alça (antecipado da #15). Frentes N, L, V, I em paralelo; revisão visual devolveu dois defeitos do painel à frente V. 344 testes vitest; contato de selo montado com mouse real no Chromium |

@@ -27,21 +27,36 @@ describe('TabelaVariaveis — layout compacto (painel lateral entre 18 e 32rem)'
   it('usa table-fixed com largura total, para o select não espremer a coluna Nome', () => {
     renderizar([variavel('x')])
 
-    const tabela = screen.getByRole('table')
+    const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
     expect(tabela).toHaveClass('table-fixed')
     expect(tabela).toHaveClass('w-full')
   })
 })
 
 describe('TabelaVariaveis — leitura', () => {
-  it('renderiza uma linha por variável com endereço, tipo fixo e valor', () => {
-    const variaveis = [variavel('entrada', '%IX0.0'), variavel('saida', '%QX0.0'), variavel('interna')]
+  it('renderiza uma linha por variável com pino (GPIO + endereço) em modo texto, tipo fixo e valor', () => {
+    const enderecoEntrada = ENTRADAS_LOCALIZADAS[0]
+    const enderecoSaida = SAIDAS_LOCALIZADAS[0]
+    const variaveis = [variavel('entrada', enderecoEntrada), variavel('saida', enderecoSaida), variavel('memoria')]
     renderizar(variaveis)
 
     expect(screen.getByLabelText('Nome da variável entrada')).toHaveValue('entrada')
-    expect(screen.getByLabelText('Endereço da variável entrada')).toHaveValue('%IX0.0')
-    expect(screen.getByLabelText('Endereço da variável saida')).toHaveValue('%QX0.0')
-    expect(screen.getByLabelText('Endereço da variável interna')).toHaveValue('')
+
+    // Em repouso, o pino é texto (botão de edição), não um select — o select
+    // só aparece ao acionar "Alterar pino de ...".
+    expect(screen.queryByLabelText('Pino da variável entrada')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alterar pino de entrada' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alterar pino de saida' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alterar pino de memoria' })).toBeInTheDocument()
+
+    const linhaEntrada = screen.getByLabelText('Nome da variável entrada').closest('tr') as HTMLElement
+    const linhaSaida = screen.getByLabelText('Nome da variável saida').closest('tr') as HTMLElement
+    const linhaMemoria = screen.getByLabelText('Nome da variável memoria').closest('tr') as HTMLElement
+
+    expect(within(linhaEntrada).getByText(`GPIO ${GPIO_DO_ENDERECO[enderecoEntrada]}`)).toBeInTheDocument()
+    expect(within(linhaEntrada).getByText(enderecoEntrada)).toBeInTheDocument()
+    expect(within(linhaSaida).getByText(`GPIO ${GPIO_DO_ENDERECO[enderecoSaida]}`)).toBeInTheDocument()
+    expect(within(linhaMemoria).getByText('Memória')).toBeInTheDocument()
 
     expect(screen.getAllByText('BOOL')).toHaveLength(3)
   })
@@ -72,9 +87,9 @@ describe('TabelaVariaveis — estado vazio', () => {
 })
 
 describe('TabelaVariaveis — abas de filtro', () => {
-  it('começa em "Todas" e filtra por classe ao trocar de aba', async () => {
+  it('começa em "Todas" e filtra por classe ao trocar de aba, com a aba Memórias no lugar de Internas', async () => {
     const usuario = userEvent.setup()
-    const variaveis = [variavel('e1', '%IX0.0'), variavel('s1', '%QX0.0'), variavel('i1')]
+    const variaveis = [variavel('e1', ENTRADAS_LOCALIZADAS[0]), variavel('s1', SAIDAS_LOCALIZADAS[0]), variavel('m1')]
     renderizar(variaveis)
 
     const tablist = screen.getByRole('tablist', { name: 'Filtrar variáveis por classe' })
@@ -83,7 +98,8 @@ describe('TabelaVariaveis — abas de filtro', () => {
     const abaTodas = screen.getByRole('tab', { name: 'Todas' })
     const abaEntradas = screen.getByRole('tab', { name: 'Entradas' })
     const abaSaidas = screen.getByRole('tab', { name: 'Saídas' })
-    const abaInternas = screen.getByRole('tab', { name: 'Internas' })
+    const abaMemorias = screen.getByRole('tab', { name: 'Memórias' })
+    expect(screen.queryByRole('tab', { name: 'Internas' })).not.toBeInTheDocument()
 
     expect(abaTodas).toHaveAttribute('aria-selected', 'true')
     expect(screen.getAllByLabelText(/^Nome da variável /)).toHaveLength(3)
@@ -93,71 +109,128 @@ describe('TabelaVariaveis — abas de filtro', () => {
     expect(abaTodas).toHaveAttribute('aria-selected', 'false')
     expect(screen.getByLabelText('Nome da variável e1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Nome da variável s1')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Nome da variável i1')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Nome da variável m1')).not.toBeInTheDocument()
 
     await usuario.click(abaSaidas)
     expect(screen.getByLabelText('Nome da variável s1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Nome da variável e1')).not.toBeInTheDocument()
 
-    await usuario.click(abaInternas)
-    expect(screen.getByLabelText('Nome da variável i1')).toBeInTheDocument()
+    await usuario.click(abaMemorias)
+    expect(screen.getByLabelText('Nome da variável m1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Nome da variável e1')).not.toBeInTheDocument()
   })
 })
 
-describe('TabelaVariaveis — adicionar', () => {
-  it('declara variável interna quando o endereço não é escolhido', async () => {
-    const usuario = userEvent.setup()
-    const aoDeclarar = vi.fn()
-    renderizar([], { aoDeclarar })
+describe('TabelaVariaveis — controle segmentado de classe', () => {
+  it('começa em Entrada', () => {
+    renderizar([])
 
-    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
-    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
-
-    expect(aoDeclarar).toHaveBeenCalledWith({ nome: 'contador' })
+    expect(screen.getByRole('radiogroup', { name: 'Classe da nova variável' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Entrada' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Saída' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('radio', { name: 'Memória' })).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('declara variável de entrada com o endereço escolhido no optgroup Entradas', async () => {
+  it('navega com as setas do teclado', async () => {
+    const usuario = userEvent.setup()
+    renderizar([])
+
+    const radioEntrada = screen.getByRole('radio', { name: 'Entrada' })
+    const radioSaida = screen.getByRole('radio', { name: 'Saída' })
+    const radioMemoria = screen.getByRole('radio', { name: 'Memória' })
+
+    await usuario.click(radioEntrada)
+    await usuario.keyboard('{ArrowRight}')
+    expect(radioSaida).toHaveAttribute('aria-checked', 'true')
+    expect(radioEntrada).toHaveAttribute('aria-checked', 'false')
+
+    await usuario.keyboard('{ArrowRight}')
+    expect(radioMemoria).toHaveAttribute('aria-checked', 'true')
+
+    await usuario.keyboard('{ArrowLeft}')
+    expect(radioSaida).toHaveAttribute('aria-checked', 'true')
+  })
+})
+
+describe('TabelaVariaveis — adicionar', () => {
+  it('com a classe Entrada (padrão), declara com o pino livre já pré-selecionado', async () => {
     const usuario = userEvent.setup()
     const aoDeclarar = vi.fn()
     renderizar([], { aoDeclarar })
 
     const primeiraEntrada = ENTRADAS_LOCALIZADAS[0]
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
-    await usuario.selectOptions(screen.getByLabelText('Endereço da nova variável'), primeiraEntrada)
+    expect(screen.getByLabelText('Pino da nova variável')).toHaveValue(primeiraEntrada)
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     expect(aoDeclarar).toHaveBeenCalledWith({ nome: 'entrada', endereco: primeiraEntrada })
   })
 
-  it('declara variável de saída com o endereço escolhido no optgroup Saídas', async () => {
+  it('escolhendo outro pino livre no seletor, declara com o pino escolhido', async () => {
+    const usuario = userEvent.setup()
+    const aoDeclarar = vi.fn()
+    renderizar([], { aoDeclarar })
+
+    const segundaEntrada = ENTRADAS_LOCALIZADAS[1]
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
+    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), segundaEntrada)
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    expect(aoDeclarar).toHaveBeenCalledWith({ nome: 'entrada', endereco: segundaEntrada })
+  })
+
+  it('trocando a classe para Saída, declara com um pino de saída', async () => {
     const usuario = userEvent.setup()
     const aoDeclarar = vi.fn()
     renderizar([], { aoDeclarar })
 
     const primeiraSaida = SAIDAS_LOCALIZADAS[0]
+    await usuario.click(screen.getByRole('radio', { name: 'Saída' }))
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'saida')
-    await usuario.selectOptions(screen.getByLabelText('Endereço da nova variável'), primeiraSaida)
+    expect(screen.getByLabelText('Pino da nova variável')).toHaveValue(primeiraSaida)
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     expect(aoDeclarar).toHaveBeenCalledWith({ nome: 'saida', endereco: primeiraSaida })
   })
 
-  it('o select de endereço só oferece os livres, agrupados por classe', () => {
+  it('trocando a classe para Memória, declara sem endereço (aoDeclarar chamado sem `endereco`)', async () => {
+    const usuario = userEvent.setup()
+    const aoDeclarar = vi.fn()
+    renderizar([], { aoDeclarar })
+
+    await usuario.click(screen.getByRole('radio', { name: 'Memória' }))
+    expect(screen.getByText('Memória: variável sem pino físico, usada na lógica.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Pino da nova variável')).not.toBeInTheDocument()
+
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    expect(aoDeclarar).toHaveBeenCalledWith({ nome: 'contador' })
+    expect(aoDeclarar.mock.calls[0][0]).not.toHaveProperty('endereco')
+  })
+
+  it('o seletor de pino mostra "GPIO n · endereço" e só os livres da classe', () => {
     const variaveis = [variavel('e1', ENTRADAS_LOCALIZADAS[0])]
     renderizar(variaveis)
 
-    const select = screen.getByLabelText('Endereço da nova variável') as HTMLSelectElement
-    const grupoEntradas = Array.from(select.querySelectorAll('optgroup[label="Entradas"] option')).map(
-      (o) => (o as HTMLOptionElement).value,
-    )
-    const grupoSaidas = Array.from(select.querySelectorAll('optgroup[label="Saídas"] option')).map(
-      (o) => (o as HTMLOptionElement).value,
-    )
+    const select = screen.getByLabelText('Pino da nova variável') as HTMLSelectElement
+    const opcoes = Array.from(select.options).map((o) => ({ valor: o.value, texto: o.textContent }))
 
-    expect(grupoEntradas).not.toContain(ENTRADAS_LOCALIZADAS[0])
-    expect(grupoEntradas).toEqual(ENTRADAS_LOCALIZADAS.slice(1))
-    expect(grupoSaidas).toEqual([...SAIDAS_LOCALIZADAS])
+    expect(opcoes.map((o) => o.valor)).not.toContain(ENTRADAS_LOCALIZADAS[0])
+    expect(opcoes.map((o) => o.valor)).toEqual(ENTRADAS_LOCALIZADAS.slice(1))
+    expect(opcoes[0].texto).toBe(`GPIO ${GPIO_DO_ENDERECO[ENTRADAS_LOCALIZADAS[1]]} · ${ENTRADAS_LOCALIZADAS[1]}`)
+  })
+
+  it('sem pino livre da classe, desabilita Adicionar com o motivo', () => {
+    const variaveis = ENTRADAS_LOCALIZADAS.map((endereco, indice) => variavel(`e${indice}`, endereco))
+    renderizar(variaveis)
+
+    const botao = screen.getByRole('button', { name: 'Adicionar' })
+    expect(screen.getByLabelText('Pino da nova variável')).toBeDisabled()
+    expect(screen.getByText('Nenhum pino de Entrada livre para declarar.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Nome da nova variável'), { target: { value: 'novaentrada' } })
+    expect(botao).toBeDisabled()
   })
 
   it('não declara com o nome em branco', async () => {
@@ -165,6 +238,7 @@ describe('TabelaVariaveis — adicionar', () => {
     const aoDeclarar = vi.fn()
     renderizar([], { aoDeclarar })
 
+    expect(screen.getByRole('button', { name: 'Adicionar' })).toBeDisabled()
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     expect(aoDeclarar).not.toHaveBeenCalled()
@@ -229,33 +303,90 @@ describe('TabelaVariaveis — renomear', () => {
   })
 })
 
-describe('TabelaVariaveis — trocar endereço', () => {
-  it('escolher um endereço livre chama aoAtualizar com o novo endereço', async () => {
+describe('TabelaVariaveis — trocar pino (edição in-place por botão)', () => {
+  it('em repouso mostra só o texto do pino; o botão "Alterar pino" abre o select', async () => {
+    const usuario = userEvent.setup()
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])
+
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+
+    expect(screen.getByLabelText('Pino da variável x')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Alterar pino de x' })).not.toBeInTheDocument()
+  })
+
+  it('escolher um pino livre aplica e volta ao modo texto', async () => {
     const usuario = userEvent.setup()
     const aoAtualizar = vi.fn()
     renderizar([variavel('x')], { aoAtualizar })
 
     const primeiraEntrada = ENTRADAS_LOCALIZADAS[0]
-    await usuario.selectOptions(screen.getByLabelText('Endereço da variável x'), primeiraEntrada)
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    await usuario.selectOptions(screen.getByLabelText('Pino da variável x'), primeiraEntrada)
 
     expect(aoAtualizar).toHaveBeenCalledWith('x', { nome: 'x', endereco: primeiraEntrada })
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alterar pino de x' })).toBeInTheDocument()
   })
 
-  it('escolher "Sem endereço (interna)" torna a variável interna', async () => {
+  it('escolher "Memória (sem pino)" torna a variável Memória', async () => {
     const usuario = userEvent.setup()
     const aoAtualizar = vi.fn()
     renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { aoAtualizar })
 
-    await usuario.selectOptions(screen.getByLabelText('Endereço da variável x'), '')
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    await usuario.selectOptions(screen.getByLabelText('Pino da variável x'), '')
 
     expect(aoAtualizar).toHaveBeenCalledWith('x', { nome: 'x', endereco: undefined })
   })
 
-  it('o próprio endereço da linha continua oferecido mesmo sendo o único livre da classe', () => {
+  it('editar o pino de entrada para saída é permitido (o núcleo decide, não a UI)', async () => {
+    const usuario = userEvent.setup()
+    const aoAtualizar = vi.fn()
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { aoAtualizar })
+
+    const primeiraSaida = SAIDAS_LOCALIZADAS[0]
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    await usuario.selectOptions(screen.getByLabelText('Pino da variável x'), primeiraSaida)
+
+    expect(aoAtualizar).toHaveBeenCalledWith('x', { nome: 'x', endereco: primeiraSaida })
+  })
+
+  it('Esc cancela a edição sem chamar aoAtualizar e volta ao modo texto', async () => {
+    const usuario = userEvent.setup()
+    const aoAtualizar = vi.fn()
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { aoAtualizar })
+
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    expect(screen.getByLabelText('Pino da variável x')).toBeInTheDocument()
+
+    await usuario.keyboard('{Escape}')
+
+    expect(aoAtualizar).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Alterar pino de x' })).toBeInTheDocument()
+  })
+
+  it('blur sem mudança cancela a edição sem chamar aoAtualizar', () => {
+    const aoAtualizar = vi.fn()
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { aoAtualizar })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    const select = screen.getByLabelText('Pino da variável x')
+    fireEvent.blur(select)
+
+    expect(aoAtualizar).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+  })
+
+  it('o próprio pino da linha continua oferecido mesmo sendo o único livre da classe', async () => {
+    const usuario = userEvent.setup()
     const variaveis = [variavel('e1', ENTRADAS_LOCALIZADAS[0]), variavel('e2', ENTRADAS_LOCALIZADAS[1])]
     renderizar(variaveis)
 
-    const select = screen.getByLabelText('Endereço da variável e1') as HTMLSelectElement
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de e1' }))
+    const select = screen.getByLabelText('Pino da variável e1') as HTMLSelectElement
     const opcoes = Array.from(select.options).map((o) => o.value)
     expect(opcoes).toContain(ENTRADAS_LOCALIZADAS[0])
     expect(opcoes).not.toContain(ENTRADAS_LOCALIZADAS[1])
@@ -263,7 +394,7 @@ describe('TabelaVariaveis — trocar endereço', () => {
 })
 
 describe('TabelaVariaveis — remover', () => {
-  it('botão remover chama aoRemover com o nome', async () => {
+  it('botão remover (com ícone e aria-label) chama aoRemover com o nome', async () => {
     const usuario = userEvent.setup()
     const aoRemover = vi.fn()
     renderizar([variavel('x')], { aoRemover })
@@ -305,32 +436,79 @@ describe('TabelaVariaveis — valor', () => {
   })
 })
 
+describe('TabelaVariaveis — área rolável única', () => {
+  it('formulário, lista e mapa de pinos ficam dentro do mesmo contêiner overflow-y-auto', () => {
+    const { container } = renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])
+
+    const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
+    const formulario = screen.getByLabelText('Nome da nova variável').closest('form') as HTMLElement
+    const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLElement
+
+    const rolavel = container.querySelector('.overflow-y-auto') as HTMLElement
+    expect(rolavel).toBeInTheDocument()
+    expect(rolavel).toContainElement(formulario)
+    expect(rolavel).toContainElement(tabela)
+    expect(rolavel).toContainElement(detalhes)
+
+    // O cabeçalho "Variáveis" e as abas ficam fora da área rolável (fixos).
+    const cabecalho = screen.getByText('Variáveis').closest('header') as HTMLElement
+    const abas = screen.getByRole('tablist', { name: 'Filtrar variáveis por classe' })
+    expect(rolavel).not.toContainElement(cabecalho)
+    expect(rolavel).not.toContainElement(abas)
+  })
+})
+
 describe('TabelaVariaveis — mapa de pinos', () => {
-  it('lista todos os endereços localizados (`GPIO_DO_ENDERECO`) com o GPIO correspondente', () => {
+  it('mostra duas tabelas separadas, Entradas e Saídas, com 8 linhas cada e colunas Endereço/GPIO/Variável', () => {
     renderizar([])
 
     const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLDetailsElement
     expect(detalhes).toBeInTheDocument()
 
-    for (const endereco of Object.keys(GPIO_DO_ENDERECO)) {
-      expect(detalhes).toHaveTextContent(endereco)
-      expect(detalhes).toHaveTextContent(`GPIO ${GPIO_DO_ENDERECO[endereco]}`)
+    const tabelaEntradas = within(detalhes).getByText('Entradas').closest('div')?.querySelector('table') as HTMLTableElement
+    const tabelaSaidas = within(detalhes).getByText('Saídas').closest('div')?.querySelector('table') as HTMLTableElement
+    expect(tabelaEntradas).toBeInTheDocument()
+    expect(tabelaSaidas).toBeInTheDocument()
+    expect(tabelaEntradas).not.toBe(tabelaSaidas)
+
+    expect(within(tabelaEntradas).getAllByRole('row')).toHaveLength(1 + ENTRADAS_LOCALIZADAS.length)
+    expect(within(tabelaSaidas).getAllByRole('row')).toHaveLength(1 + SAIDAS_LOCALIZADAS.length)
+
+    for (const cabecalho of ['Endereço', 'GPIO', 'Variável']) {
+      expect(within(tabelaEntradas).getByText(cabecalho)).toBeInTheDocument()
+      expect(within(tabelaSaidas).getByText(cabecalho)).toBeInTheDocument()
     }
-    expect([...ENTRADAS_LOCALIZADAS, ...SAIDAS_LOCALIZADAS].sort()).toEqual(Object.keys(GPIO_DO_ENDERECO).sort())
+
+    for (const endereco of ENTRADAS_LOCALIZADAS) {
+      expect(within(tabelaEntradas).getByText(endereco)).toBeInTheDocument()
+      expect(within(tabelaEntradas).getByText(`GPIO ${GPIO_DO_ENDERECO[endereco]}`)).toBeInTheDocument()
+    }
+    for (const endereco of SAIDAS_LOCALIZADAS) {
+      expect(within(tabelaSaidas).getByText(endereco)).toBeInTheDocument()
+      expect(within(tabelaSaidas).getByText(`GPIO ${GPIO_DO_ENDERECO[endereco]}`)).toBeInTheDocument()
+    }
   })
 
-  it('marca como "em uso" os endereços já usados por uma variável', () => {
+  it('mostra o nome da variável em uso, e "livre" para pinos sem variável', () => {
     const usado = ENTRADAS_LOCALIZADAS[0]
     const livre = ENTRADAS_LOCALIZADAS[1]
-    renderizar([variavel('x', usado)])
+    renderizar([variavel('sensorPartida', usado)])
 
     const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLDetailsElement
-    const linhaUsada = within(detalhes).getByText(usado).closest('div') as HTMLElement
-    const linhaLivre = within(detalhes).getByText(livre).closest('div') as HTMLElement
+    const linhaUsada = within(detalhes).getByText(usado).closest('tr') as HTMLElement
+    const linhaLivre = within(detalhes).getByText(livre).closest('tr') as HTMLElement
 
-    expect(linhaUsada).toHaveTextContent('em uso')
-    expect(linhaLivre).not.toHaveTextContent('em uso')
-    expect(detalhes).toContainElement(linhaUsada)
+    expect(within(linhaUsada).getByText('sensorPartida')).toBeInTheDocument()
+    expect(within(linhaLivre).getByText('livre')).toBeInTheDocument()
+  })
+})
+
+describe('TabelaVariaveis — sem "interna" na interface', () => {
+  it('nenhum texto visível usa a palavra "interna" (usa "Memória")', () => {
+    const variaveis = [variavel('entrada', ENTRADAS_LOCALIZADAS[0]), variavel('saida', SAIDAS_LOCALIZADAS[0]), variavel('memoria')]
+    const { container } = renderizar(variaveis)
+
+    expect(container.textContent?.toLowerCase()).not.toContain('interna')
   })
 })
 

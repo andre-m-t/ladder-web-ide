@@ -8,7 +8,8 @@
  * `role="alert"`, sem alterar o diagrama em edição).
  */
 
-import type { Celula, Diagrama, Elemento, Rung, Variavel } from './modelo'
+import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX } from './modelo'
+import type { Celula, Diagrama, Elemento, Ramo, Rung, Variavel } from './modelo'
 import { descreverCelula, motivoPosicaoInvalida } from './validacao'
 import { enderecoValido } from './enderecos'
 
@@ -180,6 +181,136 @@ export function moverElemento(
     rungOrigem.id === rungIdDestino ? novoRungOrigem : (encontrarRung(novoDiagrama, rungIdDestino) as Rung)
   elementoAMover.celula = celula
   novoRungDestino.elementos.push(elementoAMover)
+
+  return sucesso(novoDiagrama)
+}
+
+/** Menor `b<N>` (N inteiro positivo) ainda não usado como id de ramo em
+ * `diagrama`, contando os ramos de todos os degraus (mesmo esquema de
+ * `proximoIdElemento`, com prefixo `b`). */
+function proximoIdRamo(diagrama: Diagrama): string {
+  const usados = new Set<string>()
+  for (const rung of diagrama.rungs) {
+    for (const ramo of rung.ramos) usados.add(ramo.id)
+  }
+  let n = 1
+  while (usados.has(`b${n}`)) n++
+  return `b${n}`
+}
+
+function encontrarRamo(diagrama: Diagrama, ramoId: string): { rung: Rung; ramo: Ramo } | undefined {
+  for (const rung of diagrama.rungs) {
+    const ramo = rung.ramos.find((r) => r.id === ramoId)
+    if (ramo !== undefined) return { rung, ramo }
+  }
+  return undefined
+}
+
+/** True se algum elemento do rung está na `linha` dada, dentro do intervalo
+ * fechado `[colunaInicio, colunaFim]` — a mesma regra de pertencimento a um
+ * ramo usada por `motivoPosicaoInvalida`. */
+function temElementoNoIntervalo(rung: Rung, linha: number, colunaInicio: number, colunaFim: number): boolean {
+  return rung.elementos.some(
+    (elemento) =>
+      elemento.celula.linha === linha && elemento.celula.coluna >= colunaInicio && elemento.celula.coluna <= colunaFim,
+  )
+}
+
+/** Cria um ramo paralelo ao trilho principal na coluna dada (célula única,
+ * `colunaInicio === colunaFim === coluna`), na primeira linha 1..`LINHAS_EXTRAS_MAX`
+ * sem outro ramo do mesmo degrau ocupando essa coluna (plano D-14, Q-3). */
+export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): ResultadoEdicao {
+  const rungOriginal = encontrarRung(diagrama, rungId)
+  if (rungOriginal === undefined) return recusa(`degrau '${rungId}' inexistente`)
+  const indiceDegrau = indiceDoRung(diagrama, rungId)
+
+  if (coluna < 0 || coluna >= COLUNA_TERMINAL) {
+    return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+  }
+
+  const sobrepoeNaLinha = (linha: number) =>
+    rungOriginal.ramos.some((ramo) => ramo.linha === linha && coluna >= ramo.colunaInicio && coluna <= ramo.colunaFim)
+
+  let linhaLivre: number | undefined
+  for (let linha = 1; linha <= LINHAS_EXTRAS_MAX; linha++) {
+    if (!sobrepoeNaLinha(linha)) {
+      linhaLivre = linha
+      break
+    }
+  }
+  if (linhaLivre === undefined) {
+    return recusa(
+      `sem linha livre para o ramo em ${descreverCelula(indiceDegrau, { linha: 0, coluna })}: o degrau já usa ` +
+        `${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal nessa coluna (no máximo ${LINHAS_EXTRAS_MAX} linha(s), Q-3)`,
+    )
+  }
+
+  const novoDiagrama = structuredClone(diagrama)
+  const rung = encontrarRung(novoDiagrama, rungId) as Rung
+  const novoRamo: Ramo = { id: proximoIdRamo(diagrama), linha: linhaLivre, colunaInicio: coluna, colunaFim: coluna }
+  rung.ramos.push(novoRamo)
+
+  return sucesso(novoDiagrama)
+}
+
+/** Estica ou encolhe um ramo já existente até `colunaFim` (a alça arrastável
+ * do plano D-14). `colunaInicio` nunca muda. */
+export function redimensionarRamo(diagrama: Diagrama, ramoId: string, colunaFim: number): ResultadoEdicao {
+  const encontrado = encontrarRamo(diagrama, ramoId)
+  if (encontrado === undefined) return recusa(`ramo '${ramoId}' inexistente`)
+  const { rung, ramo } = encontrado
+  const indiceDegrau = indiceDoRung(diagrama, rung.id)
+
+  if (colunaFim < ramo.colunaInicio) {
+    return recusa(`coluna final do ramo '${ramoId}' não pode ficar antes da coluna inicial`)
+  }
+  if (colunaFim >= COLUNA_TERMINAL) {
+    return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+  }
+
+  const sobrepoeOutroRamo = rung.ramos.some(
+    (outro) =>
+      outro.id !== ramoId &&
+      outro.linha === ramo.linha &&
+      outro.colunaInicio <= colunaFim &&
+      ramo.colunaInicio <= outro.colunaFim,
+  )
+  if (sobrepoeOutroRamo) {
+    return recusa(`ramo '${ramoId}' se sobreporia a outro ramo na mesma linha do degrau ${indiceDegrau + 1}`)
+  }
+
+  const elementoFora = rung.elementos.find(
+    (elemento) =>
+      elemento.celula.linha === ramo.linha &&
+      (elemento.celula.coluna < ramo.colunaInicio || elemento.celula.coluna > colunaFim),
+  )
+  if (elementoFora !== undefined) {
+    return recusa(`há contato em ${descreverCelula(indiceDegrau, elementoFora.celula)} fora do novo intervalo`)
+  }
+
+  const novoDiagrama = structuredClone(diagrama)
+  const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
+  const novoRamo = novoRung.ramos.find((r) => r.id === ramoId) as Ramo
+  novoRamo.colunaFim = colunaFim
+
+  return sucesso(novoDiagrama)
+}
+
+/** Remove um ramo. Recusa se ainda houver algum elemento na linha do ramo,
+ * dentro do intervalo `[colunaInicio, colunaFim]` — remover o ramo sob um
+ * contato deixaria esse contato numa posição inválida. */
+export function removerRamo(diagrama: Diagrama, ramoId: string): ResultadoEdicao {
+  const encontrado = encontrarRamo(diagrama, ramoId)
+  if (encontrado === undefined) return recusa(`ramo '${ramoId}' inexistente`)
+  const { rung, ramo } = encontrado
+
+  if (temElementoNoIntervalo(rung, ramo.linha, ramo.colunaInicio, ramo.colunaFim)) {
+    return recusa('remova os contatos do ramo antes')
+  }
+
+  const novoDiagrama = structuredClone(diagrama)
+  const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
+  novoRung.ramos = novoRung.ramos.filter((r) => r.id !== ramoId)
 
   return sucesso(novoDiagrama)
 }

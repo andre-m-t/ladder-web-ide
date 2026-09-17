@@ -26,14 +26,26 @@
  *
  * Sem lista de problemas nesta fatia (entra na tarefa #13): `validarDiagrama`
  * não é chamado aqui.
+ *
+ * **Ramo paralelo (tarefa #24, D-14):** arrastar "Ramo" da paleta até uma
+ * célula do trilho principal cria o ramo pelo núcleo (`criarRamo`); marcar a
+ * linha de um ramo (clique numa célula vazia dele) e lixeira/Delete o
+ * remove (`removerRamo`); a alça na ponta direita redimensiona
+ * (`redimensionarRamo`) — por ponteiro, como geometria pura calculada por
+ * `GradeDegrau` e reportada aqui como número de coluna, e por teclado
+ * (Espaço pega, ←/→ ajustam, Espaço aplica, Esc cancela), inteiramente
+ * decidido aqui. Prévia e recusa reaproveitam os mesmos mecanismos de D-11:
+ * a operação do núcleo é chamada sem aplicar, e o motivo de uma recusa usa o
+ * mesmo alerta (`role="alert"`) do resto do degrau.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { GitBranch } from 'lucide-react'
 
-import { inserirElemento, moverElemento, removerElemento, vincularVariavel } from '../../ladder/edicao'
+import { criarRamo, inserirElemento, moverElemento, redimensionarRamo, removerElemento, removerRamo, vincularVariavel } from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
-import { COLUNAS_POR_DEGRAU, type Celula, type Diagrama, type Elemento } from '../../ladder/modelo'
+import { COLUNAS_POR_DEGRAU, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
 import { descreverCelula } from '../../ladder/validacao'
-import GradeDegrau, { type Previa } from './GradeDegrau'
+import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalVariavel from './ModalVariavel'
 import Paleta, { type TipoPaleta } from './Paleta'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
@@ -83,6 +95,13 @@ const NOME_TIPO: Record<Elemento['tipo'], string> = {
   bobina_reset: 'bobina RESET',
 }
 
+const NOME_TIPO_PALETA: Record<TipoPaleta, string> = {
+  contato_na: 'contato NA',
+  contato_nf: 'contato NF',
+  bobina: 'bobina',
+  ramo: 'ramo',
+}
+
 function elementoNaCelula(diagrama: Diagrama, rungId: string, celula: Celula): Elemento | undefined {
   const rung = diagrama.rungs.find((r) => r.id === rungId)
   return rung?.elementos.find((e) => e.celula.linha === celula.linha && e.celula.coluna === celula.coluna)
@@ -101,18 +120,54 @@ function elementoPorId(diagrama: Diagrama, id: string | null): Elemento | null {
   return encontrarElementoPorId(diagrama, id)?.elemento ?? null
 }
 
+/** Ramo (de qualquer degrau) cuja `id` é `ramoId`, com o id do degrau dono. */
+function encontrarRamoPorId(diagrama: Diagrama, ramoId: string): { rungId: string; ramo: Ramo } | undefined {
+  for (const rung of diagrama.rungs) {
+    const ramo = rung.ramos.find((r) => r.id === ramoId)
+    if (ramo !== undefined) return { rungId: rung.id, ramo }
+  }
+  return undefined
+}
+
+/** Ramo do degrau `rungId` cujo intervalo cobre `celula` (D-14) — usado para
+ * decidir se um clique numa célula vazia de linha > 0 marca um ramo. */
+function encontrarRamoPorCelula(diagrama: Diagrama, rungId: string, celula: Celula): Ramo | undefined {
+  if (celula.linha <= 0) return undefined
+  const rung = diagrama.rungs.find((r) => r.id === rungId)
+  return rung?.ramos.find((r) => r.linha === celula.linha && celula.coluna >= r.colunaInicio && celula.coluna <= r.colunaFim)
+}
+
+/** O `Ramo` presente em `depois.rungs[rungId]` que não existia em `antes`
+ * (D-14) — usado para achar a linha que `criarRamo` escolheu, já que a
+ * operação só recebe a coluna. */
+function ramoAdicionado(antes: Diagrama, depois: Diagrama, rungId: string): Ramo | undefined {
+  const rungAntes = antes.rungs.find((r) => r.id === rungId)
+  const rungDepois = depois.rungs.find((r) => r.id === rungId)
+  if (rungAntes === undefined || rungDepois === undefined) return undefined
+  return rungDepois.ramos.find((r) => !rungAntes.ramos.some((a) => a.id === r.id))
+}
+
 /** Nome de exibição da origem do arrasto, para o anúncio de `aria-live`. */
 function nomeOrigem(diagrama: Diagrama, origem: OrigemArrasto): string {
-  if (origem.de === 'paleta') return NOME_TIPO[origem.tipo]
+  if (origem.de === 'paleta') return NOME_TIPO_PALETA[origem.tipo]
   const achado = encontrarElementoPorId(diagrama, origem.elementoId)
   return achado ? NOME_TIPO[achado.elemento.tipo] : 'elemento'
 }
 
 /** Prévia da jogada do arrasto sobre `celula`, calculada chamando o núcleo
- * sem aplicar (D-11): origem paleta → `inserirElemento`; origem célula →
+ * sem aplicar (D-11): origem paleta (contato/bobina) → `inserirElemento`;
+ * origem paleta "Ramo" (D-14) → `criarRamo`, cuja linha o núcleo escolhe —
+ * a prévia mostra o ramo inteiro, não uma célula; origem célula →
  * `moverElemento`. Nenhuma regra de posição é reimplementada aqui. */
 function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId: string, celula: Celula): Previa {
   if (origem.de === 'paleta') {
+    if (origem.tipo === 'ramo') {
+      const resultado = criarRamo(diagrama, rungId, celula.coluna)
+      if (!resultado.ok) return { celula, tipo: 'invalida', motivo: resultado.motivo }
+      const novoRamo = ramoAdicionado(diagrama, resultado.diagrama, rungId)
+      if (novoRamo === undefined) return { celula, tipo: 'invalida', motivo: 'não foi possível calcular a prévia do ramo' }
+      return { tipo: 'ramo-criar', ramo: { linha: novoRamo.linha, colunaInicio: novoRamo.colunaInicio, colunaFim: novoRamo.colunaFim } }
+    }
     const resultado = inserirElemento(diagrama, rungId, origem.tipo, celula)
     if (resultado.ok) return { celula, tipo: 'inserir', elemento: origem.tipo }
     return { celula, tipo: 'invalida', motivo: resultado.motivo }
@@ -197,11 +252,16 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
 
 export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
+  const [ramoMarcado, setRamoMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
   const [arrasto, setArrasto] = useState<EstadoArrasto | null>(null)
   const [posGhost, setPosGhost] = useState<{ x: number; y: number } | null>(null)
   const [recusa, setRecusa] = useState<RecusaCelula | null>(null)
   const [anuncio, setAnuncio] = useState('')
+  /** Prévia (ponteiro ou teclado) da alça de redimensionamento de um ramo
+   * (D-14) — `null` quando nenhuma alça está sendo manipulada. `valido`
+   * reflete o resultado de `redimensionarRamo` chamado sem aplicar. */
+  const [previaAlca, setPreviaAlca] = useState<{ rungId: string; ramoId: string; colunaFim: number; valido: boolean } | null>(null)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const diagramaRef = useRef(diagrama)
@@ -273,6 +333,20 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
     const onde = descreverCelula(indiceDegrau, alvo.celula)
 
     if (origem.de === 'paleta') {
+      if (origem.tipo === 'ramo') {
+        const resultado = criarRamo(diagramaRef.current, alvo.rungId, alvo.celula.coluna)
+        if (!resultado.ok) {
+          setMarcado(null)
+          setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
+          setAnuncio(`recusado: ${resultado.motivo}`)
+          return
+        }
+        setRecusa(null)
+        aoMudarRef.current(resultado.diagrama)
+        setMarcado(null)
+        setAnuncio(`ramo criado em ${onde}`)
+        return
+      }
       const resultado: ResultadoEdicao = inserirElemento(diagramaRef.current, alvo.rungId, origem.tipo, alvo.celula)
       if (!resultado.ok) {
         setMarcado(null)
@@ -455,7 +529,28 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
     }
   }
 
+  /** Remove o elemento ou o ramo marcado (D-14: lixeira/Delete agem sobre o
+   * que estiver marcado; ramo tem prioridade porque marcar um sempre
+   * desmarca o outro). Recusa de `removerRamo` (ramo com contato dentro)
+   * aparece no mesmo alerta das demais recusas. */
   function removerMarcado() {
+    if (ramoMarcado !== null) {
+      const resultado = removerRamo(diagrama, ramoMarcado)
+      if (resultado.ok) {
+        aoMudar(resultado.diagrama)
+        setRamoMarcado(null)
+        setRecusa(null)
+        return
+      }
+      const achado = encontrarRamoPorId(diagrama, ramoMarcado)
+      setRecusa({
+        rungId: achado?.rungId ?? diagrama.rungs[0].id,
+        celula: { linha: achado?.ramo.linha ?? 0, coluna: achado?.ramo.colunaInicio ?? 0 },
+        motivo: resultado.motivo,
+      })
+      setAnuncio(`recusado: ${resultado.motivo}`)
+      return
+    }
     if (marcado === null) return
     const resultado = removerElemento(diagrama, marcado)
     if (resultado.ok) {
@@ -473,12 +568,23 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
   // D-13 (segundo clique): célula vazia desmarca; item não marcado marca;
   // item já marcado abre o modal (duplo clique é só esse mesmo gesto, rápido
   // o bastante para dois cliques nativos acontecerem antes do `dblclick`).
+  //
+  // D-14: célula vazia de linha > 0 dentro de um ramo marca o ramo (visual
+  // `ide-destaque`, `aria-selected`) em vez de só desmarcar.
   function aoClicarCelula(rungId: string, celula: Celula) {
     const elemento = elementoNaCelula(diagrama, rungId, celula)
     if (!elemento) {
+      const ramo = encontrarRamoPorCelula(diagrama, rungId, celula)
+      if (ramo) {
+        setMarcado(null)
+        setRamoMarcado(ramo.id)
+        return
+      }
       setMarcado(null)
+      setRamoMarcado(null)
       return
     }
+    setRamoMarcado(null)
     if (marcado === elemento.id) {
       setModal({ elementoId: elemento.id })
       return
@@ -535,10 +641,94 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
       }
       return
     }
-    if ((evento.key === 'Delete' || evento.key === 'Backspace') && marcado) {
+    if ((evento.key === 'Delete' || evento.key === 'Backspace') && (marcado || ramoMarcado)) {
       evento.preventDefault()
       evento.stopPropagation()
       removerMarcado()
+    }
+  }
+
+  /** Recalcula a prévia da alça chamando `redimensionarRamo` sem aplicar
+   * (D-14, mesma disciplina de D-11): usada tanto pelo arrasto por ponteiro
+   * (coluna vem da geometria calculada em `GradeDegrau`) quanto por cada
+   * tecla de seta durante o arrasto por teclado. Inválida reaproveita o
+   * alerta de recusa do degrau, âncorado na linha do ramo. */
+  function atualizarPreviaAlca(rungId: string, ramoId: string, coluna: number) {
+    const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
+    setPreviaAlca({ rungId, ramoId, colunaFim: coluna, valido: resultado.ok })
+    if (resultado.ok) {
+      setRecusa(null)
+      setAnuncio(`alça em coluna ${coluna + 1} — posição válida`)
+      return
+    }
+    const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
+    setRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
+    setAnuncio(`alça em coluna ${coluna + 1} — recusado: ${resultado.motivo}`)
+  }
+
+  /** Aplica o redimensionamento na coluna dada (fim do arrasto por ponteiro,
+   * ou Espaço com a alça pega pelo teclado). */
+  function aplicarAlca(rungId: string, ramoId: string, coluna: number) {
+    const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
+    if (resultado.ok) {
+      aoMudarRef.current(resultado.diagrama)
+      setRecusa(null)
+      setAnuncio('ramo redimensionado')
+    } else {
+      const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
+      setRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
+      setAnuncio(`recusado: ${resultado.motivo}`)
+    }
+    setPreviaAlca(null)
+  }
+
+  /** Esc durante o arrasto (ponteiro ou teclado) da alça: descarta a prévia
+   * sem tocar o diagrama. */
+  function cancelarAlca() {
+    setPreviaAlca(null)
+    setRecusa(null)
+    setAnuncio('arrasto cancelado')
+  }
+
+  /** Máquina de estado do arrasto por teclado da alça (D-14): a própria
+   * presença de `previaAlca` para este `ramoId` é o "pegou" — o primeiro
+   * Espaço/Enter só pega (grava a prévia com a coluna atual, sem chamar o
+   * núcleo — nada mudou ainda); com a alça pega, ←/→ recalculam a prévia,
+   * Espaço/Enter aplicam e Esc cancela. */
+  function aoTeclarNaAlca(evento: ReactKeyboardEvent<SVGGElement>, rungId: string, ramoId: string) {
+    const achado = encontrarRamoPorId(diagrama, ramoId)
+    if (!achado) return
+    const pega = previaAlca !== null && previaAlca.ramoId === ramoId
+
+    if (!pega) {
+      if (evento.key === ' ' || evento.key === 'Enter') {
+        evento.preventDefault()
+        evento.stopPropagation()
+        setPreviaAlca({ rungId, ramoId, colunaFim: achado.ramo.colunaFim, valido: true })
+        setAnuncio(`alça do ramo ${achado.ramo.linha} selecionada, coluna ${achado.ramo.colunaFim + 1} — use as setas para esticar ou encolher`)
+      }
+      return
+    }
+
+    if (evento.key === 'ArrowLeft' || evento.key === 'ArrowRight') {
+      evento.preventDefault()
+      evento.stopPropagation()
+      const atual = previaAlca?.colunaFim ?? achado.ramo.colunaFim
+      const proxima = evento.key === 'ArrowLeft' ? atual - 1 : atual + 1
+      if (proxima < 0 || proxima >= COLUNAS_POR_DEGRAU) return
+      atualizarPreviaAlca(rungId, ramoId, proxima)
+      return
+    }
+    if (evento.key === ' ' || evento.key === 'Enter') {
+      evento.preventDefault()
+      evento.stopPropagation()
+      aplicarAlca(rungId, ramoId, previaAlca?.colunaFim ?? achado.ramo.colunaFim)
+      return
+    }
+    if (evento.key === 'Escape') {
+      evento.preventDefault()
+      evento.stopPropagation()
+      cancelarAlca()
     }
   }
 
@@ -605,8 +795,9 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
       const alvo = evento.target
       // A lixeira também age sobre o elemento marcado (plano D-12) — clicar
       // nela não é "clicar fora da grade", é uma ação sobre a marcação.
-      if (alvo instanceof Element && (alvo.closest('[data-celula]') || alvo.closest('[data-lixeira]'))) return
+      if (alvo instanceof Element && (alvo.closest('[data-celula]') || alvo.closest('[data-lixeira]') || alvo.closest('[data-alca-ramo]'))) return
       setMarcado(null)
+      setRamoMarcado(null)
     }
     window.addEventListener('pointerdown', aoClicarFora)
     return () => window.removeEventListener('pointerdown', aoClicarFora)
@@ -620,16 +811,17 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
     }
     setRecusa(null)
     setMarcado(null)
+    setRamoMarcado(null)
   }
 
   const elementoDoModal = modal ? elementoPorId(diagrama, modal.elementoId) : null
-  const tipoGhost: Elemento['tipo'] | null =
+  const tipoGhost: TipoPaleta | Elemento['tipo'] | null =
     arrasto === null ? null : arrasto.origem.de === 'paleta' ? arrasto.origem.tipo : encontrarElementoPorId(diagrama, arrasto.origem.elementoId)?.elemento.tipo ?? null
 
   return (
     <div ref={containerRef} onKeyDown={aoTeclarNoContainer} className="flex h-full w-full flex-col">
       <Paleta
-        marcado={marcado !== null}
+        marcado={marcado !== null || ramoMarcado !== null}
         emArrasto={arrasto !== null}
         sobreLixeira={arrasto !== null && arrasto.alvo === 'lixeira'}
         aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiroPaleta}
@@ -653,6 +845,9 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
             return calcularPreviaArrasto(diagrama, arrasto.origem, arrasto.alvo.rungId, arrasto.alvo.celula)
           })()
 
+          const previaAlcaAqui: PreviaAlca | null =
+            previaAlca && previaAlca.rungId === rung.id ? { ramoId: previaAlca.ramoId, colunaFim: previaAlca.colunaFim, valido: previaAlca.valido } : null
+
           return (
             <GradeDegrau
               key={rung.id}
@@ -660,6 +855,7 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
               indice={indice}
               variaveis={diagrama.variaveis}
               marcado={marcado}
+              ramoMarcado={ramoMarcado}
               aoClicarCelula={aoClicarCelula}
               aoDuploClicarCelula={aoDuploClicarCelula}
               aoTeclarNaCelula={aoTeclarNaCelula}
@@ -667,6 +863,11 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
               aoPassarCelula={aoPassarCelula}
               previa={previaAqui}
               recusa={recusa && recusa.rungId === rung.id ? { celula: recusa.celula, motivo: recusa.motivo } : null}
+              aoArrastarAlca={atualizarPreviaAlca}
+              aoSoltarAlca={aplicarAlca}
+              aoCancelarAlca={cancelarAlca}
+              aoTeclarNaAlca={aoTeclarNaAlca}
+              previaAlca={previaAlcaAqui}
             />
           )
         })}
@@ -687,23 +888,28 @@ export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
   )
 }
 
-/** Fantasma do elemento sendo arrastado por ponteiro, seguindo o cursor
- * (plano D-12). `fixed` e `pointer-events-none`: nunca intercepta o próprio
- * arrasto, e a posição vem direto do evento — sem lógica de layout aqui. */
-function GhostArrasto({ tipo, x, y }: { tipo: Elemento['tipo']; x: number; y: number }) {
+/** Fantasma do elemento (ou item "Ramo", D-14) sendo arrastado por ponteiro,
+ * seguindo o cursor (plano D-12). `fixed` e `pointer-events-none`: nunca
+ * intercepta o próprio arrasto, e a posição vem direto do evento — sem
+ * lógica de layout aqui. */
+function GhostArrasto({ tipo, x, y }: { tipo: TipoPaleta | Elemento['tipo']; x: number; y: number }) {
   return (
     <div
       aria-hidden="true"
       className="pointer-events-none fixed z-50 opacity-80"
       style={{ left: x, top: y, transform: 'translate(-50%, -50%)' }}
     >
-      <svg width={40} height={32} viewBox="0 0 40 32">
-        {tipo === 'contato_na' && <ContatoNA cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
-        {tipo === 'contato_nf' && <ContatoNF cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
-        {(tipo === 'bobina' || tipo === 'bobina_set' || tipo === 'bobina_reset') && (
-          <Bobina cx={20} cy={16} variavel={null} selecionado={false} fantasma />
-        )}
-      </svg>
+      {tipo === 'ramo' ? (
+        <GitBranch className="text-ide-previa" />
+      ) : (
+        <svg width={40} height={32} viewBox="0 0 40 32">
+          {tipo === 'contato_na' && <ContatoNA cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
+          {tipo === 'contato_nf' && <ContatoNF cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
+          {(tipo === 'bobina' || tipo === 'bobina_set' || tipo === 'bobina_reset') && (
+            <Bobina cx={20} cy={16} variavel={null} selecionado={false} fantasma />
+          )}
+        </svg>
+      )}
     </div>
   )
 }

@@ -586,3 +586,206 @@ describe('EditorLadder — sem cores fixas (D-13)', () => {
     expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })
+
+/** Diagrama de partida com um ramo já criado (linha 1, colunas 1–3,
+ * 1-based) e sem elementos — usado pelos testes de D-14 que não precisam
+ * repetir a criação do ramo por arrasto. */
+function diagramaComRamo(): Diagrama {
+  return {
+    versao: 1,
+    variaveis: [],
+    rungs: [{ id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }],
+  }
+}
+
+describe('EditorLadder — criar ramo por arrasto (tarefa #24, D-14)', () => {
+  it('arrastar "Ramo" até uma célula do trilho principal mostra a prévia do ramo fantasma e cria o ramo ao soltar', () => {
+    const { aoMudar } = renderEditor()
+
+    const itemRamo = screen.getByRole('button', { name: /^ramo$/i })
+    const celulaAlvo = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+
+    fireEvent.pointerDown(itemRamo, { pointerId: 1, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 30 })
+    fireEvent.pointerEnter(celulaAlvo, { pointerId: 1 })
+
+    // prévia: o ramo fantasma nasceria na linha 1 (primeira livre), coluna 1
+    expect(document.querySelector('[data-ramo-fantasma="1:0:0"]')).not.toBeNull()
+    expect(aoMudar).not.toHaveBeenCalled()
+
+    fireEvent.pointerUp(window, { pointerId: 1 })
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, vazia' })).toBeInTheDocument()
+  })
+
+  it('soltar "Ramo" na coluna terminal (reservada a bobinas) é recusado, com o motivo do núcleo', () => {
+    const { aoMudar } = renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^ramo$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/ramo só cobre colunas de contato/i)
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('arrastar "Ramo" até a lixeira cancela, sem criar ramo nenhum', () => {
+    const { aoMudar } = renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^ramo$/i }), screen.getByRole('button', { name: /lixeira/i }))
+
+    expect(aoMudar).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /ramo 1/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('EditorLadder — contatos dentro do ramo (D-14)', () => {
+  it('soltar um contato numa célula do ramo insere o elemento lá dentro', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, ramo 1, coluna 2, vazia', null)
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].elementos).toEqual([{ id: 'e1', tipo: 'contato_na', celula: { linha: 1, coluna: 1 }, variavel: null }])
+  })
+})
+
+describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
+  it('arrasto por ponteiro: soltar numa coluna maior estica o ramo (redimensionarRamo aplicado)', () => {
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
+    fireEvent.pointerMove(window, { pointerId: 7, clientX: 200, clientY: 0 })
+    fireEvent.pointerUp(window, { pointerId: 7, clientX: 330, clientY: 0 })
+
+    const final = ultimoDiagrama(aoMudar)
+    // coluna sob clientX=330: floor((330-32)/64) = 4
+    expect(final.rungs[0].ramos[0]).toMatchObject({ colunaInicio: 0, colunaFim: 4 })
+  })
+
+  it('arrasto por ponteiro: soltar numa coluna menor encolhe o ramo', () => {
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
+    fireEvent.pointerUp(window, { pointerId: 7, clientX: 60, clientY: 0 })
+
+    const final = ultimoDiagrama(aoMudar)
+    // coluna sob clientX=60: floor((60-32)/64) = 0
+    expect(final.rungs[0].ramos[0]).toMatchObject({ colunaInicio: 0, colunaFim: 0 })
+  })
+
+  it('encolher deixando um contato fora do novo intervalo é recusado, e o diagrama não muda', () => {
+    const diagrama = diagramaComRamo()
+    diagrama.rungs[0].elementos.push({ id: 'e9', tipo: 'contato_na', celula: { linha: 1, coluna: 2 }, variavel: null })
+    const { aoMudar } = renderEditor(diagrama)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
+    fireEvent.pointerUp(window, { pointerId: 7, clientX: 60, clientY: 0 }) // coluna 0; contato está na coluna 2
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/fora do novo intervalo/i)
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('teclado: Espaço pega a alça, setas esticam, Espaço aplica', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    alca.focus()
+    await usuario.keyboard(' ')
+    await usuario.keyboard('{ArrowRight}{ArrowRight}')
+    await usuario.keyboard(' ')
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos[0]).toMatchObject({ colunaInicio: 0, colunaFim: 4 })
+  })
+
+  it('teclado: Esc cancela o redimensionamento em curso sem alterar o diagrama', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    alca.focus()
+    await usuario.keyboard(' ')
+    await usuario.keyboard('{ArrowLeft}')
+    await usuario.keyboard('{Escape}')
+
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+})
+
+describe('EditorLadder — marcar e remover ramo (D-14)', () => {
+  it('clique numa célula vazia do ramo marca o ramo (aria-selected)', () => {
+    renderEditor(diagramaComRamo())
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })
+    fireEvent.click(celula)
+
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('ramo marcado + Delete remove o ramo vazio', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })
+    fireEvent.click(celula)
+    celula.focus()
+    await usuario.keyboard('{Delete}')
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos).toEqual([])
+  })
+
+  it('ramo marcado + lixeira remove o ramo vazio', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComRamo())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' }))
+    await usuario.click(screen.getByRole('button', { name: /lixeira/i }))
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos).toEqual([])
+  })
+
+  it('remover um ramo com contato dentro é recusado, e o diagrama não muda', async () => {
+    const usuario = userEvent.setup()
+    const diagrama = diagramaComRamo()
+    diagrama.rungs[0].elementos.push({ id: 'e9', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: null })
+    const { aoMudar } = renderEditor(diagrama)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' }))
+    await usuario.click(screen.getByRole('button', { name: /lixeira/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/remova os contatos do ramo antes/i)
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+})
+
+describe('EditorLadder — contato de selo pela UI (tarefa #24)', () => {
+  it('NA partida (col.1) + Ramo (col.1) com NA motor dentro + NF parada (col.2) + bobina motor (col.8) => ramo colunaFim=0, sem erro de validação', async () => {
+    const usuario = userEvent.setup()
+    const variaveis: Variavel[] = [
+      { nome: 'partida', tipo: 'BOOL', endereco: '%IX0.0' },
+      { nome: 'parada', tipo: 'BOOL', endereco: '%IX0.1' },
+      { nome: 'motor', tipo: 'BOOL', endereco: '%QX0.0' },
+    ]
+    const { aoMudar } = renderEditor(diagramaComVariaveis(variaveis))
+
+    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', 'partida')
+
+    arrastar(screen.getByRole('button', { name: /^ramo$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA partida' }))
+
+    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, ramo 1, coluna 1, vazia', 'motor')
+    await arrastarEEscolher(usuario, /^contato nf$/i, 'Degrau 1, coluna 2, vazia', 'parada')
+    await arrastarEEscolher(usuario, /^bobina$/i, 'Degrau 1, coluna 8, vazia', 'motor')
+
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
+    expect(validarDiagrama(final)).toEqual([])
+  })
+})

@@ -21,7 +21,7 @@ describe('Paleta — itens arrastáveis', () => {
   it('cada item é um "item arrastável" (aria-roledescription), não um botão de ação', () => {
     render(<Paleta {...propsBase()} />)
 
-    for (const nome of [/contato na/i, /contato nf/i, /^bobina$/i]) {
+    for (const nome of [/contato na/i, /contato nf/i, /^bobina$/i, /^ramo$/i]) {
       const item = screen.getByRole('button', { name: nome })
       expect(item).toHaveAttribute('aria-roledescription', 'item arrastável')
     }
@@ -58,27 +58,67 @@ describe('Paleta — itens arrastáveis', () => {
     expect(aoIniciarArrastoTeclado).toHaveBeenCalledWith('contato_nf')
   })
 
-  it('cada item tem exatamente um ícone SVG marcado como aria-hidden', () => {
-    render(<Paleta {...propsBase()} />)
-
-    for (const item of screen.getAllByRole('button', { name: /contato|bobina/i })) {
-      const svgsEscondidos = item.querySelectorAll('svg[aria-hidden="true"]')
-      expect(svgsEscondidos).toHaveLength(1)
-    }
-  })
-
   it('nome acessível de cada item é exatamente o rótulo, sem texto do ícone', () => {
     render(<Paleta {...propsBase()} />)
 
     expect(screen.getByRole('button', { name: 'Contato NA' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Contato NF' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Bobina' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ramo' })).toBeInTheDocument()
   })
 
   it('data-tipo-paleta identifica o item, para foco programático durante o arrasto por teclado', () => {
     render(<Paleta {...propsBase()} />)
 
     expect(screen.getByRole('button', { name: 'Contato NA' })).toHaveAttribute('data-tipo-paleta', 'contato_na')
+    expect(screen.getByRole('button', { name: 'Ramo' })).toHaveAttribute('data-tipo-paleta', 'ramo')
+  })
+})
+
+describe('Paleta — item Ramo (D-14)', () => {
+  it('pointerdown no item Ramo chama aoIniciarArrastoPonteiro com "ramo"', () => {
+    const aoIniciarArrastoPonteiro = vi.fn()
+    render(<Paleta {...propsBase()} aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiro} />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Ramo' }), { pointerId: 1, clientX: 5, clientY: 5 })
+
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('ramo', expect.anything())
+  })
+
+  it('Espaço no item Ramo chama aoIniciarArrastoTeclado com "ramo"', async () => {
+    const usuario = userEvent.setup()
+    const aoIniciarArrastoTeclado = vi.fn()
+    render(<Paleta {...propsBase()} aoIniciarArrastoTeclado={aoIniciarArrastoTeclado} />)
+
+    screen.getByRole('button', { name: 'Ramo' }).focus()
+    await usuario.keyboard(' ')
+
+    expect(aoIniciarArrastoTeclado).toHaveBeenCalledWith('ramo')
+  })
+
+  it('o item Ramo tem um ícone aria-hidden (sem glifo monoespaçado)', () => {
+    render(<Paleta {...propsBase()} />)
+
+    const item = screen.getByRole('button', { name: 'Ramo' })
+    expect(item.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+  })
+})
+
+describe('Paleta — sem SVG de símbolo duplicado nos itens (D-14)', () => {
+  it('contato NA, contato NF e bobina não têm nenhum SVG (só o glifo monoespaçado em texto)', () => {
+    render(<Paleta {...propsBase()} />)
+
+    for (const nome of [/^contato na$/i, /^contato nf$/i, /^bobina$/i]) {
+      const item = screen.getByRole('button', { name: nome })
+      expect(item.querySelector('svg')).toBeNull()
+    }
+  })
+
+  it('contato NA mostra o glifo monoespaçado "-| |-"', () => {
+    render(<Paleta {...propsBase()} />)
+
+    const item = screen.getByRole('button', { name: /^contato na$/i })
+    expect(item).toHaveTextContent('-| |-')
   })
 })
 
@@ -137,13 +177,21 @@ describe('Paleta — lixeira', () => {
 
     expect(screen.getByRole('button', { name: /lixeira/i }).className).toContain('border-ide-perigo')
   })
-})
 
-describe('Paleta — barra de ferramentas compacta (D-13)', () => {
-  it('tem um título discreto "Paleta"', () => {
+  it('mostra o ícone Trash2 (svg aria-hidden) e o texto "Lixeira"', () => {
     render(<Paleta {...propsBase()} />)
 
-    expect(screen.getByText('Paleta')).toBeInTheDocument()
+    const lixeira = screen.getByRole('button', { name: /lixeira/i })
+    expect(lixeira.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    expect(lixeira).toHaveTextContent('Lixeira')
+  })
+})
+
+describe('Paleta — barra de ferramentas compacta (D-14)', () => {
+  it('não tem mais o rótulo visível "Paleta"', () => {
+    render(<Paleta {...propsBase()} />)
+
+    expect(screen.queryByText('Paleta')).not.toBeInTheDocument()
   })
 
   it('nenhuma classe de cor fixa (só tokens ide-*)', () => {

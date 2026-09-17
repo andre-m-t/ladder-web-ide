@@ -2,22 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import BarraSuperior, { type BarraSuperiorProps, type EstadoSaude } from './BarraSuperior'
-
-const SAUDE_OK: EstadoSaude = {
-  kind: 'ok',
-  health: {
-    status: 'ok',
-    iec2c: { available: true, path: '', version: null },
-    esp_idf: { available: false, path: '', version: null },
-  },
-}
+import BarraSuperior, { type BarraSuperiorProps } from './BarraSuperior'
 
 function propsBase(): BarraSuperiorProps {
   return {
     aba: 'ladder',
     aoMudarAba: vi.fn(),
-    saude: SAUDE_OK,
     compilando: false,
     aoCompilar: vi.fn(),
     gravando: false,
@@ -51,19 +41,22 @@ describe('BarraSuperior', () => {
     expect(props.aoMudarAba).toHaveBeenCalledWith('st')
   })
 
-  it('mostra o status de MATIEC e da toolchain a partir de /health', () => {
+  it('não mostra mais MATIEC/toolchain no header (foram para o console, D-14)', () => {
     render(<BarraSuperior {...propsBase()} />)
 
-    expect(screen.getByText(/MATIEC: ok/)).toBeInTheDocument()
-    expect(screen.getByText(/toolchain ESP32: indisponível/)).toBeInTheDocument()
+    expect(screen.queryByText(/MATIEC/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/toolchain/i)).not.toBeInTheDocument()
   })
 
-  it('mostra "consultando…" enquanto a saúde carrega, e o erro quando falha', () => {
-    const { rerender } = render(<BarraSuperior {...propsBase()} saude={{ kind: 'carregando' }} />)
-    expect(screen.getByText(/consultando/)).toBeInTheDocument()
+  it('todo botão do header tem um ícone svg marcado aria-hidden', () => {
+    render(<BarraSuperior {...propsBase()} />)
 
-    rerender(<BarraSuperior {...propsBase()} saude={{ kind: 'erro', message: 'falhou' }} />)
-    expect(screen.getByText(/indisponível \(falhou\)/)).toBeInTheDocument()
+    for (const botao of screen.getAllByRole('button')) {
+      expect(botao.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    }
+    for (const aba of screen.getAllByRole('tab')) {
+      expect(aba.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    }
   })
 
   it('Gravar fica desabilitado quando podeGravar é falso', () => {
@@ -76,9 +69,17 @@ describe('BarraSuperior', () => {
     expect(screen.getByRole('button', { name: /gravar no esp32/i })).not.toBeDisabled()
   })
 
-  it('Compilar mostra "Compilando…" e fica desabilitado durante a compilação', () => {
+  it('Gravar mostra o progresso e um spinner durante a gravação', () => {
+    render(<BarraSuperior {...propsBase()} gravando={true} progressoGravacao={42} />)
+    expect(screen.getByRole('button', { name: /gravando… 42%/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /gravando/i }).querySelector('.animate-spin')).not.toBeNull()
+  })
+
+  it('Compilar mostra "Compilando…" com spinner e fica desabilitado durante a compilação', () => {
     render(<BarraSuperior {...propsBase()} compilando={true} />)
-    expect(screen.getByRole('button', { name: /compilando/i })).toBeDisabled()
+    const botao = screen.getByRole('button', { name: /compilando/i })
+    expect(botao).toBeDisabled()
+    expect(botao.querySelector('.animate-spin')).not.toBeNull()
   })
 
   it('alternar tema tem aria-label e chama aoAlternarTema ao clicar', async () => {
@@ -90,15 +91,29 @@ describe('BarraSuperior', () => {
     expect(props.aoAlternarTema).toHaveBeenCalledTimes(1)
   })
 
-  it('botões de painel de variáveis e console chamam seus alternadores', async () => {
+  it('alternadores de painel de variáveis e console têm aria-pressed e chamam seus alternadores', async () => {
     const usuario = userEvent.setup()
     const props = propsBase()
-    render(<BarraSuperior {...props} />)
+    render(<BarraSuperior {...props} painelVariaveisAberto={true} consoleAberto={false} />)
 
-    await usuario.click(screen.getByRole('button', { name: 'Variáveis' }))
+    const botaoVariaveis = screen.getByRole('button', { name: /alternar painel de variáveis/i })
+    const botaoConsole = screen.getByRole('button', { name: /alternar console/i })
+    expect(botaoVariaveis).toHaveAttribute('aria-pressed', 'true')
+    expect(botaoConsole).toHaveAttribute('aria-pressed', 'false')
+
+    await usuario.click(botaoVariaveis)
     expect(props.aoAlternarPainelVariaveis).toHaveBeenCalledTimes(1)
 
-    await usuario.click(screen.getByRole('button', { name: 'Console' }))
+    await usuario.click(botaoConsole)
     expect(props.aoAlternarConsole).toHaveBeenCalledTimes(1)
+  })
+
+  it('não usa cores fixas (só classes de tokens ide-*)', () => {
+    const { container } = render(<BarraSuperior {...propsBase()} />)
+    const CORES_FIXAS = /\b(bg|text|border|stroke|fill)-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|black|white)-?\d*\b/
+
+    for (const el of container.querySelectorAll('[class]')) {
+      expect(el.getAttribute('class') ?? '').not.toMatch(CORES_FIXAS)
+    }
   })
 })

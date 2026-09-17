@@ -19,7 +19,7 @@
  */
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX, ehBobina, ehContato } from './modelo'
-import type { Celula, Diagrama, Elemento, Rung } from './modelo'
+import type { Celula, Diagrama, Elemento, Ramo, Rung } from './modelo'
 import { ehEntrada, enderecoValido } from './enderecos'
 
 // -- Códigos de problema -----------------------------------------------
@@ -129,6 +129,18 @@ function temBobina(rung: Rung): boolean {
   return rung.elementos.some((elemento) => ehBobina(elemento.tipo))
 }
 
+/** True se algum elemento do rung está na linha do ramo, dentro do intervalo
+ * fechado `[colunaInicio, colunaFim]` — um ramo sem nenhum elemento aí dentro
+ * é fio nu ligando as duas pontas: curto-circuita o trecho (plano D-14). */
+function ramoVazio(rung: Rung, ramo: Ramo): boolean {
+  return !rung.elementos.some(
+    (elemento) =>
+      elemento.celula.linha === ramo.linha &&
+      elemento.celula.coluna >= ramo.colunaInicio &&
+      elemento.celula.coluna <= ramo.colunaFim,
+  )
+}
+
 function validarEnderecosDasVariaveis(diagrama: Diagrama): Problema[] {
   const problemas: Problema[] = []
   for (const variavel of diagrama.variaveis) {
@@ -215,6 +227,18 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
         elementoId: null,
         mensagem: `degrau ${indiceDegrau + 1} sem nenhuma bobina — todo degrau precisa terminar numa bobina na coluna ${COLUNA_TERMINAL + 1}`,
       })
+    }
+
+    for (const ramo of rung.ramos) {
+      if (ramoVazio(rung, ramo)) {
+        problemas.push({
+          codigo: 'rung_incompleto',
+          severidade: 'erro',
+          rungId: rung.id,
+          elementoId: null,
+          mensagem: `ramo vazio em degrau ${indiceDegrau + 1}, colunas ${ramo.colunaInicio + 1}–${ramo.colunaFim + 1}: um ramo sem contato curto-circuita o trecho`,
+        })
+      }
     }
   })
 

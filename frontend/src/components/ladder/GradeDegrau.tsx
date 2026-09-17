@@ -2,24 +2,38 @@
  * Grade SVG de um degrau (plano D-1, spike S4 §3 — SVG puro venceu Konva:
  * ver `docs/specs/002-editor-ladder/spike-canvas.md`).
  *
- * Reescrito na tarefa #22 (D-12: arrastar-e-soltar) e redesenhado como
- * cartão de IDE na tarefa #23 (plano `agora-precisamos-trabalhar-em-cozy-dragon.md`,
- * D-13): cabeçalho numerado ("Degrau 001", três dígitos), trilhos mais
- * espessos e tokens de cor só (`stroke-/fill-ide-*`, nenhuma cor Tailwind
- * fixa). Este componente continua função pura das props, sem estado próprio
- * e sem decidir se uma jogada é válida: só desenha e encaminha os eventos
- * nativos (clique, duplo clique, tecla, pointerdown, pointerenter/leave)
- * para quem manda, `EditorLadder.tsx`, que é quem tem a máquina de estado do
- * arrasto/marcação e chama o núcleo para calcular prévia/recusa.
+ * Reescrito na tarefa #22 (D-12: arrastar-e-soltar), redesenhado como cartão
+ * de IDE na tarefa #23 (D-13) e estendido na tarefa #24
+ * (`agora-precisamos-trabalhar-em-cozy-dragon.md`, D-14) com **largura
+ * responsiva** e **ramo paralelo**. Este componente continua função pura das
+ * props, sem estado próprio de diagrama e sem decidir se uma jogada é
+ * válida: só desenha e encaminha os eventos nativos (clique, duplo clique,
+ * tecla, pointerdown, pointerenter/leave) para quem manda,
+ * `EditorLadder.tsx`, que é quem tem a máquina de estado do arrasto/marcação
+ * e chama o núcleo para calcular prévia/recusa.
  *
- * **Endereço e nome no símbolo (D-13):** para desenhar o endereço da
- * variável vinculada a cada elemento (`%IX0.1`...), a grade recebe a lista
- * de variáveis do diagrama (`variaveis`) — ela não guarda nem deriva nada
- * disso sozinha, só procura pelo nome.
+ * **Degrau responsivo (D-14):** a largura da célula não é mais fixa. Um
+ * `ResizeObserver` mede a largura disponível do cartão (o `div` que envolve
+ * o `<svg>`) e `larguraCelula = max(56, (largura − margens) / 8)`. Sem
+ * `ResizeObserver` (jsdom nos testes) cai num valor padrão fixo que
+ * reproduz a largura antiga (64px de célula), então os testes existentes
+ * continuam válidos sem mockar nada. Trilho direito e fio horizontal vão
+ * até a borda útil calculada a partir dessa largura; abaixo do mínimo, o
+ * `overflow-x-auto` do próprio wrapper rola só a área do degrau. A altura
+ * cresce com a maior linha de ramo em uso (real ou em prévia de criação).
  *
- * Só a linha 0 (trilho principal) é desenhada aqui — ramos entram na tarefa
- * #18 — mas a geometria já é função de `linha`, para reaproveitar no ramo sem
- * reescrever o cálculo de posição.
+ * **Ramo paralelo (D-14):** só a linha 0 (trilho principal) tinha desenho
+ * até a tarefa #23; agora cada `Ramo` do rung desenha uma linha horizontal
+ * entre a borda esquerda de `colunaInicio` e a direita de `colunaFim`, com
+ * conectores verticais nas duas pontas até o trilho principal, e expõe uma
+ * célula por coluna do intervalo como alvo de arrasto (mesmo mecanismo de
+ * `aoClicarCelula`/`aoIniciarArrastoPonteiro` da linha 0 — só bobina nunca
+ * entra nelas, e isso é regra do núcleo, não deste componente). A ponta
+ * direita ganha uma **alça** focável (`role="slider"`): o arrasto por
+ * ponteiro é geometria pura deste componente (não decide validade, só
+ * traduz posição de tela em número de coluna e repassa por
+ * `aoArrastarAlca`/`aoSoltarAlca`/`aoCancelarAlca`); o arrasto por teclado é
+ * encaminhado cru por `aoTeclarNaAlca`, como já acontece com as células.
  *
  * `select-none touch-none` e `onDragStart` bloqueado na célula (SVG não tem o
  * atributo `draggable` do HTML): correção de bug real do Chromium (relatado
@@ -28,7 +42,15 @@
  * nativo de conteúdo, cancelado pelo navegador (`pointercancel`) no meio do
  * gesto — ver `armarPonteiro` em `EditorLadder.tsx`.
  */
-import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react'
 
 import {
   COLUNAS_POR_DEGRAU,
@@ -36,6 +58,7 @@ import {
   ehBobina,
   type Celula,
   type Elemento,
+  type Ramo,
   type Rung,
   type TipoBobina,
   type TipoContato,
@@ -47,11 +70,23 @@ import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
  * chamando o núcleo (`inserirElemento`/`moverElemento`) sem aplicar (D-11,
  * reaproveitada pela #22 durante o arrasto). O tipo `remover` também é usado
  * para destacar o próprio elemento de origem quando o alvo do arrasto é a
- * lixeira. */
+ * lixeira. `ramo-criar` (D-14) é a prévia de soltar "Ramo" da paleta: não
+ * tem `celula` própria — o núcleo (`criarRamo`) decide a linha, então o
+ * ramo inteiro é a prévia, desenhada como um ramo fantasma. */
 export type Previa =
   | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo'] }
   | { celula: Celula; tipo: 'remover' }
   | { celula: Celula; tipo: 'invalida'; motivo: string }
+  | { tipo: 'ramo-criar'; ramo: { linha: number; colunaInicio: number; colunaFim: number } }
+
+/** Prévia de redimensionamento da alça de um ramo (D-14): calculada por
+ * `EditorLadder` chamando `redimensionarRamo` sem aplicar, a cada posição
+ * (ponteiro) ou tecla (←/→) reportada por este componente. */
+export interface PreviaAlca {
+  ramoId: string
+  colunaFim: number
+  valido: boolean
+}
 
 export interface GradeDegrauProps {
   rung: Rung
@@ -61,6 +96,8 @@ export interface GradeDegrauProps {
   variaveis: Variavel[]
   /** Id do elemento marcado, ou null se nenhum (clique simples marca; #22/#23). */
   marcado: string | null
+  /** Id do ramo marcado (clique na linha do ramo; D-14), ou null/ausente. */
+  ramoMarcado?: string | null
   /** Clique simples: marca o elemento da célula, ou abre o modal se já estava marcado (D-13). */
   aoClicarCelula: (rungId: string, celula: Celula) => void
   /** Duplo clique: abre o modal de variável do elemento (célula vazia é no-op). */
@@ -69,27 +106,66 @@ export interface GradeDegrauProps {
   aoTeclarNaCelula: (evento: KeyboardEvent<SVGGElement>, rungId: string, celula: Celula) => void
   /** pointerdown na célula: só importa quando há elemento (início do arrasto por ponteiro). */
   aoIniciarArrastoPonteiro: (evento: ReactPointerEvent<SVGGElement>, rungId: string, celula: Celula) => void
-  /** Prévia a desenhar na célula sob o arrasto, ou null/ausente. */
+  /** Prévia a desenhar na célula (ou no ramo fantasma) sob o arrasto, ou null/ausente. */
   previa?: Previa | null
   /** Avisa qual célula está sob o ponteiro ou o foco (null ao sair) — usado
    * pelo editor para acompanhar o alvo do arrasto. */
   aoPassarCelula?: (rungId: string, celula: Celula | null) => void
   /** Última recusa de uma jogada sobre uma célula deste degrau, ou null/ausente. */
   recusa?: { celula: Celula; motivo: string } | null
+  /** pointerdown na alça de um ramo (D-14): início do arrasto geométrico local. */
+  aoIniciarArrastoAlca?: (evento: ReactPointerEvent<SVGGElement>, rungId: string, ramoId: string) => void
+  /** Reporta, a cada `pointermove` com o botão pressionado sobre a alça, a
+   * coluna sob o ponteiro (geometria deste componente — validade é do núcleo). */
+  aoArrastarAlca?: (rungId: string, ramoId: string, coluna: number) => void
+  /** `pointerup` com a alça em arrasto: coluna final sob o ponteiro. */
+  aoSoltarAlca?: (rungId: string, ramoId: string, coluna: number) => void
+  /** `pointercancel` com a alça em arrasto. */
+  aoCancelarAlca?: () => void
+  /** Evento de teclado bruto na alça: `EditorLadder` decide Espaço/setas/Esc. */
+  aoTeclarNaAlca?: (evento: KeyboardEvent<SVGGElement>, rungId: string, ramoId: string) => void
+  /** Prévia de redimensionamento da alça em curso (D-14), ou null/ausente. */
+  previaAlca?: PreviaAlca | null
 }
 
-const LARGURA_CELULA = 64
+const LARGURA_CELULA_MIN = 56
+const LARGURA_CELULA_PADRAO = 64
 const ALTURA_LINHA = 64
 const MARGEM_ESQUERDA = 32
+const MARGEM_DIREITA = 32
 const MARGEM_TOPO = 24
+const RAIO_ALCA = 7
 
-/** Posição vertical (centro) de uma linha do degrau — linha 0 é o trilho principal. */
-function yDaLinha(linha: number): number {
-  return MARGEM_TOPO + ALTURA_LINHA / 2 + linha * ALTURA_LINHA
+/** Largura disponível padrão, usada até a primeira medição do
+ * `ResizeObserver` e sempre que ele não existe no ambiente (jsdom nos
+ * testes de componente). Reproduz a largura de célula antiga (64px), para
+ * que nenhum teste existente precise mockar nada. */
+const LARGURA_DISPONIVEL_PADRAO = MARGEM_ESQUERDA + MARGEM_DIREITA + COLUNAS_POR_DEGRAU * LARGURA_CELULA_PADRAO
+
+/** Mede a largura de conteúdo de `ref` via `ResizeObserver`, atualizando a
+ * cada mudança (redimensionar a janela ou o painel lateral, plano D-14).
+ * Sem `ResizeObserver` no ambiente, devolve o padrão fixo sem observar nada. */
+function useLarguraDisponivel(ref: RefObject<HTMLElement | null>): number {
+  const [largura, setLargura] = useState(LARGURA_DISPONIVEL_PADRAO)
+
+  useLayoutEffect(() => {
+    const elemento = ref.current
+    if (!elemento || typeof ResizeObserver === 'undefined') return
+
+    const observador = new ResizeObserver((entradas) => {
+      const entrada = entradas[0]
+      if (entrada) setLargura(entrada.contentRect.width)
+    })
+    observador.observe(elemento)
+    return () => observador.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return largura
 }
 
-function xDaColuna(coluna: number): number {
-  return MARGEM_ESQUERDA + coluna * LARGURA_CELULA
+function yDaLinha(linha: number): number {
+  return MARGEM_TOPO + ALTURA_LINHA / 2 + linha * ALTURA_LINHA
 }
 
 function encontrarElemento(rung: Rung, celula: Celula): Elemento | undefined {
@@ -115,8 +191,11 @@ function rotuloTipo(tipo: TipoContato | TipoBobina): string {
   }
 }
 
-function rotuloCelula(indiceDegrau: number, coluna: number, elemento: Elemento | undefined): string {
-  const base = `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}`
+/** Rótulo acessível de uma célula — "Degrau N, coluna M" no trilho principal
+ * (linha 0), "Degrau N, ramo L, coluna M" num ramo (linha L > 0, D-14),
+ * mesma convenção de `validacao.ts#descreverCelula`. */
+function rotuloCelula(indiceDegrau: number, linha: number, coluna: number, elemento: Elemento | undefined): string {
+  const base = linha === 0 ? `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}` : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
   if (!elemento) return `${base}, vazia`
   return `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
 }
@@ -144,11 +223,20 @@ function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusa
   return ehTerminal ? 'fill-ide-elevado stroke-ide-borda' : 'fill-transparent stroke-ide-borda'
 }
 
+/** Menor coluna livre sob o ponteiro, a partir de um `clientX` de tela e do
+ * retângulo do `<svg>` (geometria deste componente — D-14). */
+function colunaSobPonteiro(clientX: number, svgLeft: number, larguraCelula: number): number {
+  const local = clientX - svgLeft - MARGEM_ESQUERDA
+  const coluna = Math.floor(local / larguraCelula)
+  return Math.max(0, Math.min(COLUNAS_POR_DEGRAU - 1, coluna))
+}
+
 export default function GradeDegrau({
   rung,
   indice,
   variaveis,
   marcado,
+  ramoMarcado,
   aoClicarCelula,
   aoDuploClicarCelula,
   aoTeclarNaCelula,
@@ -156,12 +244,68 @@ export default function GradeDegrau({
   previa,
   aoPassarCelula,
   recusa,
+  aoIniciarArrastoAlca,
+  aoArrastarAlca,
+  aoSoltarAlca,
+  aoCancelarAlca,
+  aoTeclarNaAlca,
+  previaAlca,
 }: GradeDegrauProps) {
-  const largura = MARGEM_ESQUERDA * 2 + COLUNAS_POR_DEGRAU * LARGURA_CELULA
-  const altura = MARGEM_TOPO * 2 + ALTURA_LINHA
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const larguraDisponivel = useLarguraDisponivel(wrapperRef)
+  const larguraCelula = Math.max(LARGURA_CELULA_MIN, (larguraDisponivel - MARGEM_ESQUERDA - MARGEM_DIREITA) / COLUNAS_POR_DEGRAU)
+
+  const alcaArrastoRef = useRef<{ rungId: string; ramoId: string; pointerId: number } | null>(null)
+
+  // Arrasto geométrico da alça (D-14): só traduz clientX em número de coluna
+  // usando o retângulo do próprio `<svg>` — a validade de cada coluna é
+  // decidida por `EditorLadder` via `redimensionarRamo`, nunca aqui.
+  useEffect(() => {
+    function coluna(clientX: number): number {
+      const rect = svgRef.current?.getBoundingClientRect()
+      return colunaSobPonteiro(clientX, rect?.left ?? 0, larguraCelula)
+    }
+    function mover(evento: PointerEvent) {
+      const pendente = alcaArrastoRef.current
+      if (!pendente || evento.pointerId !== pendente.pointerId) return
+      aoArrastarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX))
+    }
+    function soltar(evento: PointerEvent) {
+      const pendente = alcaArrastoRef.current
+      if (!pendente || evento.pointerId !== pendente.pointerId) return
+      alcaArrastoRef.current = null
+      aoSoltarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX))
+    }
+    function cancelar(evento: PointerEvent) {
+      const pendente = alcaArrastoRef.current
+      if (!pendente || evento.pointerId !== pendente.pointerId) return
+      alcaArrastoRef.current = null
+      aoCancelarAlca?.()
+    }
+    window.addEventListener('pointermove', mover)
+    window.addEventListener('pointerup', soltar)
+    window.addEventListener('pointercancel', cancelar)
+    return () => {
+      window.removeEventListener('pointermove', mover)
+      window.removeEventListener('pointerup', soltar)
+      window.removeEventListener('pointercancel', cancelar)
+    }
+  }, [larguraCelula, aoArrastarAlca, aoSoltarAlca, aoCancelarAlca])
+
+  function xDaColuna(coluna: number): number {
+    return MARGEM_ESQUERDA + coluna * larguraCelula
+  }
+
+  const previaRamoCriar = previa?.tipo === 'ramo-criar' ? previa.ramo : undefined
+  const linhasEmUso = rung.ramos.map((r) => r.linha)
+  const maiorLinha = Math.max(0, ...linhasEmUso, ...(previaRamoCriar ? [previaRamoCriar.linha] : []))
+
+  const largura = MARGEM_ESQUERDA + MARGEM_DIREITA + COLUNAS_POR_DEGRAU * larguraCelula
+  const altura = MARGEM_TOPO * 2 + ALTURA_LINHA * (maiorLinha + 1)
   const y0 = yDaLinha(0)
   const xEsquerda = MARGEM_ESQUERDA
-  const xDireita = MARGEM_ESQUERDA + COLUNAS_POR_DEGRAU * LARGURA_CELULA
+  const xDireita = MARGEM_ESQUERDA + COLUNAS_POR_DEGRAU * larguraCelula
   const idAlerta = `recusa-${rung.id}`
 
   function aoEntrarNaCelula(celula: Celula) {
@@ -172,6 +316,140 @@ export default function GradeDegrau({
     aoPassarCelula?.(rung.id, null)
   }
 
+  function iniciarAlca(evento: ReactPointerEvent<SVGGElement>, ramoId: string) {
+    evento.preventDefault()
+    alcaArrastoRef.current = { rungId: rung.id, ramoId, pointerId: evento.pointerId }
+    aoIniciarArrastoAlca?.(evento, rung.id, ramoId)
+  }
+
+  /** Uma célula (linha 0 ou linha de ramo) — compartilhada pelos dois desenhos. */
+  function celulaGrade(linha: number, coluna: number, ehTerminal: boolean, ramoId?: string) {
+    const celula: Celula = { linha, coluna }
+    const elemento = encontrarElemento(rung, celula)
+    const cx = xDaColuna(coluna)
+    const centroX = cx + larguraCelula / 2
+    const y = yDaLinha(linha)
+    // D-14: uma célula fica "ativa" (destaque + aria-selected) se o próprio
+    // elemento está marcado OU se ela pertence ao ramo marcado (mesmo vazia
+    // — marcar o ramo destaca a linha inteira, não um elemento específico).
+    const ativo = (elemento !== undefined && elemento.id === marcado) || (ramoId !== undefined && ramoId === ramoMarcado)
+
+    const previaAqui = previa && 'celula' in previa && celulaIgual(previa.celula, celula) ? previa : undefined
+    const recusada = recusa != null && celulaIgual(recusa.celula, celula)
+    const ehRemocaoAqui = previaAqui?.tipo === 'remover'
+    const cursorInvalido = previaAqui?.tipo === 'invalida'
+    const endereco = enderecoDaVariavel(variaveis, elemento?.variavel ?? null)
+
+    return (
+      <g
+        key={`${linha}:${coluna}`}
+        tabIndex={0}
+        role="button"
+        aria-label={rotuloCelula(indice, linha, coluna, elemento)}
+        aria-selected={ativo}
+        aria-invalid={recusada ? 'true' : undefined}
+        aria-describedby={recusada ? idAlerta : undefined}
+        data-terminal={ehTerminal ? 'true' : undefined}
+        data-previa={previaAqui ? previaAqui.tipo : undefined}
+        data-celula={`${rung.id}:${linha}:${coluna}`}
+        onDragStart={(evento) => evento.preventDefault()}
+        onClick={() => aoClicarCelula(rung.id, celula)}
+        onDoubleClick={() => aoDuploClicarCelula(rung.id, celula)}
+        onKeyDown={(evento) => aoTeclarNaCelula(evento, rung.id, celula)}
+        onPointerDown={(evento) => aoIniciarArrastoPonteiro(evento, rung.id, celula)}
+        onPointerEnter={() => aoEntrarNaCelula(celula)}
+        onPointerLeave={() => aoSairDaCelula()}
+        onFocus={() => aoEntrarNaCelula(celula)}
+        onBlur={() => aoSairDaCelula()}
+        className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
+      >
+        {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
+        <rect
+          x={cx}
+          y={y - ALTURA_LINHA / 2}
+          width={larguraCelula}
+          height={ALTURA_LINHA}
+          strokeWidth={1}
+          strokeDasharray={ehTerminal ? undefined : '2,3'}
+          className={classeRetangulo(ehTerminal, previaAqui, recusada, ativo)}
+        />
+        {elemento?.tipo === 'contato_na' && (
+          <ContatoNA cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {elemento?.tipo === 'contato_nf' && (
+          <ContatoNF cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {elemento && ehBobina(elemento.tipo) && (
+          <Bobina cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
+          <ContatoNA cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
+          <ContatoNF cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
+          <Bobina cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+      </g>
+    )
+  }
+
+  /** Linha horizontal + conectores verticais de um ramo real ou fantasma
+   * (D-14). `fantasma`/`marcado` controlam só a cor (tokens `ide-*`). */
+  function tracoRamo(ramo: { linha: number; colunaInicio: number; colunaFim: number }, opts: { fantasma?: boolean; marcado?: boolean; invalido?: boolean }) {
+    const y = yDaLinha(ramo.linha)
+    const xIni = xDaColuna(ramo.colunaInicio)
+    const xFim = xDaColuna(ramo.colunaFim) + larguraCelula
+    const classe = opts.invalido
+      ? 'stroke-ide-perigo/60'
+      : opts.fantasma
+        ? 'stroke-ide-previa opacity-60'
+        : opts.marcado
+          ? 'stroke-ide-destaque'
+          : 'stroke-ide-fio'
+    return (
+      <g aria-hidden="true" data-ramo-fantasma={opts.fantasma ? `${ramo.linha}:${ramo.colunaInicio}:${ramo.colunaFim}` : undefined}>
+        <line x1={xIni} y1={y0} x2={xIni} y2={y} strokeWidth={2} className={classe} />
+        <line x1={xFim} y1={y0} x2={xFim} y2={y} strokeWidth={2} className={classe} />
+        <line x1={xIni} y1={y} x2={xFim} y2={y} strokeWidth={2} className={classe} />
+      </g>
+    )
+  }
+
+  function alcaDoRamo(ramo: Ramo) {
+    const y = yDaLinha(ramo.linha)
+    const x = xDaColuna(ramo.colunaFim) + larguraCelula
+    const marcadoAqui = ramoMarcado === ramo.id
+    const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined
+    const classeAlca = previaAqui
+      ? previaAqui.valido
+        ? 'fill-ide-previa stroke-ide-previa'
+        : 'fill-ide-perigo stroke-ide-perigo'
+      : marcadoAqui
+        ? 'fill-ide-destaque stroke-ide-destaque'
+        : 'fill-ide-elevado stroke-ide-fio'
+
+    return (
+      <g
+        key={`alca-${ramo.id}`}
+        role="slider"
+        tabIndex={0}
+        aria-label={`Estender ramo ${ramo.linha}`}
+        aria-valuenow={ramo.colunaFim + 1}
+        aria-valuemin={ramo.colunaInicio + 1}
+        aria-valuemax={COLUNA_TERMINAL}
+        data-alca-ramo={ramo.id}
+        onDragStart={(evento) => evento.preventDefault()}
+        onPointerDown={(evento) => iniciarAlca(evento, ramo.id)}
+        onKeyDown={(evento) => aoTeclarNaAlca?.(evento, rung.id, ramo.id)}
+        className="cursor-ew-resize touch-none select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+      >
+        <circle cx={x} cy={y} r={RAIO_ALCA} strokeWidth={2} className={classeAlca} />
+      </g>
+    )
+  }
+
   return (
     <figure className="my-4 overflow-hidden rounded-lg border border-ide-borda bg-ide-painel" aria-label={`Degrau ${indice + 1}`}>
       <figcaption className="flex items-center gap-2 border-b border-ide-borda bg-ide-elevado px-3 py-1.5">
@@ -180,82 +458,32 @@ export default function GradeDegrau({
         </span>
       </figcaption>
 
-      <div className="overflow-x-auto p-3">
-        <svg role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="overflow-visible">
+      <div ref={wrapperRef} className="overflow-x-auto p-3">
+        <svg ref={svgRef} role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="overflow-visible">
           {/* trilhos de energia esquerdo e direito, mais espessos que o fio */}
           <line x1={xEsquerda} y1={y0 - ALTURA_LINHA / 2} x2={xEsquerda} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
           <line x1={xDireita} y1={y0 - ALTURA_LINHA / 2} x2={xDireita} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
           {/* fio horizontal atravessando as células vazias */}
           <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-ide-fio" />
 
-          {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => {
-            const celula: Celula = { linha: 0, coluna }
-            const elemento = encontrarElemento(rung, celula)
-            const cx = xDaColuna(coluna)
-            const centroX = cx + LARGURA_CELULA / 2
-            const ehTerminal = coluna === COLUNA_TERMINAL
-            const ativo = elemento !== undefined && elemento.id === marcado
-
-            const previaAqui = previa && celulaIgual(previa.celula, celula) ? previa : undefined
-            const recusada = recusa != null && celulaIgual(recusa.celula, celula)
-            const ehRemocaoAqui = previaAqui?.tipo === 'remover'
-            const cursorInvalido = previaAqui?.tipo === 'invalida'
-            const endereco = enderecoDaVariavel(variaveis, elemento?.variavel ?? null)
-
+          {rung.ramos.map((ramo) => {
+            const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined
+            const ramoDesenhado = previaAqui ? { ...ramo, colunaFim: previaAqui.colunaFim } : ramo
             return (
-              <g
-                key={coluna}
-                tabIndex={0}
-                role="button"
-                aria-label={rotuloCelula(indice, coluna, elemento)}
-                aria-selected={ativo}
-                aria-invalid={recusada ? 'true' : undefined}
-                aria-describedby={recusada ? idAlerta : undefined}
-                data-terminal={ehTerminal ? 'true' : undefined}
-                data-previa={previaAqui ? previaAqui.tipo : undefined}
-                data-celula={`${rung.id}:${celula.linha}:${celula.coluna}`}
-                onDragStart={(evento) => evento.preventDefault()}
-                onClick={() => aoClicarCelula(rung.id, celula)}
-                onDoubleClick={() => aoDuploClicarCelula(rung.id, celula)}
-                onKeyDown={(evento) => aoTeclarNaCelula(evento, rung.id, celula)}
-                onPointerDown={(evento) => aoIniciarArrastoPonteiro(evento, rung.id, celula)}
-                onPointerEnter={() => aoEntrarNaCelula(celula)}
-                onPointerLeave={() => aoSairDaCelula()}
-                onFocus={() => aoEntrarNaCelula(celula)}
-                onBlur={() => aoSairDaCelula()}
-                className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
-              >
-                {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
-                <rect
-                  x={cx}
-                  y={y0 - ALTURA_LINHA / 2}
-                  width={LARGURA_CELULA}
-                  height={ALTURA_LINHA}
-                  strokeWidth={1}
-                  strokeDasharray={ehTerminal ? undefined : '2,3'}
-                  className={classeRetangulo(ehTerminal, previaAqui, recusada, ativo)}
-                />
-                {elemento?.tipo === 'contato_na' && (
-                  <ContatoNA cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
-                )}
-                {elemento?.tipo === 'contato_nf' && (
-                  <ContatoNF cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
-                )}
-                {elemento && ehBobina(elemento.tipo) && (
-                  <Bobina cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
-                )}
-                {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
-                  <ContatoNA cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-                )}
-                {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
-                  <ContatoNF cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-                )}
-                {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
-                  <Bobina cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-                )}
+              <g key={`traco-${ramo.id}`}>
+                {tracoRamo(ramoDesenhado, previaAqui ? { invalido: !previaAqui.valido } : { marcado: ramoMarcado === ramo.id })}
               </g>
             )
           })}
+          {previaRamoCriar && tracoRamo(previaRamoCriar, { fantasma: true })}
+
+          {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => celulaGrade(0, coluna, coluna === COLUNA_TERMINAL))}
+
+          {rung.ramos.map((ramo) =>
+            Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) => celulaGrade(ramo.linha, ramo.colunaInicio + i, false, ramo.id)),
+          )}
+
+          {rung.ramos.map((ramo) => alcaDoRamo(ramo))}
         </svg>
       </div>
 

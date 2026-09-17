@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import { COLUNA_TERMINAL } from './modelo'
+import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX } from './modelo'
 import type { Diagrama, Elemento } from './modelo'
 import { IO_ESPELHO } from './fixtures'
+import { validarDiagrama } from './validacao'
 import {
   atualizarVariavel,
+  criarRamo,
   declararVariavel,
   diagramaVazio,
   inserirElemento,
   moverElemento,
+  redimensionarRamo,
   removerElemento,
+  removerRamo,
   removerVariavel,
   vincularVariavel,
 } from './edicao'
@@ -365,6 +369,346 @@ describe('moverElemento', () => {
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('degrau 2')
     expect(resultado.motivo).toContain('fora da grade')
+  })
+})
+
+describe('contatos e ramos: inserirElemento/moverElemento respeitam o intervalo do ramo', () => {
+  function diagramaComRamo(): Diagrama {
+    const base: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [{ id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 1, colunaFim: 3 }] }],
+    }
+    return base
+  }
+
+  it('inserirElemento aceita contato dentro do intervalo do ramo', () => {
+    const diagrama = congelarProfundo(diagramaComRamo())
+    const resultado = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 2 })
+    expect(resultado.ok).toBe(true)
+  })
+
+  it('inserirElemento recusa contato fora do intervalo do ramo (mesma linha, coluna fora)', () => {
+    const diagrama = congelarProfundo(diagramaComRamo())
+    const resultado = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 4 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('não tem ramo declarado')
+  })
+
+  it('inserirElemento recusa bobina dentro do ramo (bobina só no trilho principal)', () => {
+    const diagrama = congelarProfundo(diagramaComRamo())
+    const resultado = inserirElemento(diagrama, 'r1', 'bobina', { linha: 1, coluna: 2 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('trilho principal')
+  })
+
+  it('moverElemento aceita mover contato do trilho para dentro do ramo', () => {
+    const comContato = inserirElemento(diagramaComRamo(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContato.diagrama)
+
+    const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 1, coluna: 1 })
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].elementos[0].celula).toEqual({ linha: 1, coluna: 1 })
+  })
+
+  it('moverElemento recusa mover contato para fora do intervalo do ramo', () => {
+    const comContato = inserirElemento(diagramaComRamo(), 'r1', 'contato_na', { linha: 1, coluna: 1 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContato.diagrama)
+
+    const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 1, coluna: 5 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('não tem ramo declarado')
+  })
+
+  it('moverElemento recusa mover bobina para dentro do ramo', () => {
+    const comBobina = inserirElemento(diagramaComRamo(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comBobina.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comBobina.diagrama)
+
+    const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 1, coluna: 1 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('trilho principal')
+  })
+})
+
+describe('criarRamo', () => {
+  it('caminho feliz: cria na linha 1, colunaInicio === colunaFim === coluna, id b1', () => {
+    const original = congelarProfundo(diagramaVazio())
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = criarRamo(original, 'r1', 2)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 2, colunaFim: 2 }])
+    // entrada não foi mutada
+    expect(original).toEqual(antes)
+  })
+
+  it('ids novos são o menor b<N> livre em todo o diagrama', () => {
+    let diagrama = diagramaVazio()
+    const r1 = criarRamo(diagrama, 'r1', 0)
+    if (!r1.ok) throw new Error('esperava sucesso')
+    diagrama = r1.diagrama
+
+    const r2 = criarRamo(diagrama, 'r1', 1)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    diagrama = r2.diagrama
+
+    const semB1 = removerRamo(diagrama, 'b1')
+    if (!semB1.ok) throw new Error('esperava sucesso')
+
+    const r3 = criarRamo(semB1.diagrama, 'r1', 3)
+    if (!r3.ok) throw new Error('esperava sucesso')
+    expect(r3.diagrama.rungs[0].ramos.map((r) => r.id).sort()).toEqual(['b1', 'b2'])
+  })
+
+  it('recusa: degrau inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = criarRamo(diagrama, 'r-fantasma', 0)
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: coluna fora de 0..COLUNA_TERMINAL-1 (coluna terminal é de bobina)', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = criarRamo(diagrama, 'r1', COLUNA_TERMINAL)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toBe(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+  })
+
+  it('recusa: coluna negativa', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = criarRamo(diagrama, 'r1', -1)
+    expect(resultado.ok).toBe(false)
+  })
+
+  it('duas colunas diferentes na mesma linha 1: cada ramo na sua própria linha só se sobrepuserem', () => {
+    // colunas diferentes não se sobrepõem — o segundo ramo pode ficar na
+    // mesma linha 1 do primeiro
+    let diagrama = diagramaVazio()
+    const r1 = criarRamo(diagrama, 'r1', 0)
+    if (!r1.ok) throw new Error('esperava sucesso')
+    diagrama = r1.diagrama
+
+    const r2 = criarRamo(diagrama, 'r1', 5)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    expect(r2.diagrama.rungs[0].ramos).toEqual([
+      { id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 },
+      { id: 'b2', linha: 1, colunaInicio: 5, colunaFim: 5 },
+    ])
+  })
+
+  it('mesma coluna: o segundo ramo vai para a linha 2 (a 1 já está ocupada nessa coluna)', () => {
+    let diagrama = diagramaVazio()
+    const r1 = criarRamo(diagrama, 'r1', 3)
+    if (!r1.ok) throw new Error('esperava sucesso')
+    diagrama = r1.diagrama
+
+    const r2 = criarRamo(diagrama, 'r1', 3)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    expect(r2.diagrama.rungs[0].ramos).toEqual([
+      { id: 'b1', linha: 1, colunaInicio: 3, colunaFim: 3 },
+      { id: 'b2', linha: 2, colunaInicio: 3, colunaFim: 3 },
+    ])
+  })
+
+  it('recusa: sem linha livre além do limite (Q-3) quando todas as linhas extras já cobrem a coluna', () => {
+    let diagrama = diagramaVazio()
+    for (let linha = 1; linha <= LINHAS_EXTRAS_MAX; linha++) {
+      const r = criarRamo(diagrama, 'r1', 3)
+      if (!r.ok) throw new Error('esperava sucesso')
+      diagrama = r.diagrama
+    }
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = criarRamo(congelado, 'r1', 3)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain(`${LINHAS_EXTRAS_MAX}`)
+    expect(resultado.motivo).toContain('linha livre')
+  })
+})
+
+describe('redimensionarRamo', () => {
+  it('caminho feliz: estica colunaFim, colunaInicio inalterado, sem mutar a entrada', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comRamo.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = redimensionarRamo(original, 'b1', 4)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 1, colunaFim: 4 }])
+    expect(original).toEqual(antes)
+  })
+
+  it('igual ao atual: ok, sem mudança de conteúdo', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comRamo.diagrama)
+
+    const resultado = redimensionarRamo(diagrama, 'b1', 1)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos).toEqual(diagrama.rungs[0].ramos)
+  })
+
+  it('recusa: ramo inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = redimensionarRamo(diagrama, 'b-fantasma', 2)
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: colunaFim < colunaInicio', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 3)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comRamo.diagrama)
+
+    const resultado = redimensionarRamo(diagrama, 'b1', 2)
+    expect(resultado.ok).toBe(false)
+  })
+
+  it('recusa: colunaFim >= COLUNA_TERMINAL', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 3)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comRamo.diagrama)
+
+    const resultado = redimensionarRamo(diagrama, 'b1', COLUNA_TERMINAL)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toBe(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+  })
+
+  it('recusa: sobreposição com outro ramo da mesma linha no mesmo degrau ao esticar', () => {
+    let diagrama = diagramaVazio()
+    const r1 = criarRamo(diagrama, 'r1', 0) // b1, linha 1, [0,0]
+    if (!r1.ok) throw new Error('esperava sucesso')
+    diagrama = r1.diagrama
+    const r2 = criarRamo(diagrama, 'r1', 5) // b2, linha 1, [5,5] (0 e 5 não se sobrepõem)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    diagrama = r2.diagrama
+    const congelado = congelarProfundo(diagrama)
+
+    // esticar b1 até 5 invadiria b2
+    const resultado = redimensionarRamo(congelado, 'b1', 5)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('sobrep')
+  })
+
+  it('recusa: encolher deixando um contato de fora do novo intervalo', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    let diagrama = comRamo.diagrama
+    const r2 = redimensionarRamo(diagrama, 'b1', 4)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    diagrama = r2.diagrama
+    const comContato = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 4 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const congelado = congelarProfundo(comContato.diagrama)
+
+    const resultado = redimensionarRamo(congelado, 'b1', 2)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('degrau 1, ramo 1, coluna 5')
+    expect(resultado.motivo).toContain('fora do novo intervalo')
+  })
+})
+
+describe('removerRamo', () => {
+  it('caminho feliz: remove ramo sem elementos dentro, sem mutar a entrada', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comRamo.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = removerRamo(original, 'b1')
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([])
+    expect(original).toEqual(antes)
+  })
+
+  it('recusa: ramo inexistente', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = removerRamo(diagrama, 'b-fantasma')
+    expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
+  })
+
+  it('recusa: há elemento dentro do intervalo do ramo', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    const comContato = inserirElemento(comRamo.diagrama, 'r1', 'contato_na', { linha: 1, coluna: 1 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const congelado = congelarProfundo(comContato.diagrama)
+
+    const resultado = removerRamo(congelado, 'b1')
+    expect(resultado).toEqual({ ok: false, motivo: 'remova os contatos do ramo antes' })
+  })
+})
+
+describe('cenário: contato de selo (partida NA + motor NA em ramo + parada NF + bobina motor)', () => {
+  it('monta o diagrama pelas operações de edicao.ts e valida sem problemas', () => {
+    let diagrama = diagramaVazio()
+
+    diagrama = (declararVariavel(diagrama, { nome: 'partida', endereco: '%IX0.0' }) as { ok: true; diagrama: Diagrama })
+      .diagrama
+    diagrama = (declararVariavel(diagrama, { nome: 'parada', endereco: '%IX0.1' }) as { ok: true; diagrama: Diagrama })
+      .diagrama
+    diagrama = (declararVariavel(diagrama, { nome: 'motor', endereco: '%QX0.0' }) as { ok: true; diagrama: Diagrama })
+      .diagrama
+
+    // NA partida em (0,0)
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_na', { linha: 0, coluna: 0 }) as {
+      ok: true
+      diagrama: Diagrama
+    }).diagrama
+    // ramo saindo da coluna 0 (a mesma coluna de 'partida', como um selo)
+    const comRamo = criarRamo(diagrama, 'r1', 0)
+    if (!comRamo.ok) throw new Error('esperava sucesso ao criar ramo')
+    expect(comRamo.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
+    diagrama = comRamo.diagrama
+
+    // NA motor em (1,0), dentro do ramo
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 0 }) as {
+      ok: true
+      diagrama: Diagrama
+    }).diagrama
+    // NF parada em (0,1)
+    diagrama = (inserirElemento(diagrama, 'r1', 'contato_nf', { linha: 0, coluna: 1 }) as {
+      ok: true
+      diagrama: Diagrama
+    }).diagrama
+    // bobina motor em (0, COLUNA_TERMINAL)
+    diagrama = (inserirElemento(diagrama, 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL }) as {
+      ok: true
+      diagrama: Diagrama
+    }).diagrama
+
+    // vincula cada elemento à sua variável
+    const partidaEl = diagrama.rungs[0].elementos.find((e) => e.celula.linha === 0 && e.celula.coluna === 0) as Elemento
+    diagrama = (vincularVariavel(diagrama, partidaEl.id, 'partida') as { ok: true; diagrama: Diagrama }).diagrama
+    const motorContatoEl = diagrama.rungs[0].elementos.find(
+      (e) => e.celula.linha === 1 && e.celula.coluna === 0,
+    ) as Elemento
+    diagrama = (vincularVariavel(diagrama, motorContatoEl.id, 'motor') as { ok: true; diagrama: Diagrama }).diagrama
+    const paradaEl = diagrama.rungs[0].elementos.find((e) => e.celula.linha === 0 && e.celula.coluna === 1) as Elemento
+    diagrama = (vincularVariavel(diagrama, paradaEl.id, 'parada') as { ok: true; diagrama: Diagrama }).diagrama
+    const bobinaEl = diagrama.rungs[0].elementos.find((e) => e.tipo === 'bobina') as Elemento
+    diagrama = (vincularVariavel(diagrama, bobinaEl.id, 'motor') as { ok: true; diagrama: Diagrama }).diagrama
+
+    expect(validarDiagrama(diagrama)).toEqual([])
   })
 })
 

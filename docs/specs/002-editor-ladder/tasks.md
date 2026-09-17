@@ -147,6 +147,20 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     e claro, console com eventos de compilação e gravação; verificação em
     Chromium com compilação real.
 
+- [x] **#24 — [N][L][V][I] Degrau responsivo, variáveis por pino, ícones e ramo paralelo (plano §14, D-14)**
+  - Arquivos: `frontend/src/ladder/{edicao,validacao}.ts`;
+    `components/ladder/{EditorLadder,GradeDegrau,Paleta,Simbolos,TabelaVariaveis,PainelVariaveis}.tsx`;
+    `components/ide/**`, `App.tsx`; `frontend/package.json` (`lucide-react`),
+    `THIRD_PARTY.md`; testes
+  - Depende de: #23
+  - Pronto quando: degrau ocupa a largura e acompanha o redimensionamento;
+    variável Memória criável e rotulada; seletor e lista mostram GPIO; mapa em
+    duas tabelas; header com ícones e sem MATIEC/toolchain, que aparecem uma
+    vez no console; paleta com glifo, Ramo e lixeira com ícone; contato de selo
+    montável por arrasto (ramo, alça, contato no ramo) com validação sem erro;
+    ramo vazio sinalizado; verificação em Chromium.
+  - Antecipa da #15: ramo paralelo e limite de linhas.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [ ] **#9 — [N] Degraus, mover e limite de colunas**
@@ -213,7 +227,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 
 ## Fatia 4 — S5b: ramo paralelo, SET/RESET e CTU
 
-- [ ] **#15 — [N] Ramo paralelo, SET/RESET e limite de linhas**
+- [ ] **#15 — [N] SET/RESET (ramo paralelo e limite de linhas já entregues na #24)**
   - Arquivos: `frontend/src/ladder/edicao.ts`, `validacao.ts`, testes
   - Depende de: #11
   - Pronto quando: `criarRamo(degrau, colunaInicio, colunaFim)`,
@@ -306,6 +320,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #21 | RF-12 (D-11) | CA-5 |
 | #22 | RF-2, RF-6, RF-7, RF-9, RF-10, RF-12 (D-12) | CA-1, CA-2, CA-5, CA-7 |
 | #23 | RF-9, RF-10, RF-12 (D-13) | CA-1, CA-2, CA-5, CA-7 |
+| #24 | RF-1, RF-4, RF-9, RF-10, RF-12 (D-14) | CA-2, CA-4, CA-10 |
 
 ## Paralelismo previsto
 

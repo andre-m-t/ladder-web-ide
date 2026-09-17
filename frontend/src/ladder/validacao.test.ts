@@ -228,6 +228,35 @@ describe('validarDiagrama — um código por vez', () => {
     )
   })
 
+  it('rung_incompleto: ramo declarado sem nenhum contato dentro (curto-circuita o trecho)', () => {
+    const rung: Rung = {
+      ...rungBase(),
+      ramos: [{ id: 'ramo1', linha: 1, colunaInicio: 2, colunaFim: 4 }],
+    }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    const problema = problemas.find((p) => p.mensagem.includes('ramo vazio'))
+    expect(problema).toEqual(
+      expect.objectContaining({ codigo: 'rung_incompleto', severidade: 'erro', rungId: 'r1', elementoId: null }),
+    )
+    expect(problema?.mensagem).toBe('ramo vazio em degrau 1, colunas 3–5: um ramo sem contato curto-circuita o trecho')
+    // não é confundido com a falta de bobina — o rung já tem bobina
+    expect(problemas.filter((p) => p.codigo === 'rung_incompleto')).toHaveLength(1)
+  })
+
+  it('ramo com contato dentro do intervalo: sem rung_incompleto por causa do ramo', () => {
+    const rung: Rung = {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 1, coluna: 2 }, variavel: 'entrada' },
+        { id: 'b1', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [{ id: 'ramo1', linha: 1, colunaInicio: 1, colunaFim: 3 }],
+    }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    expect(problemas.filter((p) => p.codigo === 'rung_incompleto')).toEqual([])
+  })
+
   it('bobina_escreve_entrada: bobina vinculada a variável com endereço %IX', () => {
     const rung: Rung = {
       id: 'r1',

@@ -21,6 +21,7 @@ como processo separado.
 | React | MIT | Dependência de pacote (front-end). |
 | Vite | MIT | Dependência de pacote (ferramenta de build do front-end). |
 | Tailwind CSS | MIT | Dependência de pacote (front-end). |
+| lucide-react | ISC | Dependência de pacote (front-end): ícones da interface. |
 | TypeScript | Apache-2.0 | Dependência de pacote (ferramenta de build do front-end). |
 | Vitest, jsdom, Testing Library (`@testing-library/react`, `jest-dom`, `user-event`) | MIT | Dependências de pacote usadas só nos testes do front-end; não entram no programa entregue. |
 | `@types/w3c-web-serial` | MIT | Declarações de tipo da Web Serial API (ferramenta de build do front-end). |

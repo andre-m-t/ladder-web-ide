@@ -144,6 +144,8 @@ desligar com atraso) continuam fora** — ver §7.
   cada variável será exibido ao vivo quando houver simulação (F9).
 - **RF-10.** O sistema deve permitir vincular um elemento a uma variável
   **interna**, sem endereço do controlador.
+  *Revisão aditiva (2026-09-17):* na interface, a variável interna chama-se
+  **memória** ("sem pino físico"), por ser o termo mais claro para o usuário.
 - **RF-11.** O sistema deve validar a estrutura do diagrama e identificar, no
   mínimo: degrau incompleto, variável não vinculada a um elemento que a
   exige, e elemento em posição inválida da grade. Também identifica duas

@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { IO_ESPELHO } from '../../ladder/fixtures'
-import GradeDegrau, { type Previa } from './GradeDegrau'
+import type { Ramo } from '../../ladder/modelo'
+import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 
 /** Props obrigatórias que a maioria dos testes não usa — mantém as chamadas
  * de `render` curtas. */
@@ -273,6 +274,186 @@ describe('GradeDegrau — sem cores fixas (D-13)', () => {
       />,
     )
 
+    expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
+  })
+})
+
+/** `ResizeObserver` mínimo para os testes de largura responsiva (D-14):
+ * guarda a instância mais recente para o teste disparar manualmente o
+ * `callback`, como o navegador faria ao medir o wrapper de verdade. */
+class ResizeObserverFalso {
+  static instancias: ResizeObserverFalso[] = []
+  callback: ResizeObserverCallback
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback
+    ResizeObserverFalso.instancias.push(this)
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  disparar(width: number) {
+    this.callback([{ contentRect: { width } } as ResizeObserverEntry], this as unknown as ResizeObserver)
+  }
+}
+
+describe('GradeDegrau — largura responsiva (D-14)', () => {
+  afterEach(() => {
+    delete (window as { ResizeObserver?: unknown }).ResizeObserver
+    ResizeObserverFalso.instancias.length = 0
+  })
+
+  it('sem ResizeObserver no ambiente (jsdom padrão), usa a largura padrão fixa (célula de 64px)', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    expect(celula.querySelector('rect')).toHaveAttribute('width', '64')
+  })
+
+  it('larguraCelula muda com a largura medida pelo ResizeObserver (e respeita o mínimo de 56px)', () => {
+    window.ResizeObserver = ResizeObserverFalso as unknown as typeof ResizeObserver
+
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
+    const instancia = ResizeObserverFalso.instancias[ResizeObserverFalso.instancias.length - 1]
+
+    act(() => instancia.disparar(400))
+    // (400 - 64) / 8 = 42 < 56 (mínimo) -> a célula fica no mínimo
+    expect(celula.querySelector('rect')).toHaveAttribute('width', '56')
+
+    act(() => instancia.disparar(960))
+    // (960 - 64) / 8 = 112, acima do mínimo -> usa o valor calculado
+    expect(celula.querySelector('rect')).toHaveAttribute('width', '112')
+  })
+})
+
+describe('GradeDegrau — ramo paralelo, desenho (D-14)', () => {
+  const ramo: Ramo = { id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }
+  const rungComRamo = {
+    id: 'r1',
+    elementos: [{ id: 'e1', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'x' }],
+    ramos: [ramo],
+  }
+
+  it('cada coluna do intervalo do ramo é uma célula com rótulo "ramo L"', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, contato NA x' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 3, vazia' })).toBeInTheDocument()
+    // fora do intervalo do ramo, na mesma linha: nenhuma célula
+    expect(screen.queryByRole('button', { name: /ramo 1, coluna 4/i })).not.toBeInTheDocument()
+  })
+
+  it('desenha uma alça (role slider) na ponta direita do ramo, com aria-valuenow = colunaFim (1-based)', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} />)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    expect(alca).toHaveAttribute('aria-valuenow', '3')
+  })
+
+  it('ramoMarcado destaca todas as células do ramo com aria-selected, mesmo vazias', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} ramoMarcado="b1" />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, contato NA x' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
+
+  it('sem ramoMarcado, as células vazias do ramo não ficam marcadas', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 2, vazia' })).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('prévia de criação de ramo (ramo-criar) desenha um ramo fantasma com data-ramo-fantasma', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    const previa: Previa = { tipo: 'ramo-criar', ramo: { linha: 1, colunaInicio: 0, colunaFim: 0 } }
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} previa={previa} />)
+
+    expect(container.querySelector('[data-ramo-fantasma="1:0:0"]')).not.toBeNull()
+  })
+
+  it('sem prévia de ramo, nenhum ramo fantasma é desenhado', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    expect(container.querySelector('[data-ramo-fantasma]')).toBeNull()
+  })
+
+  it('altura do SVG cresce quando há ramo em linha mais alta', () => {
+    const semRamo = { id: 'r1', elementos: [], ramos: [] }
+    const { container: c1 } = render(<GradeDegrau rung={semRamo} indice={0} {...propsBase()} />)
+    const alturaSemRamo = Number(c1.querySelector('svg')?.getAttribute('height'))
+
+    const { container: c2 } = render(<GradeDegrau rung={rungComRamo} indice={1} {...propsBase()} />)
+    const alturaComRamo = Number(c2.querySelector('svg')?.getAttribute('height'))
+
+    expect(alturaComRamo).toBeGreaterThan(alturaSemRamo)
+  })
+})
+
+describe('GradeDegrau — alça do ramo, geometria do arrasto por ponteiro (D-14)', () => {
+  const rungComRamo = { id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }
+
+  it('pointermove sobre a alça reporta a coluna sob o ponteiro via aoArrastarAlca', () => {
+    const aoArrastarAlca = vi.fn()
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoArrastarAlca={aoArrastarAlca} />)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
+    fireEvent.pointerMove(window, { pointerId: 9, clientX: 200, clientY: 0 })
+
+    // getBoundingClientRect do <svg> é (0,0,0,0) no jsdom; coluna = floor((200-32)/64) = 2
+    expect(aoArrastarAlca).toHaveBeenCalledWith('r1', 'b1', 2)
+  })
+
+  it('pointerup sobre a alça reporta a coluna final via aoSoltarAlca', () => {
+    const aoSoltarAlca = vi.fn()
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoSoltarAlca={aoSoltarAlca} />)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
+    fireEvent.pointerUp(window, { pointerId: 9, clientX: 300, clientY: 0 })
+
+    // coluna = floor((300-32)/64) = 4
+    expect(aoSoltarAlca).toHaveBeenCalledWith('r1', 'b1', 4)
+  })
+
+  it('pointercancel durante o arrasto da alça chama aoCancelarAlca', () => {
+    const aoCancelarAlca = vi.fn()
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoCancelarAlca={aoCancelarAlca} />)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
+    fireEvent.pointerCancel(window, { pointerId: 9 })
+
+    expect(aoCancelarAlca).toHaveBeenCalledTimes(1)
+  })
+
+  it('encaminha o evento de tecla bruto na alça para aoTeclarNaAlca', async () => {
+    const usuario = userEvent.setup()
+    const aoTeclarNaAlca = vi.fn()
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoTeclarNaAlca={aoTeclarNaAlca} />)
+
+    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    alca.focus()
+    await usuario.keyboard(' ')
+
+    expect(aoTeclarNaAlca).toHaveBeenCalledTimes(1)
+    expect(aoTeclarNaAlca.mock.calls[0][1]).toBe('r1')
+    expect(aoTeclarNaAlca.mock.calls[0][2]).toBe('b1')
+  })
+
+  it('previaAlca inválida colore a alça com o token de perigo (sem cor fixa)', () => {
+    const previaAlca: PreviaAlca = { ramoId: 'b1', colunaFim: 5, valido: false }
+    const { container } = render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} previaAlca={previaAlca} />)
+
+    expect(container.innerHTML).toMatch(/stroke-ide-perigo/)
     expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })

@@ -5,6 +5,7 @@
  * streaming da saída do `iec2c`/`idf.py` — o servidor continua síncrono
  * (spec 001, Q-6); isto é só o que o cliente já observa.
  */
+import { SquareTerminal, Trash2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import type { EntradaConsole } from '../../lib/console'
@@ -39,12 +40,17 @@ export default function Console({ entradas, aoLimpar }: ConsoleProps) {
   return (
     <div className="flex h-full flex-col bg-ide-painel">
       <div className="flex shrink-0 items-center justify-between border-b border-ide-borda px-3 py-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-ide-suave">Console</h2>
+        <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ide-suave">
+          <SquareTerminal aria-hidden="true" size={14} />
+          Console
+        </h2>
         <button
           type="button"
           onClick={aoLimpar}
-          className="rounded px-2 py-0.5 text-xs text-ide-suave hover:bg-ide-elevado hover:text-ide-texto"
+          title="Limpar console"
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-ide-suave hover:bg-ide-elevado hover:text-ide-texto"
         >
+          <Trash2 aria-hidden="true" size={14} />
           Limpar
         </button>
       </div>

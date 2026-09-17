@@ -520,3 +520,37 @@ casca visual.
 - **Requisito atendido:** RF-9, RF-10, RF-12; CA-1 (agora ponta a ponta na IDE),
   CA-2, CA-5, CA-7; preserva RF-1 a RF-6 da spec 001.
 
+## 14. Revisão aditiva — degrau responsivo, variáveis por pino, ícones e ramo paralelo (2026-09-17)
+
+Ajustes pedidos pelo autor após usar a #23. Tarefa #24. D-12 e D-13 continuam.
+
+### D-14: degrau responsivo, "memória", pino no seletor, ícones e ramo por arrasto
+- **Escolha:**
+  - **Degrau responsivo:** largura da célula calculada da largura medida do
+    cartão (mínimo 56 px), trilho e fio até a borda; rolagem horizontal só
+    abaixo do mínimo.
+  - **Variáveis:** "interna" passa a **Memória (sem pino)**; formulário com
+    escolha explícita Entrada | Saída | Memória; seletor mostra `GPIO n · %IX0.k`;
+    filtro Todas | Entradas | Saídas | Memórias; mapa de pinos em duas tabelas
+    (Entradas e Saídas) com Endereço | GPIO | Variável.
+  - **Header** com ícones e sem os chips de MATIEC/toolchain; o console registra
+    **uma linha por ferramenta** na abertura.
+  - **Paleta** sem rótulo, glifo monoespaçado por item (sem SVG duplicado), item
+    **Ramo** e lixeira com ícone.
+  - **Ramo paralelo por arrasto** (antecipado da #15): soltar "Ramo" numa coluna
+    de contato cria o ramo na primeira linha livre; **alça** na ponta direita
+    estica/encolhe; ramo marcado sai pela lixeira/Delete; ramo vazio é
+    `rung_incompleto`. Prévia e recusa pelo núcleo (`criarRamo`,
+    `redimensionarRamo`, `removerRamo`).
+  - **Dependência nova:** `lucide-react` (ISC), só ícones, importados por nome
+    (tree-shaking), pedida pelo autor; registrada em `THIRD_PARTY.md`.
+- **Por quê:** avaliação de uso — espaço desperdiçado ao lado do degrau, criação
+  de variável sem pino não percebida, pino físico é o que o estudante liga na
+  bancada, status duplicado no header, e o contato de selo (ramo) é o primeiro
+  circuito que todo curso de Ladder ensina.
+- **Alternativas descartadas:** ramo criado arrastando sobre colunas sem alça
+  (autor preferiu alça); ícones SVG próprios (autor pediu biblioteca);
+  mostrar só GPIO sem o endereço (o endereço é o que aparece no degrau e no ST).
+- **Requisito atendido:** RF-1, RF-4, RF-9, RF-10, RF-12; CA-2, CA-4 (ramo vazio),
+  CA-10 (limite de linhas).
+

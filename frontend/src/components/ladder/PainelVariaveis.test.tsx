@@ -10,8 +10,9 @@ import type { Diagrama } from '../../ladder/modelo'
 import codigoFonte from './PainelVariaveis.tsx?raw'
 import PainelVariaveis from './PainelVariaveis'
 
-/** Diagrama com uma variável interna vinculada a um contato — só para testar
- * a recusa de `removerVariavel` (núcleo) quando a variável está em uso. */
+/** Diagrama com uma variável Memória (sem endereço) vinculada a um contato —
+ * só para testar a recusa de `removerVariavel` (núcleo) quando a variável
+ * está em uso. */
 const DIAGRAMA_COM_VINCULO: Diagrama = {
   versao: 1,
   variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
@@ -50,7 +51,7 @@ describe('PainelVariaveis — preenche a altura do painel', () => {
 })
 
 describe('PainelVariaveis — declarar via núcleo', () => {
-  it('adiciona variável interna e o diagrama sobe por aoMudar', async () => {
+  it('classe Entrada (padrão): adiciona com um pino já pré-selecionado e o diagrama sobe por aoMudar', async () => {
     const usuario = userEvent.setup()
     render(<Wrapper inicial={diagramaVazio()} />)
 
@@ -58,19 +59,36 @@ describe('PainelVariaveis — declarar via núcleo', () => {
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     expect(screen.getByLabelText('Nome da variável contador')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de contador' }))
+    expect(screen.getByLabelText('Pino da variável contador')).toHaveValue(ENTRADAS_LOCALIZADAS[0])
     expect(screen.getByText('1 declarada')).toBeInTheDocument()
   })
 
-  it('adiciona variável com endereço', async () => {
+  it('escolhendo outro pino no seletor, declara com o pino escolhido', async () => {
     const usuario = userEvent.setup()
     render(<Wrapper inicial={diagramaVazio()} />)
 
-    const primeiraEntrada = ENTRADAS_LOCALIZADAS[0]
+    const segundaEntrada = ENTRADAS_LOCALIZADAS[1]
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
-    await usuario.selectOptions(screen.getByLabelText('Endereço da nova variável'), primeiraEntrada)
+    await usuario.selectOptions(screen.getByLabelText('Pino da nova variável'), segundaEntrada)
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
-    expect(screen.getByLabelText('Endereço da variável entrada')).toHaveValue(primeiraEntrada)
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de entrada' }))
+    expect(screen.getByLabelText('Pino da variável entrada')).toHaveValue(segundaEntrada)
+  })
+
+  it('classe Memória via controle segmentado: adiciona sem pino', async () => {
+    const usuario = userEvent.setup()
+    render(<Wrapper inicial={diagramaVazio()} />)
+
+    await usuario.click(screen.getByRole('radio', { name: 'Memória' }))
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    expect(screen.getByLabelText('Nome da variável contador')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de contador' }))
+    expect(screen.getByLabelText('Pino da variável contador')).toHaveValue('')
+    expect(screen.getByText('1 declarada')).toBeInTheDocument()
   })
 })
 
@@ -96,6 +114,22 @@ describe('PainelVariaveis — editar e remover via núcleo', () => {
 
     expect(screen.queryByLabelText('Nome da variável x')).not.toBeInTheDocument()
     expect(screen.getByText('0 declaradas')).toBeInTheDocument()
+  })
+
+  it('edita o pino de entrada para saída (o núcleo decide, não a UI)', async () => {
+    const usuario = userEvent.setup()
+    const diagramaComEntrada: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'x', tipo: 'BOOL', endereco: ENTRADAS_LOCALIZADAS[0] }],
+      rungs: [{ id: 'r1', elementos: [], ramos: [] }],
+    }
+    render(<Wrapper inicial={diagramaComEntrada} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    await usuario.selectOptions(screen.getByLabelText('Pino da variável x'), '%QX0.0')
+
+    await usuario.click(screen.getByRole('button', { name: 'Alterar pino de x' }))
+    expect(screen.getByLabelText('Pino da variável x')).toHaveValue('%QX0.0')
   })
 })
 
