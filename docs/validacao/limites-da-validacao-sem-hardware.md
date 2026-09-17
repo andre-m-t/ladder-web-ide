@@ -126,6 +126,21 @@ Que segurá-lo no boot entra em modo de gravação em vez de executar a aplicaç
 é comportamento esperado do hardware, e só a bancada mostra se isso atrapalha o
 uso pretendido.
 
+**Atualização (2026-09-17).** A Q-5 recebeu uma segunda revisão, ampliando a
+pinagem de 2+2 para 8+8 endereços (`%IX0.0`–`%IX0.7`, `%QX0.0`–`%QX0.7`), a
+pedido da spec 002 (editor Ladder com até 8 entradas e 8 saídas). Os quatro
+pinos originais não mudaram de GPIO. Os doze pinos novos
+(`%IX0.2`–`%IX0.7` em GPIO19/21/22/23/32/33; `%QX0.2`–`%QX0.7` em
+GPIO16/17/25/26/27/13) foram escolhidos fora das faixas de risco conhecidas
+(nenhum é *strapping pin*, nenhum está na faixa do flash SPI interno, nenhuma
+entrada *input-only* recebeu pull-up) — mas esse limite de método vale
+**integralmente** para eles: nenhum foi gravado, nenhum foi medido, e a
+travessia de bancada continua bloqueada por falta de hardware físico (F3 em
+`.claude/state.md`). Concretamente, o que muda para os quatro pinos
+originais é zero; para os doze novos, a situação é a mesma que este
+documento já descrevia para todo o mapa antes de existir gravação alguma —
+só que agora são doze pinos a menos verificados, não dois.
+
 ### 4. Estado elétrico dos pinos
 
 Um nível em memória não é uma tensão em um pino. Nenhum dos caminhos desta

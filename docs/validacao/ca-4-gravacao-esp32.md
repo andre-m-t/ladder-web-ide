@@ -13,7 +13,10 @@ Serial API (RF-5/RF-6) — interface que ainda **não existe** nesta fatia. O
 procedimento abaixo valida, por `esptool` executado diretamente no host, que
 o **firmware** produzido pela metade servidor do pipeline (ST → C → `.bin`,
 já provado por `backend/tests/test_esp32.py`) de fato roda em um ESP32 físico
-com o mapa de pinos vigente (Q-5, revisão de 2026-09-15).
+com o mapa de pinos vigente (Q-5, revisão de 2026-09-17 — 8 entradas e 8
+saídas; ver a ressalva de 2026-09-17 na seção "Nota sobre esta versão do
+documento", ao final: os doze pinos acrescentados nessa revisão não têm
+nenhuma evidência de bancada).
 
 É o **pré-requisito** de CA-4 — prova que o binário é correto antes de
 investir na gravação pelo navegador — e não deve ser lido como evidência de
@@ -33,7 +36,8 @@ grava no diretório de trabalho compartilhado do volume `esp-build-cache`
 
 Gravar um ESP32 **virgem** exige três arquivos, não só o da aplicação —
 confirmado ao vivo em 2026-09-15, listando o volume `esp-build-cache` após
-rodar o build com o mapa de pinos revisado (Q-5, GPIO18):
+rodar o build com o mapa de pinos revisado (Q-5, GPIO18; a ampliação para
+8+8 pinos de 2026-09-17 não muda a lista de arquivos nem os offsets abaixo):
 
 ```
 build/ladderflow_plc.bin
@@ -130,6 +134,13 @@ Com `backend/tests/fixtures/io_espelho.st` gravado (fixture da Tarefa 2,
   (`%QX0.1`); soltar deve apagá-la. Confirma a revisão de Q-5 (GPIO5 → GPIO18)
   na prática, e não só na compilação.
 
+> **Os doze pinos da revisão 2026-09-17** (`%IX0.2`–`%IX0.7` em GPIO19, 21,
+> 22, 23, 32, 33; `%QX0.2`–`%QX0.7` em GPIO16, 17, 25, 26, 27, 13) **não têm
+> roteiro de observação nesta versão do documento** porque nenhum deles foi
+> gravado ainda — `io_espelho.st` só declara `%IX0.1`/`%QX0.1`. Estender o
+> roteiro acima (mais `%IXx.y`/`%QXx.y` gravados, mais fios de teste) é
+> trabalho de bancada futuro, não desta rodada.
+
 ## 4. Gabarito de evidência
 
 Uma linha por sessão de bancada. `<revisão>` é `git rev-parse --short HEAD`
@@ -152,3 +163,15 @@ mapa de pinos revisado. As seções 2 e 3 (gravação e observação em hardware
 físico) **não foram executadas nesta rodada** — não há ESP32 conectado à
 máquina onde este documento foi escrito. Ficam para a sessão de bancada, cujo
 resultado preenche a tabela da seção 4.
+
+**Nota (2026-09-17).** A pinagem foi ampliada de 2+2 para 8+8 endereços
+(Q-5 da spec 001, revisão 2026-09-17), a pedido da spec 002 (editor Ladder
+com até 8 entradas e 8 saídas). Os quatro pinos que este documento já
+descrevia (`%IX0.0`=GPIO0, `%IX0.1`=GPIO18, `%QX0.0`=GPIO2, `%QX0.1`=GPIO4)
+não mudaram. Os doze pinos novos (`%IX0.2`–`%IX0.7` em GPIO19/21/22/23/32/33;
+`%QX0.2`–`%QX0.7` em GPIO16/17/25/26/27/13) só foram verificados por
+`test_plc_io_map.py` (contrato header ↔ spec ↔ editor), pelo runtime
+hospedeiro e pelo boot em QEMU — **nenhum deles foi gravado ou medido em
+hardware físico**. Este documento continua descrevendo, em detalhe, apenas o
+procedimento para os quatro pinos originais; estendê-lo aos doze novos fica
+para quando houver hardware disponível.

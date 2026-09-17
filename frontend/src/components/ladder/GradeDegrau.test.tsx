@@ -9,6 +9,7 @@ import GradeDegrau, { type Previa } from './GradeDegrau'
  * de `render` curtas. */
 function propsBase() {
   return {
+    variaveis: [],
     marcado: null,
     aoClicarCelula: vi.fn(),
     aoDuploClicarCelula: vi.fn(),
@@ -208,5 +209,70 @@ describe('GradeDegrau — aoPassarCelula (ponteiro e foco)', () => {
 
     celula.blur()
     expect(aoPassarCelula).toHaveBeenLastCalledWith('r1', null)
+  })
+})
+
+describe('GradeDegrau — cabeçalho "Degrau NNN" (D-13)', () => {
+  it('mostra o número do degrau com três dígitos', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    expect(screen.getByText('Degrau 001')).toBeInTheDocument()
+  })
+
+  it('preenche com zeros também a partir do décimo degrau', () => {
+    const rung = { id: 'r1', elementos: [], ramos: [] }
+    render(<GradeDegrau rung={rung} indice={9} {...propsBase()} />)
+
+    expect(screen.getByText('Degrau 010')).toBeInTheDocument()
+  })
+})
+
+describe('GradeDegrau — endereço e nome no símbolo (D-13)', () => {
+  it('mostra o endereço da variável vinculada, quando ela tem um', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} variaveis={IO_ESPELHO.variaveis} />)
+
+    expect(screen.getByText('%IX0.1')).toBeInTheDocument()
+    expect(screen.getByText('%QX0.1')).toBeInTheDocument()
+  })
+
+  it('sem variáveis informadas, não mostra endereço nenhum', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} variaveis={[]} />)
+
+    expect(screen.queryByText('%IX0.1')).not.toBeInTheDocument()
+  })
+
+  it('elemento sem variável mostra "?"', () => {
+    const rung = {
+      id: 'r1',
+      elementos: [{ id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: null }],
+      ramos: [],
+    }
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    expect(screen.getByText('?')).toBeInTheDocument()
+  })
+})
+
+describe('GradeDegrau — sem cores fixas (D-13)', () => {
+  it('nenhuma classe de cor fixa (só tokens ide-*), em marcado/prévia/recusa', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const previa: Previa = { celula: { linha: 0, coluna: 1 }, tipo: 'invalida', motivo: 'posição inválida' }
+    const recusa = { celula: { linha: 0, coluna: 2 }, motivo: 'célula ocupada' }
+    const { container } = render(
+      <GradeDegrau
+        rung={rung}
+        indice={0}
+        {...propsBase()}
+        variaveis={IO_ESPELHO.variaveis}
+        marcado="e1"
+        previa={previa}
+        recusa={recusa}
+      />,
+    )
+
+    expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })

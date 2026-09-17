@@ -3,29 +3,42 @@
  * partir de `spikes/canvas-svg/src/App.tsx`, sem copiar).
  *
  * Cada símbolo é uma função pura de posição (`cx`, `cy` — centro da célula) e
- * estado (`variavel`, `selecionado`, `semRotulo`, `fantasma`, `perigo`): nada
- * aqui lê o diagrama nem decide onde a célula fica na grade, isso é de
- * `GradeDegrau.tsx`. SET/RESET (variantes de bobina) e o contador CTU entram
- * na tarefa #18.
+ * estado (`variavel`, `endereco`, `selecionado`, `semRotulo`, `fantasma`,
+ * `perigo`): nada aqui lê o diagrama nem decide onde a célula fica na grade,
+ * isso é de `GradeDegrau.tsx`. SET/RESET (variantes de bobina) e o contador
+ * CTU entram na tarefa #18.
  *
- * `semRotulo` esconde o nome da variável (usado pelo ícone da paleta, que não
- * tem variável nenhuma para mostrar). `fantasma` é a prévia de inserção
- * (traço sky com opacidade reduzida) e implica `semRotulo` — a prévia ainda
- * não tem variável vinculada. `perigo` é a prévia de remoção sobre um
- * elemento existente (traço e rótulo em vermelho). Precedência de cor:
- * `perigo` > `fantasma` > `selecionado` > normal.
+ * `semRotulo` esconde nome e endereço da variável (usado pelo ícone da
+ * paleta, que não tem variável nenhuma para mostrar). `fantasma` é a prévia
+ * de inserção (traço `ide-previa` com opacidade reduzida) e implica
+ * `semRotulo` — a prévia ainda não tem variável vinculada. `perigo` é a
+ * prévia de remoção sobre um elemento existente (traço e rótulo em
+ * `ide-perigo`). Precedência de cor: `perigo` > `fantasma` > `selecionado` >
+ * normal.
+ *
+ * **Tokens só (plano §13, D-13):** nenhuma cor Tailwind fixa (`slate-*`,
+ * `sky-*`, `red-*`...) — só classes `stroke-ide-*`/`fill-ide-*`, para que o
+ * tema escuro/claro troque a aparência sem tocar este arquivo.
+ *
+ * **Endereço acima do nome (D-13):** quando a variável vinculada tem
+ * `endereco` (`%IX0.1`...), ele aparece em texto pequeno monoespaçado acima
+ * do nome, que por sua vez fica acima do símbolo. Sem variável vinculada, o
+ * nome mostra "?" e não há linha de endereço.
  */
 
 export interface SimboloProps {
   cx: number
   cy: number
   variavel: string | null
+  /** Endereço da variável vinculada (`%IX0.1`...), ou `null`/ausente quando
+   * a variável é interna ou não há variável vinculada. */
+  endereco?: string | null
   selecionado: boolean
-  /** Não desenha o nome da variável (ícone da paleta). */
+  /** Não desenha nome nem endereço da variável (ícone da paleta). */
   semRotulo?: boolean
-  /** Traço sky com opacidade reduzida (prévia de inserção); implica semRotulo. */
+  /** Traço `ide-previa` com opacidade reduzida (prévia de inserção); implica semRotulo. */
   fantasma?: boolean
-  /** Traço vermelho (prévia de remoção sobre o elemento). */
+  /** Traço `ide-perigo` (prévia de remoção sobre o elemento). */
   perigo?: boolean
 }
 
@@ -33,30 +46,42 @@ const MEIA_ALTURA = 14
 const AFASTAMENTO_TRACO = 8
 
 function corTraco({ selecionado, fantasma, perigo }: SimboloProps): string {
-  if (perigo) return 'stroke-red-600'
-  if (fantasma) return 'stroke-sky-500 opacity-50'
-  if (selecionado) return 'stroke-sky-600'
-  return 'stroke-slate-700'
+  if (perigo) return 'stroke-ide-perigo'
+  if (fantasma) return 'stroke-ide-previa opacity-50'
+  if (selecionado) return 'stroke-ide-destaque'
+  return 'stroke-ide-fio'
 }
 
 function corTexto({ selecionado, perigo }: SimboloProps): string {
-  if (perigo) return 'fill-red-600 font-semibold'
-  if (selecionado) return 'fill-sky-700 font-semibold'
-  return 'fill-slate-600'
+  if (perigo) return 'fill-ide-perigo font-semibold'
+  if (selecionado) return 'fill-ide-destaque font-semibold'
+  return 'fill-ide-suave'
 }
 
-/** Nome da variável acima do símbolo, ou "?" quando ainda não vinculada. */
+function corEndereco({ selecionado, perigo }: SimboloProps): string {
+  if (perigo) return 'fill-ide-perigo'
+  if (selecionado) return 'fill-ide-destaque'
+  return 'fill-ide-suave'
+}
+
+/** Endereço (opcional) e nome da variável acima do símbolo, ou "?" quando
+ * ainda não vinculada. O endereço, quando existe, fica na linha de cima, em
+ * fonte monoespaçada menor. */
 function RotuloVariavel(props: SimboloProps) {
-  const { cx, cy, variavel } = props
+  const { cx, cy, variavel, endereco } = props
+  const yNome = cy - MEIA_ALTURA - 6
+  const yEndereco = yNome - 10
   return (
-    <text
-      x={cx}
-      y={cy - MEIA_ALTURA - 6}
-      textAnchor="middle"
-      className={`text-[10px] ${corTexto(props)}`}
-    >
-      {variavel ?? '?'}
-    </text>
+    <>
+      {endereco && (
+        <text x={cx} y={yEndereco} textAnchor="middle" className={`font-mono text-[9px] ${corEndereco(props)}`}>
+          {endereco}
+        </text>
+      )}
+      <text x={cx} y={yNome} textAnchor="middle" className={`text-[10px] ${corTexto(props)}`}>
+        {variavel ?? '?'}
+      </text>
+    </>
   )
 }
 

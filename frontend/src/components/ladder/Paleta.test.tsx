@@ -135,6 +135,20 @@ describe('Paleta — lixeira', () => {
   it('destaque visual quando é o alvo do arrasto (sobreLixeira)', () => {
     render(<Paleta {...propsBase()} emArrasto={true} sobreLixeira={true} />)
 
-    expect(screen.getByRole('button', { name: /lixeira/i }).className).toContain('border-red-500')
+    expect(screen.getByRole('button', { name: /lixeira/i }).className).toContain('border-ide-perigo')
+  })
+})
+
+describe('Paleta — barra de ferramentas compacta (D-13)', () => {
+  it('tem um título discreto "Paleta"', () => {
+    render(<Paleta {...propsBase()} />)
+
+    expect(screen.getByText('Paleta')).toBeInTheDocument()
+  })
+
+  it('nenhuma classe de cor fixa (só tokens ide-*)', () => {
+    const { container } = render(<Paleta {...propsBase()} sobreLixeira={true} emArrasto={true} marcado={true} />)
+
+    expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })

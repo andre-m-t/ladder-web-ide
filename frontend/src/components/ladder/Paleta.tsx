@@ -1,18 +1,19 @@
 /**
- * Paleta de elementos do editor (tarefa #22, plano
- * `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-12): reescrita para o
- * gesto de arrastar-e-soltar, substituindo o modelo de "ferramenta ativa"
- * (D-4/R-2, revertido pelo autor). Não há mais botões de ação nem o tipo
- * `Ferramenta` — cada item é uma peça arrastável (aparência de peça: borda
+ * Paleta de elementos do editor (tarefa #22, D-12; redesenhada como barra de
+ * ferramentas na tarefa #23, plano `agora-precisamos-trabalhar-em-cozy-dragon.md`,
+ * D-13): cada item é uma peça arrastável (aparência de peça: borda
  * tracejada, cursor de arrasto), que também pode ser pega por teclado
  * (Espaço). `EditorLadder.tsx` é quem decide o que a máquina de estado do
  * arrasto faz com o `pointerdown`/Espaço — este componente só encaminha.
  *
- * Cada item traz um mini-símbolo (herdado de D-11) à esquerda do nome,
- * reaproveitando `ContatoNA`/`ContatoNF`/`Bobina` de `Simbolos.tsx` com
- * `semRotulo` (o item da paleta não tem variável nenhuma para nomear). O
- * ícone é `aria-hidden`: o nome acessível continua sendo só o texto do
- * rótulo.
+ * **Barra de ferramentas compacta (D-13):** título discreto "Paleta", cada
+ * item com um glifo monoespaçado do símbolo (`-| |-`, `-|/|-`, `-( )-`) mais
+ * o mini-SVG (herdado de D-11, reaproveitando `ContatoNA`/`ContatoNF`/`Bobina`
+ * de `Simbolos.tsx` com `semRotulo`) e o nome; a lixeira fica à direita
+ * (`ml-auto`). O ícone é `aria-hidden`: o nome acessível continua sendo só o
+ * texto do rótulo.
+ *
+ * **Tokens só (D-13):** nenhuma cor Tailwind fixa — só `bg-/text-/border-ide-*`.
  *
  * A lixeira é ao mesmo tempo alvo de soltar (pointerenter/leave) e botão de
  * ação (clique ou Espaço/Enter com foco nela remove o elemento marcado, ou
@@ -61,10 +62,10 @@ export interface PaletaProps {
   aoTeclarNaLixeira: (evento: KeyboardEvent<HTMLButtonElement>) => void
 }
 
-const ITENS: Array<{ tipo: TipoPaleta; rotulo: string }> = [
-  { tipo: 'contato_na', rotulo: 'Contato NA' },
-  { tipo: 'contato_nf', rotulo: 'Contato NF' },
-  { tipo: 'bobina', rotulo: 'Bobina' },
+const ITENS: Array<{ tipo: TipoPaleta; rotulo: string; glifo: string }> = [
+  { tipo: 'contato_na', rotulo: 'Contato NA', glifo: '-| |-' },
+  { tipo: 'contato_nf', rotulo: 'Contato NF', glifo: '-|/|-' },
+  { tipo: 'bobina', rotulo: 'Bobina', glifo: '-( )-' },
 ]
 
 // viewBox maior que o ícone visível (28×20) porque o símbolo tem meia altura
@@ -113,7 +114,12 @@ export default function Paleta({
   const lixeiraDesabilitada = !marcado && !emArrasto
 
   return (
-    <section aria-label="Paleta de elementos" className="flex flex-wrap items-center gap-3">
+    <section
+      aria-label="Paleta de elementos"
+      className="flex w-full flex-wrap items-center gap-3 border-b border-ide-borda bg-ide-painel px-3 py-2"
+    >
+      <span className="text-xs font-medium uppercase tracking-wide text-ide-suave">Paleta</span>
+
       {ITENS.map((item) => {
         const idInstrucao = `paleta-instrucao-${item.tipo}`
         return (
@@ -128,12 +134,10 @@ export default function Paleta({
               onDragStart={(evento) => evento.preventDefault()}
               onPointerDown={(evento) => aoIniciarArrastoPonteiro(item.tipo, evento)}
               onKeyDown={(evento) => aoTeclarNoItem(evento, item.tipo)}
-              className="inline-flex cursor-grab touch-none select-none items-center gap-1.5 rounded-lg border border-dashed border-slate-400 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 outline-none active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500"
+              className="inline-flex cursor-grab touch-none select-none items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
             >
-              <span aria-hidden="true" className="flex flex-col gap-0.5">
-                <span className="block h-0.5 w-3 rounded bg-slate-400" />
-                <span className="block h-0.5 w-3 rounded bg-slate-400" />
-                <span className="block h-0.5 w-3 rounded bg-slate-400" />
+              <span aria-hidden="true" className="font-mono text-[11px] text-ide-suave">
+                {item.glifo}
               </span>
               <IconeItem tipo={item.tipo} />
               {item.rotulo}
@@ -161,8 +165,8 @@ export default function Paleta({
         onBlur={() => aoPassarLixeira(false)}
         className={
           sobreLixeira
-            ? 'inline-flex touch-none select-none items-center gap-1.5 rounded-lg border-2 border-red-500 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700'
-            : 'inline-flex touch-none select-none items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white'
+            ? 'ml-auto inline-flex touch-none select-none items-center gap-1.5 rounded-lg border-2 border-ide-perigo bg-ide-perigo/10 px-3 py-1.5 text-sm font-medium text-ide-perigo'
+            : 'ml-auto inline-flex touch-none select-none items-center gap-1.5 rounded-lg border border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto hover:bg-ide-painel disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-ide-elevado'
         }
       >
         Lixeira

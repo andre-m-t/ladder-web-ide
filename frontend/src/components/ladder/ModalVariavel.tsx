@@ -15,6 +15,9 @@
  * existindo em `validacao.ts`): variável de classe entrada aparece desabilitada
  * quando o elemento é uma bobina, para não deixar o usuário criar o problema
  * pelo modal.
+ *
+ * **Tokens só (tarefa #23, D-13):** o painel usa `bg-ide-elevado`/`text-ide-*`;
+ * o overlay é um escurecimento neutro (`bg-black/60`), independente de tema.
  */
 import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent } from 'react'
 
@@ -112,7 +115,7 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={aoClicarOverlay}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={aoClicarOverlay}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -120,9 +123,9 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
         aria-labelledby={idTitulo}
         onClick={aoClicarDialogo}
         onKeyDown={aoTeclarNoDialogo}
-        className="w-80 rounded-lg bg-white p-4 shadow-lg"
+        className="w-80 rounded-lg border border-ide-borda bg-ide-elevado p-4 shadow-lg"
       >
-        <h2 id={idTitulo} className="text-sm font-semibold text-slate-800">
+        <h2 id={idTitulo} className="text-sm font-semibold text-ide-texto">
           Variável do {rotuloTipoElemento(elemento.tipo)}
         </h2>
 
@@ -133,7 +136,7 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
               data-opcao={OPCAO_SEM_VARIAVEL}
               aria-current={elemento.variavel === null ? 'true' : undefined}
               onClick={() => aoEscolher(null)}
-              className="w-full rounded border border-slate-200 px-2 py-1 text-left text-sm text-slate-700 hover:bg-slate-50"
+              className="w-full rounded border border-ide-borda px-2 py-1 text-left text-sm text-ide-texto hover:bg-ide-painel"
             >
               Sem variável
             </button>
@@ -150,26 +153,26 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
                   disabled={desabilitada}
                   aria-current={elemento.variavel === variavel.nome ? 'true' : undefined}
                   onClick={() => aoEscolher(variavel.nome)}
-                  className="w-full rounded border border-slate-200 px-2 py-1 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  className="w-full rounded border border-ide-borda px-2 py-1 text-left text-sm text-ide-texto hover:bg-ide-painel disabled:cursor-not-allowed disabled:bg-ide-fundo disabled:text-ide-suave"
                 >
                   <span>
                     <span className="font-mono">{variavel.nome}</span>{' '}
-                    <span className="text-slate-500">
+                    <span className="text-ide-suave">
                       ({ROTULO_CLASSE[classe]}
                       {variavel.endereco ? ` ${variavel.endereco}` : ''})
                     </span>
                   </span>
-                  {desabilitada && <span className="block text-xs text-red-700">entradas não podem ser escritas por bobina</span>}
+                  {desabilitada && <span className="block text-xs text-ide-perigo">entradas não podem ser escritas por bobina</span>}
                 </button>
               </li>
             )
           })}
         </ul>
 
-        {variaveis.length === 0 && <p className="mt-2 text-sm text-slate-500">Crie variáveis na tabela ao lado.</p>}
+        {variaveis.length === 0 && <p className="mt-2 text-sm text-ide-suave">Crie variáveis na tabela ao lado.</p>}
 
         <div className="mt-4 flex justify-end">
-          <button type="button" onClick={aoFechar} className="rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={aoFechar} className="rounded border border-ide-borda px-3 py-1 text-sm text-ide-texto hover:bg-ide-painel">
             Cancelar
           </button>
         </div>

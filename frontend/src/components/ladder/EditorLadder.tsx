@@ -1,40 +1,35 @@
 /**
- * Editor Ladder (spec 002; fatia 1 nas tarefas #7/#21; reescrito na #22,
- * plano `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-12).
+ * Editor Ladder (spec 002; fatia 1 nas tarefas #7/#21; arrastar-e-soltar na
+ * #22; controlado e redesenhado como IDE na #23, plano
+ * `agora-precisamos-trabalhar-em-cozy-dragon.md`, D-13).
  *
- * **Reversão de D-4/R-2 pelo autor (2026-09-16, plano §12):** depois de usar
- * o editor por seleção de ferramenta (D-4/R-2), o autor rejeitou o modelo —
- * elementos pareciam botões, a ferramenta ativa e a seleção persistente
- * atrapalhavam. Este arquivo passa a implementar **só arrastar-e-soltar**:
- * não existe mais `Ferramenta` nem "ferramenta ativa"; a paleta oferece peças
- * arrastáveis (`Paleta.tsx`) que vão para a grade (`GradeDegrau.tsx`) por
- * Pointer Events (mouse/toque) ou pela mesma máquina de estado por teclado
- * (Espaço pega, setas movem o alvo, Espaço/Enter solta, Esc cancela). Clique
- * simples marca um elemento (sem painel); duplo clique ou Enter abre
- * `ModalVariavel` para vincular variável; Delete/Backspace ou a lixeira
- * removem. `TabelaVariaveis` fica ao lado da grade — não há mais vínculo de
- * variável por lá, só declarar/editar/remover.
+ * **Editor controlado, sem tabela (D-13):** este componente não guarda mais
+ * o diagrama em estado próprio — `diagrama` vem por prop e toda mudança sai
+ * por `aoMudar`, para a IDE (frente I) decidir o que fazer (persistência,
+ * `PainelVariaveis` no painel lateral). A tabela de variáveis não mora mais
+ * aqui: declarar/editar/remover variável é responsabilidade de
+ * `PainelVariaveis`, fora deste componente.
  *
- * Continua orquestrando o núcleo puro (`ladder/edicao.ts`): todo estado novo
- * do diagrama vem de uma operação do núcleo, nunca de um cálculo local, e
- * toda prévia (D-11) é a própria operação do núcleo chamada sem aplicar —
- * o que a prévia promete é exatamente o que soltar fará.
+ * **Segundo clique (D-13):** clique num item não marcado marca; clique no
+ * item **já marcado** abre `ModalVariavel`; Enter com foco no item marcado
+ * também abre o modal (Enter num item ainda não marcado só marca, para
+ * manter a paridade com o clique); duplo clique continua abrindo — é só o
+ * caso rápido do mesmo gesto (dois cliques nativos acontecem antes do
+ * evento de duplo clique, e o segundo já encontra o item marcado). **Soltar
+ * um item novo da paleta marca o item e não abre o modal** — o próximo
+ * clique/Enter é que abre.
+ *
+ * Continua orquestrando o núcleo puro (`ladder/edicao.ts`): todo diagrama
+ * novo vem de uma operação do núcleo, nunca de um cálculo local, e toda
+ * prévia (D-11) é a própria operação do núcleo chamada sem aplicar — o que a
+ * prévia promete é exatamente o que soltar fará.
  *
  * Sem lista de problemas nesta fatia (entra na tarefa #13): `validarDiagrama`
  * não é chamado aqui.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 
-import {
-  declararVariavel,
-  diagramaVazio,
-  inserirElemento,
-  moverElemento,
-  removerElemento,
-  removerVariavel,
-  atualizarVariavel,
-  vincularVariavel,
-} from '../../ladder/edicao'
+import { inserirElemento, moverElemento, removerElemento, vincularVariavel } from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
 import { COLUNAS_POR_DEGRAU, type Celula, type Diagrama, type Elemento } from '../../ladder/modelo'
 import { descreverCelula } from '../../ladder/validacao'
@@ -42,13 +37,13 @@ import GradeDegrau, { type Previa } from './GradeDegrau'
 import ModalVariavel from './ModalVariavel'
 import Paleta, { type TipoPaleta } from './Paleta'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
-import TabelaVariaveis from './TabelaVariaveis'
 
 export interface EditorLadderProps {
-  /** Diagrama de partida; por padrão, um degrau vazio (`diagramaVazio()`). */
-  diagramaInicial?: Diagrama
-  /** Chamado a cada mudança bem-sucedida do diagrama (persistência é a tarefa #12). */
-  aoMudar?: (diagrama: Diagrama) => void
+  /** Diagrama atual — o editor não guarda estado próprio (D-13, controlado). */
+  diagrama: Diagrama
+  /** Chamado a cada mudança bem-sucedida do diagrama. Quem monta o editor
+   * decide o que fazer (persistência, `PainelVariaveis`, etc.). */
+  aoMudar: (diagrama: Diagrama) => void
 }
 
 /** Recusa de uma jogada sobre célula, localizada no degrau e na célula afetados. */
@@ -200,14 +195,12 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
   return alvo
 }
 
-export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderProps = {}) {
-  const [diagrama, setDiagrama] = useState<Diagrama>(diagramaInicial ?? diagramaVazio())
+export default function EditorLadder({ diagrama, aoMudar }: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
   const [arrasto, setArrasto] = useState<EstadoArrasto | null>(null)
   const [posGhost, setPosGhost] = useState<{ x: number; y: number } | null>(null)
   const [recusa, setRecusa] = useState<RecusaCelula | null>(null)
-  const [erroTabela, setErroTabela] = useState<string | null>(null)
   const [anuncio, setAnuncio] = useState('')
 
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -250,24 +243,27 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
    * nada a fazer (alvo nulo, ou paleta solta na lixeira). Nunca lê estado
    * React diretamente — só `diagramaRef`/`aoMudarRef` — porque também é
    * chamado de dentro do listener de `pointerup` em `window`, registrado uma
-   * única vez no mount. */
+   * única vez no mount.
+   *
+   * D-13: soltar um item **novo** da paleta com sucesso marca o elemento
+   * recém-criado e não abre o modal — o próximo clique/Enter é que abre.
+   * Mover ou remover continuam desmarcando ao final (D-12, sem regressão). */
   function finalizarDrop(origem: OrigemArrasto, alvo: AlvoArrasto) {
-    setMarcado(null)
-
     if (alvo === null) {
+      setMarcado(null)
       setAnuncio('arrasto cancelado')
       return
     }
 
     if (alvo === 'lixeira') {
+      setMarcado(null)
       if (origem.de === 'paleta') {
         setAnuncio('arrasto cancelado')
         return
       }
       const resultado = removerElemento(diagramaRef.current, origem.elementoId)
       if (resultado.ok) {
-        setDiagrama(resultado.diagrama)
-        aoMudarRef.current?.(resultado.diagrama)
+        aoMudarRef.current(resultado.diagrama)
         setAnuncio('elemento removido')
       }
       return
@@ -279,19 +275,20 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
     if (origem.de === 'paleta') {
       const resultado: ResultadoEdicao = inserirElemento(diagramaRef.current, alvo.rungId, origem.tipo, alvo.celula)
       if (!resultado.ok) {
+        setMarcado(null)
         setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
         setAnuncio(`recusado: ${resultado.motivo}`)
         return
       }
       setRecusa(null)
-      setDiagrama(resultado.diagrama)
-      aoMudarRef.current?.(resultado.diagrama)
-      setAnuncio(`solto em ${onde}`)
+      aoMudarRef.current(resultado.diagrama)
       const novoElemento = elementoNaCelula(resultado.diagrama, alvo.rungId, alvo.celula)
-      if (novoElemento) setModal({ elementoId: novoElemento.id })
+      setMarcado(novoElemento ? novoElemento.id : null)
+      setAnuncio(`solto em ${onde}, marcado — clique ou Enter de novo para escolher a variável`)
       return
     }
 
+    setMarcado(null)
     const resultado = moverElemento(diagramaRef.current, origem.elementoId, alvo.rungId, alvo.celula)
     if (!resultado.ok) {
       setRecusa({ rungId: alvo.rungId, celula: alvo.celula, motivo: resultado.motivo })
@@ -299,8 +296,7 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
       return
     }
     setRecusa(null)
-    setDiagrama(resultado.diagrama)
-    aoMudarRef.current?.(resultado.diagrama)
+    aoMudarRef.current(resultado.diagrama)
     setAnuncio(`solto em ${onde}`)
   }
 
@@ -463,8 +459,7 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
     if (marcado === null) return
     const resultado = removerElemento(diagrama, marcado)
     if (resultado.ok) {
-      setDiagrama(resultado.diagrama)
-      aoMudar?.(resultado.diagrama)
+      aoMudar(resultado.diagrama)
       setMarcado(null)
     }
   }
@@ -474,9 +469,21 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
   // "clique fantasma" que alguns navegadores sintetizam depois do
   // `pointerup` raramente chega até aqui; quando chega, marcar de novo o
   // mesmo elemento é inofensivo (idempotente).
+  //
+  // D-13 (segundo clique): célula vazia desmarca; item não marcado marca;
+  // item já marcado abre o modal (duplo clique é só esse mesmo gesto, rápido
+  // o bastante para dois cliques nativos acontecerem antes do `dblclick`).
   function aoClicarCelula(rungId: string, celula: Celula) {
     const elemento = elementoNaCelula(diagrama, rungId, celula)
-    setMarcado(elemento ? elemento.id : null)
+    if (!elemento) {
+      setMarcado(null)
+      return
+    }
+    if (marcado === elemento.id) {
+      setModal({ elementoId: elemento.id })
+      return
+    }
+    setMarcado(elemento.id)
   }
 
   function aoDuploClicarCelula(rungId: string, celula: Celula) {
@@ -518,7 +525,13 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
       if (elemento) {
         evento.preventDefault()
         evento.stopPropagation()
-        setModal({ elementoId: elemento.id })
+        // D-13: Enter no item já marcado abre o modal; num item ainda não
+        // marcado, Enter só marca (paridade com o clique simples).
+        if (marcado === elemento.id) {
+          setModal({ elementoId: elemento.id })
+        } else {
+          setMarcado(elemento.id)
+        }
       }
       return
     }
@@ -579,34 +592,9 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
     if (!modal) return
     const resultado = vincularVariavel(diagrama, modal.elementoId, nome)
     if (resultado.ok) {
-      setDiagrama(resultado.diagrama)
-      aoMudar?.(resultado.diagrama)
-    } else {
-      setErroTabela(resultado.motivo)
+      aoMudar(resultado.diagrama)
     }
     fecharModal()
-  }
-
-  function aplicarResultadoTabela(resultado: ResultadoEdicao) {
-    if (!resultado.ok) {
-      setErroTabela(resultado.motivo)
-      return
-    }
-    setDiagrama(resultado.diagrama)
-    setErroTabela(null)
-    aoMudar?.(resultado.diagrama)
-  }
-
-  function aoDeclarar(variavel: { nome: string; endereco?: string }) {
-    aplicarResultadoTabela(declararVariavel(diagrama, variavel))
-  }
-
-  function aoAtualizar(nomeAtual: string, nova: { nome: string; endereco?: string }) {
-    aplicarResultadoTabela(atualizarVariavel(diagrama, nomeAtual, nova))
-  }
-
-  function aoRemoverVariavel(nome: string) {
-    aplicarResultadoTabela(removerVariavel(diagrama, nome))
   }
 
   /** Clique fora de qualquer célula da grade desmarca (plano D-12) — não
@@ -631,7 +619,6 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
       return
     }
     setRecusa(null)
-    setErroTabela(null)
     setMarcado(null)
   }
 
@@ -640,7 +627,7 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
     arrasto === null ? null : arrasto.origem.de === 'paleta' ? arrasto.origem.tipo : encontrarElementoPorId(diagrama, arrasto.origem.elementoId)?.elemento.tipo ?? null
 
   return (
-    <div ref={containerRef} onKeyDown={aoTeclarNoContainer}>
+    <div ref={containerRef} onKeyDown={aoTeclarNoContainer} className="flex h-full w-full flex-col">
       <Paleta
         marcado={marcado !== null}
         emArrasto={arrasto !== null}
@@ -652,48 +639,37 @@ export default function EditorLadder({ diagramaInicial, aoMudar }: EditorLadderP
         aoTeclarNaLixeira={aoTeclarNaLixeira}
       />
 
-      <div className="mt-4 lg:grid lg:grid-cols-[auto_28rem] lg:items-start lg:gap-6">
-        <div>
-          {diagrama.rungs.map((rung, indice) => {
-            const previaAqui = (() => {
-              if (!arrasto || arrasto.alvo === null) return null
-              if (arrasto.alvo === 'lixeira') {
-                if (arrasto.origem.de !== 'celula') return null
-                const achado = encontrarElementoPorId(diagrama, arrasto.origem.elementoId)
-                if (!achado || achado.rungId !== rung.id) return null
-                return { celula: achado.elemento.celula, tipo: 'remover' as const }
-              }
-              if (arrasto.alvo.rungId !== rung.id) return null
-              return calcularPreviaArrasto(diagrama, arrasto.origem, arrasto.alvo.rungId, arrasto.alvo.celula)
-            })()
+      <div className="flex-1 overflow-auto p-4">
+        {diagrama.rungs.map((rung, indice) => {
+          const previaAqui = (() => {
+            if (!arrasto || arrasto.alvo === null) return null
+            if (arrasto.alvo === 'lixeira') {
+              if (arrasto.origem.de !== 'celula') return null
+              const achado = encontrarElementoPorId(diagrama, arrasto.origem.elementoId)
+              if (!achado || achado.rungId !== rung.id) return null
+              return { celula: achado.elemento.celula, tipo: 'remover' as const }
+            }
+            if (arrasto.alvo.rungId !== rung.id) return null
+            return calcularPreviaArrasto(diagrama, arrasto.origem, arrasto.alvo.rungId, arrasto.alvo.celula)
+          })()
 
-            return (
-              <GradeDegrau
-                key={rung.id}
-                rung={rung}
-                indice={indice}
-                marcado={marcado}
-                aoClicarCelula={aoClicarCelula}
-                aoDuploClicarCelula={aoDuploClicarCelula}
-                aoTeclarNaCelula={aoTeclarNaCelula}
-                aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiroCelula}
-                aoPassarCelula={aoPassarCelula}
-                previa={previaAqui}
-                recusa={recusa && recusa.rungId === rung.id ? { celula: recusa.celula, motivo: recusa.motivo } : null}
-              />
-            )
-          })}
-        </div>
-
-        <div className="mt-4 lg:mt-0">
-          <TabelaVariaveis
-            variaveis={diagrama.variaveis}
-            aoDeclarar={aoDeclarar}
-            aoAtualizar={aoAtualizar}
-            aoRemover={aoRemoverVariavel}
-            erro={erroTabela}
-          />
-        </div>
+          return (
+            <GradeDegrau
+              key={rung.id}
+              rung={rung}
+              indice={indice}
+              variaveis={diagrama.variaveis}
+              marcado={marcado}
+              aoClicarCelula={aoClicarCelula}
+              aoDuploClicarCelula={aoDuploClicarCelula}
+              aoTeclarNaCelula={aoTeclarNaCelula}
+              aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiroCelula}
+              aoPassarCelula={aoPassarCelula}
+              previa={previaAqui}
+              recusa={recusa && recusa.rungId === rung.id ? { celula: recusa.celula, motivo: recusa.motivo } : null}
+            />
+          )
+        })}
       </div>
 
       <div aria-live="polite" className="sr-only">

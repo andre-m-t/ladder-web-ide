@@ -2,14 +2,20 @@
  * Grade SVG de um degrau (plano D-1, spike S4 §3 — SVG puro venceu Konva:
  * ver `docs/specs/002-editor-ladder/spike-canvas.md`).
  *
- * Reescrito na tarefa #22 (plano `agora-precisamos-trabalhar-em-cozy-dragon.md`,
- * D-12): não existe mais "ferramenta ativa" nem `aoAtivarCelula` — o gesto
- * principal é arrastar (paleta → célula, célula → célula, célula → lixeira),
- * por Pointer Events ou teclado. Este componente continua função pura das
- * props, sem estado próprio e sem decidir se uma jogada é válida: só desenha
- * e encaminha os eventos nativos (clique, duplo clique, tecla, pointerdown,
- * pointerenter/leave) para quem manda, `EditorLadder.tsx`, que é quem tem a
- * máquina de estado do arrasto e chama o núcleo para calcular prévia/recusa.
+ * Reescrito na tarefa #22 (D-12: arrastar-e-soltar) e redesenhado como
+ * cartão de IDE na tarefa #23 (plano `agora-precisamos-trabalhar-em-cozy-dragon.md`,
+ * D-13): cabeçalho numerado ("Degrau 001", três dígitos), trilhos mais
+ * espessos e tokens de cor só (`stroke-/fill-ide-*`, nenhuma cor Tailwind
+ * fixa). Este componente continua função pura das props, sem estado próprio
+ * e sem decidir se uma jogada é válida: só desenha e encaminha os eventos
+ * nativos (clique, duplo clique, tecla, pointerdown, pointerenter/leave)
+ * para quem manda, `EditorLadder.tsx`, que é quem tem a máquina de estado do
+ * arrasto/marcação e chama o núcleo para calcular prévia/recusa.
+ *
+ * **Endereço e nome no símbolo (D-13):** para desenhar o endereço da
+ * variável vinculada a cada elemento (`%IX0.1`...), a grade recebe a lista
+ * de variáveis do diagrama (`variaveis`) — ela não guarda nem deriva nada
+ * disso sozinha, só procura pelo nome.
  *
  * Só a linha 0 (trilho principal) é desenhada aqui — ramos entram na tarefa
  * #18 — mas a geometria já é função de `linha`, para reaproveitar no ramo sem
@@ -24,7 +30,17 @@
  */
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
-import { COLUNAS_POR_DEGRAU, COLUNA_TERMINAL, ehBobina, type Celula, type Elemento, type Rung, type TipoBobina, type TipoContato } from '../../ladder/modelo'
+import {
+  COLUNAS_POR_DEGRAU,
+  COLUNA_TERMINAL,
+  ehBobina,
+  type Celula,
+  type Elemento,
+  type Rung,
+  type TipoBobina,
+  type TipoContato,
+  type Variavel,
+} from '../../ladder/modelo'
 import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
 
 /** Prévia de uma jogada de arrasto sobre uma célula, calculada pelo editor
@@ -39,11 +55,13 @@ export type Previa =
 
 export interface GradeDegrauProps {
   rung: Rung
-  /** 0-based; usado nos rótulos "Degrau 1", "Degrau 2"... */
+  /** 0-based; usado nos rótulos "Degrau 1", "Degrau 2"... e no cabeçalho "Degrau 001". */
   indice: number
-  /** Id do elemento marcado, ou null se nenhum (clique simples marca; #22). */
+  /** Variáveis do diagrama, para achar o endereço de cada elemento vinculado (D-13). */
+  variaveis: Variavel[]
+  /** Id do elemento marcado, ou null se nenhum (clique simples marca; #22/#23). */
   marcado: string | null
-  /** Clique simples: marca o elemento da célula, ou desmarca se vazia. */
+  /** Clique simples: marca o elemento da célula, ou abre o modal se já estava marcado (D-13). */
   aoClicarCelula: (rungId: string, celula: Celula) => void
   /** Duplo clique: abre o modal de variável do elemento (célula vazia é no-op). */
   aoDuploClicarCelula: (rungId: string, celula: Celula) => void
@@ -103,19 +121,33 @@ function rotuloCelula(indiceDegrau: number, coluna: number, elemento: Elemento |
   return `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
 }
 
-/** Classe do retângulo da célula conforme prévia/recusa (D-11: precedência
- * recusa > prévia inválida > prévia remover > prévia inserir > normal). */
-function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusada: boolean): string {
-  if (recusada) return 'fill-red-50 stroke-red-500'
-  if (previa?.tipo === 'invalida') return 'fill-red-50 stroke-red-300'
-  if (previa?.tipo === 'remover') return 'fill-red-50 stroke-red-300'
-  if (previa?.tipo === 'inserir') return 'fill-sky-50 stroke-sky-400'
-  return ehTerminal ? 'fill-slate-100 stroke-slate-300' : 'fill-transparent stroke-slate-200'
+/** Endereço da variável vinculada a `nome`, ou `null` (interna ou sem vínculo). */
+function enderecoDaVariavel(variaveis: Variavel[], nome: string | null): string | null {
+  if (nome === null) return null
+  return variaveis.find((v) => v.nome === nome)?.endereco ?? null
+}
+
+/** Número do degrau com três dígitos, para o cabeçalho do cartão ("Degrau 001"). */
+function numeroDegrau(indice: number): string {
+  return String(indice + 1).padStart(3, '0')
+}
+
+/** Classe do retângulo da célula conforme marcação/prévia/recusa (D-11/D-13:
+ * precedência recusa > prévia inválida > prévia remover > prévia inserir >
+ * marcado > normal). Só tokens `ide-*` — nenhuma cor Tailwind fixa. */
+function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusada: boolean, marcado: boolean): string {
+  if (recusada) return 'fill-ide-perigo/10 stroke-ide-perigo'
+  if (previa?.tipo === 'invalida') return 'fill-ide-perigo/10 stroke-ide-perigo/60'
+  if (previa?.tipo === 'remover') return 'fill-ide-perigo/10 stroke-ide-perigo/60'
+  if (previa?.tipo === 'inserir') return 'fill-ide-previa/10 stroke-ide-previa'
+  if (marcado) return 'fill-ide-destaque/10 stroke-ide-destaque'
+  return ehTerminal ? 'fill-ide-elevado stroke-ide-borda' : 'fill-transparent stroke-ide-borda'
 }
 
 export default function GradeDegrau({
   rung,
   indice,
+  variaveis,
   marcado,
   aoClicarCelula,
   aoDuploClicarCelula,
@@ -141,79 +173,94 @@ export default function GradeDegrau({
   }
 
   return (
-    <figure className="my-4" aria-label={`Degrau ${indice + 1}`}>
-      <figcaption className="mb-1 text-xs font-medium text-slate-500">Degrau {indice + 1}</figcaption>
-      <svg role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="overflow-visible">
-        {/* trilhos de energia esquerdo e direito */}
-        <line x1={xEsquerda} y1={y0 - ALTURA_LINHA / 2} x2={xEsquerda} y2={y0 + ALTURA_LINHA / 2} strokeWidth={3} className="stroke-slate-700" />
-        <line x1={xDireita} y1={y0 - ALTURA_LINHA / 2} x2={xDireita} y2={y0 + ALTURA_LINHA / 2} strokeWidth={3} className="stroke-slate-700" />
-        {/* fio horizontal atravessando as células vazias */}
-        <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-slate-700" />
+    <figure className="my-4 overflow-hidden rounded-lg border border-ide-borda bg-ide-painel" aria-label={`Degrau ${indice + 1}`}>
+      <figcaption className="flex items-center gap-2 border-b border-ide-borda bg-ide-elevado px-3 py-1.5">
+        <span className="rounded bg-ide-destaque px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ide-destaque-texto">
+          Degrau {numeroDegrau(indice)}
+        </span>
+      </figcaption>
 
-        {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => {
-          const celula: Celula = { linha: 0, coluna }
-          const elemento = encontrarElemento(rung, celula)
-          const cx = xDaColuna(coluna)
-          const centroX = cx + LARGURA_CELULA / 2
-          const ehTerminal = coluna === COLUNA_TERMINAL
-          const ativo = elemento !== undefined && elemento.id === marcado
+      <div className="overflow-x-auto p-3">
+        <svg role="group" aria-label={`Degrau ${indice + 1}, grade`} width={largura} height={altura} className="overflow-visible">
+          {/* trilhos de energia esquerdo e direito, mais espessos que o fio */}
+          <line x1={xEsquerda} y1={y0 - ALTURA_LINHA / 2} x2={xEsquerda} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
+          <line x1={xDireita} y1={y0 - ALTURA_LINHA / 2} x2={xDireita} y2={y0 + ALTURA_LINHA / 2} strokeWidth={5} className="stroke-ide-trilho" />
+          {/* fio horizontal atravessando as células vazias */}
+          <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-ide-fio" />
 
-          const previaAqui = previa && celulaIgual(previa.celula, celula) ? previa : undefined
-          const recusada = recusa != null && celulaIgual(recusa.celula, celula)
-          const ehRemocaoAqui = previaAqui?.tipo === 'remover'
-          const cursorInvalido = previaAqui?.tipo === 'invalida'
+          {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => {
+            const celula: Celula = { linha: 0, coluna }
+            const elemento = encontrarElemento(rung, celula)
+            const cx = xDaColuna(coluna)
+            const centroX = cx + LARGURA_CELULA / 2
+            const ehTerminal = coluna === COLUNA_TERMINAL
+            const ativo = elemento !== undefined && elemento.id === marcado
 
-          return (
-            <g
-              key={coluna}
-              tabIndex={0}
-              role="button"
-              aria-label={rotuloCelula(indice, coluna, elemento)}
-              aria-selected={ativo}
-              aria-invalid={recusada ? 'true' : undefined}
-              aria-describedby={recusada ? idAlerta : undefined}
-              data-terminal={ehTerminal ? 'true' : undefined}
-              data-previa={previaAqui ? previaAqui.tipo : undefined}
-              data-celula={`${rung.id}:${celula.linha}:${celula.coluna}`}
-              onDragStart={(evento) => evento.preventDefault()}
-              onClick={() => aoClicarCelula(rung.id, celula)}
-              onDoubleClick={() => aoDuploClicarCelula(rung.id, celula)}
-              onKeyDown={(evento) => aoTeclarNaCelula(evento, rung.id, celula)}
-              onPointerDown={(evento) => aoIniciarArrastoPonteiro(evento, rung.id, celula)}
-              onPointerEnter={() => aoEntrarNaCelula(celula)}
-              onPointerLeave={() => aoSairDaCelula()}
-              onFocus={() => aoEntrarNaCelula(celula)}
-              onBlur={() => aoSairDaCelula()}
-              className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
-            >
-              {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
-              <rect
-                x={cx}
-                y={y0 - ALTURA_LINHA / 2}
-                width={LARGURA_CELULA}
-                height={ALTURA_LINHA}
-                strokeWidth={1}
-                strokeDasharray={ehTerminal ? undefined : '2,3'}
-                className={classeRetangulo(ehTerminal, previaAqui, recusada)}
-              />
-              {elemento?.tipo === 'contato_na' && <ContatoNA cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
-              {elemento?.tipo === 'contato_nf' && <ContatoNF cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
-              {elemento && ehBobina(elemento.tipo) && <Bobina cx={centroX} cy={y0} variavel={elemento.variavel} selecionado={ativo} perigo={ehRemocaoAqui} />}
-              {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
-                <ContatoNA cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-              )}
-              {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
-                <ContatoNF cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-              )}
-              {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
-                <Bobina cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
-              )}
-            </g>
-          )
-        })}
-      </svg>
+            const previaAqui = previa && celulaIgual(previa.celula, celula) ? previa : undefined
+            const recusada = recusa != null && celulaIgual(recusa.celula, celula)
+            const ehRemocaoAqui = previaAqui?.tipo === 'remover'
+            const cursorInvalido = previaAqui?.tipo === 'invalida'
+            const endereco = enderecoDaVariavel(variaveis, elemento?.variavel ?? null)
+
+            return (
+              <g
+                key={coluna}
+                tabIndex={0}
+                role="button"
+                aria-label={rotuloCelula(indice, coluna, elemento)}
+                aria-selected={ativo}
+                aria-invalid={recusada ? 'true' : undefined}
+                aria-describedby={recusada ? idAlerta : undefined}
+                data-terminal={ehTerminal ? 'true' : undefined}
+                data-previa={previaAqui ? previaAqui.tipo : undefined}
+                data-celula={`${rung.id}:${celula.linha}:${celula.coluna}`}
+                onDragStart={(evento) => evento.preventDefault()}
+                onClick={() => aoClicarCelula(rung.id, celula)}
+                onDoubleClick={() => aoDuploClicarCelula(rung.id, celula)}
+                onKeyDown={(evento) => aoTeclarNaCelula(evento, rung.id, celula)}
+                onPointerDown={(evento) => aoIniciarArrastoPonteiro(evento, rung.id, celula)}
+                onPointerEnter={() => aoEntrarNaCelula(celula)}
+                onPointerLeave={() => aoSairDaCelula()}
+                onFocus={() => aoEntrarNaCelula(celula)}
+                onBlur={() => aoSairDaCelula()}
+                className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
+              >
+                {previaAqui?.tipo === 'invalida' && <title>{previaAqui.motivo}</title>}
+                <rect
+                  x={cx}
+                  y={y0 - ALTURA_LINHA / 2}
+                  width={LARGURA_CELULA}
+                  height={ALTURA_LINHA}
+                  strokeWidth={1}
+                  strokeDasharray={ehTerminal ? undefined : '2,3'}
+                  className={classeRetangulo(ehTerminal, previaAqui, recusada, ativo)}
+                />
+                {elemento?.tipo === 'contato_na' && (
+                  <ContatoNA cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+                )}
+                {elemento?.tipo === 'contato_nf' && (
+                  <ContatoNF cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+                )}
+                {elemento && ehBobina(elemento.tipo) && (
+                  <Bobina cx={centroX} cy={y0} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+                )}
+                {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
+                  <ContatoNA cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+                )}
+                {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
+                  <ContatoNF cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+                )}
+                {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
+                  <Bobina cx={centroX} cy={y0} variavel={null} selecionado={false} fantasma />
+                )}
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
       {recusa && (
-        <p id={idAlerta} role="alert" className="mt-1 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-900">
+        <p id={idAlerta} role="alert" className="mx-3 mb-3 rounded border border-ide-perigo/40 bg-ide-perigo/10 p-2 text-sm text-ide-perigo">
           {recusa.motivo}
         </p>
       )}

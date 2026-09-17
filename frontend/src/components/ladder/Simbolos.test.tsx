@@ -5,6 +5,9 @@ import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
 
 const PROPS_BASE = { cx: 20, cy: 20, variavel: 'M1', selecionado: false }
 
+/** Nenhuma cor Tailwind fixa (plano §13, D-13): só tokens `ide-*`. */
+const COR_FIXA = /\b(slate|sky|red|emerald|amber)-\d/
+
 describe('Simbolos', () => {
   it('renderiza o rótulo da variável por padrão', () => {
     const { container } = render(
@@ -37,7 +40,7 @@ describe('Simbolos', () => {
     expect(container.querySelector('text')).toBeNull()
   })
 
-  it('fantasma aplica traço sky com opacidade reduzida', () => {
+  it('fantasma aplica traço ide-previa com opacidade reduzida', () => {
     const { container } = render(
       <svg>
         <ContatoNA {...PROPS_BASE} fantasma />
@@ -45,11 +48,11 @@ describe('Simbolos', () => {
     )
 
     const linha = container.querySelector('line')
-    expect(linha?.getAttribute('class')).toContain('stroke-sky-500')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-previa')
     expect(linha?.getAttribute('class')).toContain('opacity-50')
   })
 
-  it('perigo aplica traço vermelho', () => {
+  it('perigo aplica traço ide-perigo', () => {
     const { container } = render(
       <svg>
         <Bobina {...PROPS_BASE} perigo />
@@ -57,7 +60,7 @@ describe('Simbolos', () => {
     )
 
     const traco = container.querySelector('path')
-    expect(traco?.getAttribute('class')).toContain('stroke-red-600')
+    expect(traco?.getAttribute('class')).toContain('stroke-ide-perigo')
   })
 
   it('perigo tem precedência sobre fantasma e selecionado', () => {
@@ -68,12 +71,12 @@ describe('Simbolos', () => {
     )
 
     const linha = container.querySelector('line')
-    expect(linha?.getAttribute('class')).toContain('stroke-red-600')
-    expect(linha?.getAttribute('class')).not.toContain('stroke-sky-500')
-    expect(linha?.getAttribute('class')).not.toContain('stroke-sky-600')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-perigo')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-previa')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-destaque')
   })
 
-  it('perigo também pinta o rótulo da variável de vermelho quando ele é desenhado', () => {
+  it('perigo também pinta o rótulo da variável de vermelho (ide-perigo) quando ele é desenhado', () => {
     const { container } = render(
       <svg>
         <ContatoNA {...PROPS_BASE} perigo />
@@ -81,7 +84,7 @@ describe('Simbolos', () => {
     )
 
     const texto = container.querySelector('text')
-    expect(texto?.getAttribute('class')).toContain('fill-red-600')
+    expect(texto?.getAttribute('class')).toContain('fill-ide-perigo')
   })
 
   it('sem props novas, renderiza igual ao comportamento anterior (selecionado altera cor)', () => {
@@ -96,7 +99,55 @@ describe('Simbolos', () => {
       </svg>,
     )
 
-    expect(semSelecao.querySelector('line')?.getAttribute('class')).toContain('stroke-slate-700')
-    expect(comSelecao.querySelector('line')?.getAttribute('class')).toContain('stroke-sky-600')
+    expect(semSelecao.querySelector('line')?.getAttribute('class')).toContain('stroke-ide-fio')
+    expect(comSelecao.querySelector('line')?.getAttribute('class')).toContain('stroke-ide-destaque')
+  })
+
+  it('endereço aparece em texto monoespaçado acima do nome, quando presente', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} endereco="%IX0.1" />
+      </svg>,
+    )
+
+    const textos = container.querySelectorAll('text')
+    expect(textos).toHaveLength(2)
+    expect(textos[0].textContent).toBe('%IX0.1')
+    expect(textos[0].getAttribute('class')).toContain('font-mono')
+    expect(textos[1].textContent).toBe('M1')
+    // endereço fica acima do nome (y menor = mais para cima no SVG)
+    expect(Number(textos[0].getAttribute('y'))).toBeLessThan(Number(textos[1].getAttribute('y')))
+  })
+
+  it('sem endereço, mostra só o nome (uma linha)', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} endereco={null} />
+      </svg>,
+    )
+
+    expect(container.querySelectorAll('text')).toHaveLength(1)
+  })
+
+  it('sem variável vinculada, mostra "?" mesmo com semRotulo ausente', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} variavel={null} />
+      </svg>,
+    )
+
+    expect(container.querySelector('text')?.textContent).toBe('?')
+  })
+
+  it('nenhuma classe de cor fixa (só tokens ide-*), em qualquer combinação de estado', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} endereco="%IX0.1" selecionado />
+        <ContatoNF {...PROPS_BASE} fantasma />
+        <Bobina {...PROPS_BASE} perigo />
+      </svg>,
+    )
+
+    expect(container.innerHTML).not.toMatch(COR_FIXA)
   })
 })

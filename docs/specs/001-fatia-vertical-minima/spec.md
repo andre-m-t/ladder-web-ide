@@ -260,7 +260,8 @@ decisão e justificativa; não apague o enunciado.
   - **`%QX0.0` mantido em GPIO2:** strapping, porém saída e LED onboard — o uso
     é consagrado na plataforma e não há conflito no reset.
 
-  Tabela consolidada, em vigor após esta revisão:
+  Tabela consolidada após a revisão de 2026-09-15 (histórico — substituída
+  pela tabela da revisão de 2026-09-17, logo abaixo):
 
   | Endereço IEC | GPIO | Observação |
   |---|---|---|
@@ -268,6 +269,64 @@ decisão e justificativa; não apague o enunciado.
   | `%IX0.1` | 18 | entrada livre, pull-up interno; não é strapping pin |
   | `%QX0.0` | 2 | LED embarcado da DevKit v1; strapping pin, uso consagrado como saída |
   | `%QX0.1` | 4 | saída livre |
+
+- **Revisão (2026-09-17):** tabela ampliada de 2 entradas + 2 saídas para
+  **8 entradas + 8 saídas** (`%IX0.0`–`%IX0.7`, `%QX0.0`–`%QX0.7`).
+  - **Motivo:** a spec 002 (editor Ladder) fixou 8 entradas e 8 saídas
+    localizadas como capacidade do editor (D-13 do plano da spec 002 —
+    decisão do autor de já cravar a pinagem real nesta rodada, em vez de
+    esperar hardware). O editor só pode oferecer endereço que o firmware de
+    fato mapeia (ressalva R-3 do plano da spec 002, travada por
+    `backend/tests/test_plc_io_map.py`) — sem esta revisão, o editor teria
+    endereços "fantasma", que só falhariam ao tentar gravar.
+  - **Os quatro pinos já em uso não mudam**: `%IX0.0`=GPIO0, `%IX0.1`=GPIO18,
+    `%QX0.0`=GPIO2, `%QX0.1`=GPIO4 permanecem exatamente como na revisão de
+    2026-09-15.
+  - **Os doze pinos novos**, escolhidos pelos mesmos critérios da revisão
+    anterior — nada em *strapping* perigoso (GPIO5/12/15), nada na faixa do
+    flash SPI interno (GPIO6-11), nenhuma entrada *input-only* (GPIO34-39)
+    com pull-up:
+    - Entradas `%IX0.2`–`%IX0.7`: GPIO19, 21, 22, 23, 32, 33 — todas com
+      pull-up interno habilitado e `active_low = false`, mesma convenção de
+      `%IX0.1`; nenhuma tem papel de *strapping* no boot. GPIO21/22 são os
+      pinos padrão de I²C (SDA/SCL) quando essa periferia é usada, mas aqui
+      seguem como GPIO digital comum; GPIO32/33 são RTC GPIO/ADC1, usados
+      aqui só como entrada digital.
+    - Saídas `%QX0.2`–`%QX0.7`: GPIO16, 17, 25, 26, 27, 13 — `active_low =
+      false`, mesma convenção de `%QX0.1`. GPIO16/17 só estão livres porque o
+      alvo (módulo WROOM-32) **não** tem PSRAM — em módulos WROVER com
+      PSRAM esses pinos são reservados ao barramento da memória; GPIO25/26
+      são capazes de DAC, usados aqui só como saída digital; GPIO13
+      compartilha papel com JTAG (MTCK) quando há um depurador externo
+      conectado, mas comporta-se como GPIO comum sem um.
+  - **Risco explícito, registrado e não fechado por esta revisão**: nenhum
+    dos doze pinos novos foi gravado ou medido em um ESP32 físico — a
+    validação continua restrita a header ↔ spec (`test_plc_io_map.py`),
+    runtime hospedeiro e QEMU. Ver
+    `docs/validacao/limites-da-validacao-sem-hardware.md` e
+    `docs/validacao/ca-4-gravacao-esp32.md`. Só a bancada (bloqueada por
+    falta de hardware físico, ver F3 em `.claude/state.md`) fecha esse risco.
+
+  Tabela consolidada, em vigor após esta revisão:
+
+  | Endereço IEC | GPIO | Observação |
+  |---|---|---|
+  | `%IX0.0` | 0 | botão BOOT da placa, ativo em nível baixo, pull-up interno; strapping pin — circuito externo deve garantir nível alto no reset |
+  | `%IX0.1` | 18 | entrada livre, pull-up interno; não é strapping pin |
+  | `%IX0.2` | 19 | entrada livre, pull-up interno; não é strapping pin; não gravado em hardware |
+  | `%IX0.3` | 21 | entrada livre, pull-up interno; pino padrão de I²C SDA quando essa periferia é usada; não gravado em hardware |
+  | `%IX0.4` | 22 | entrada livre, pull-up interno; pino padrão de I²C SCL quando essa periferia é usada; não gravado em hardware |
+  | `%IX0.5` | 23 | entrada livre, pull-up interno; VSPI MOSI só quando essa periferia é ativada; não gravado em hardware |
+  | `%IX0.6` | 32 | entrada livre, pull-up interno; RTC GPIO/ADC1; não gravado em hardware |
+  | `%IX0.7` | 33 | entrada livre, pull-up interno; RTC GPIO/ADC1; não gravado em hardware |
+  | `%QX0.0` | 2 | LED embarcado da DevKit v1; strapping pin, uso consagrado como saída |
+  | `%QX0.1` | 4 | saída livre |
+  | `%QX0.2` | 16 | saída livre; livre só por este alvo não ter PSRAM; não gravado em hardware |
+  | `%QX0.3` | 17 | saída livre; livre só por este alvo não ter PSRAM; não gravado em hardware |
+  | `%QX0.4` | 25 | saída livre; capaz de DAC1, usado aqui só como saída digital; não gravado em hardware |
+  | `%QX0.5` | 26 | saída livre; capaz de DAC2, usado aqui só como saída digital; não gravado em hardware |
+  | `%QX0.6` | 27 | saída livre; não gravado em hardware |
+  | `%QX0.7` | 13 | saída livre; compartilha papel com JTAG (MTCK) sem depurador conectado; não gravado em hardware |
 
 ### Q-6 — Compilação síncrona ou assíncrona
 - **Enunciado:** A compilação é síncrona (uma requisição bloqueia até o binário)

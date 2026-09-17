@@ -42,7 +42,7 @@
 
 /* Numero maximo de variaveis localizadas que este programa consegue listar
  * de uma vez (para imprimir as saidas em ordem crescente de endereco). Bem
- * acima de PLC_IO_PIN_COUNT hoje (4): existe folga para programas maiores
+ * acima de PLC_IO_PIN_COUNT hoje (16, pinagem 8/8 de 2026-09-17): existe folga para programas maiores
  * sem precisar mexer aqui. */
 #define PLC_HOST_MAX_VARS 64
 

@@ -16,7 +16,7 @@ interface PainelErroProps {
 export default function PainelErro({ erro }: PainelErroProps) {
   if (!(erro instanceof ErroCompilacao)) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+      <div className="rounded-lg border border-ide-perigo/40 bg-ide-elevado p-4 text-sm text-ide-perigo">
         <p className="font-medium">Não foi possível compilar.</p>
         <p className="mt-1">{erro.message}</p>
       </div>
@@ -26,7 +26,7 @@ export default function PainelErro({ erro }: PainelErroProps) {
   const { envelope } = erro
 
   return (
-    <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+    <div role="alert" className="rounded-lg border border-ide-perigo/40 bg-ide-elevado p-4 text-sm text-ide-perigo">
       <p className="font-medium">
         Falha na compilação — etapa <code className="font-mono">{envelope.stage}</code> (
         <code className="font-mono">{envelope.code}</code>)
@@ -34,7 +34,7 @@ export default function PainelErro({ erro }: PainelErroProps) {
       <p className="mt-1">{envelope.message}</p>
 
       {envelope.diagnostics.length > 0 && (
-        <ul className="mt-3 space-y-1 rounded bg-white/60 p-2 font-mono text-xs">
+        <ul className="mt-3 space-y-1 rounded bg-ide-painel p-2 font-mono text-xs">
           {envelope.diagnostics.map((diagnostico, indice) => (
             <li key={indice}>
               {diagnostico.line ?? '?'}:{diagnostico.column ?? '?'} — {diagnostico.message}
@@ -44,8 +44,8 @@ export default function PainelErro({ erro }: PainelErroProps) {
       )}
 
       <details className="mt-3">
-        <summary className="cursor-pointer text-red-700">Saída bruta do compilador</summary>
-        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-2 text-xs text-slate-800">
+        <summary className="cursor-pointer text-ide-perigo">Saída bruta do compilador</summary>
+        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-ide-painel p-2 text-xs text-ide-texto">
           {'stdout:\n'}
           {envelope.raw.stdout || '(vazio)'}
           {'\n\nstderr:\n'}

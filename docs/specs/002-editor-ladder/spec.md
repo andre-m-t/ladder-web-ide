@@ -139,6 +139,9 @@ desligar com atraso) continuam fora** — ver §7.
   degrau existente, suportando qualquer número de degraus no mesmo diagrama.
 - **RF-9.** O sistema deve permitir vincular um elemento a uma variável de
   entrada ou saída **localizada** (com endereço do controlador).
+  *Revisão aditiva (2026-09-17):* o controlador oferece **até 8 entradas e 8
+  saídas** localizadas (pinagem revista na Q-5 da spec 001); o estado atual de
+  cada variável será exibido ao vivo quando houver simulação (F9).
 - **RF-10.** O sistema deve permitir vincular um elemento a uma variável
   **interna**, sem endereço do controlador.
 - **RF-11.** O sistema deve validar a estrutura do diagrama e identificar, no

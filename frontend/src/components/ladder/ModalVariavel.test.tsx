@@ -167,3 +167,14 @@ describe('ModalVariavel — Tab preso no diálogo', () => {
     expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus()
   })
 })
+
+describe('ModalVariavel — sem cores fixas (D-13)', () => {
+  it('nenhuma classe de cor fixa (só tokens ide-*), inclusive com opção desabilitada', () => {
+    const variaveis = [variavel('entrada', '%IX0.0'), variavel('saida', '%QX0.0')]
+    const { container } = render(
+      <ModalVariavel elemento={elemento('bobina', 'saida')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />,
+    )
+
+    expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
+  })
+})

@@ -133,6 +133,20 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
   - Substitui: a ferramenta/seleção das #6/#7 e o "mover por seleção" da #10;
     `moverElemento` sai da #9.
 
+- [x] **#23 — [F][L][V][I] IDE de tela inteira, segundo clique, variáveis e 8/8 E/S (plano §13, D-13)**
+  - Arquivos: `backend/firmware/esp32-template/main/plc_io_map.h`,
+    `docs/specs/001-fatia-vertical-minima/spec.md` (Q-5), `backend/tests/test_plc_io_map.py`,
+    `frontend/src/ladder/enderecos.ts`; `components/ladder/{EditorLadder,GradeDegrau,Paleta,Simbolos,ModalVariavel,TabelaVariaveis,PainelVariaveis}.tsx`;
+    `components/ide/**`, `lib/{console,tema}.ts`, `App.tsx`, `main.tsx`, `index.css`;
+    remoção de `PainelGravacao.tsx`; testes
+  - Depende de: #22
+  - Pronto quando: segundo clique abre o modal e soltar não abre; painel de
+    variáveis Nome/Endereço/Tipo/Valor com 16 endereços e mapa de GPIO; pinagem
+    8/8 com imagem reconstruída e suíte `slow` verde; IDE de tela inteira com
+    painel e console recolhíveis/redimensionáveis, abas Ladder/ST, temas escuro
+    e claro, console com eventos de compilação e gravação; verificação em
+    Chromium com compilação real.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [ ] **#9 — [N] Degraus, mover e limite de colunas**
@@ -167,7 +181,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
   - Nota: o SET/RESET só é inserível pela UI em #18; aqui a regra é testada em
     unidade sobre diagramas montados à mão.
 
-- [ ] **#12 — [T] Modos Ladder/ST e persistência ligada**
+- [ ] **#12 — [T] Persistência ligada (modos Ladder/ST já entregues na #23)**
   - Arquivos: `frontend/src/App.tsx`, `App.test.tsx`
   - Depende de: #8, #11
   - Pronto quando: `modo: 'ladder' | 'st'` com `role="tablist"`, Ladder como
@@ -291,6 +305,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 | #20 | todos | todos |
 | #21 | RF-12 (D-11) | CA-5 |
 | #22 | RF-2, RF-6, RF-7, RF-9, RF-10, RF-12 (D-12) | CA-1, CA-2, CA-5, CA-7 |
+| #23 | RF-9, RF-10, RF-12 (D-13) | CA-1, CA-2, CA-5, CA-7 |
 
 ## Paralelismo previsto
 

@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-16 (spec 002 — #22: editor só com arrastar-e-soltar, tabela de variáveis e modal) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-16 (spec 002 — #23: IDE de tela inteira, segundo clique, variáveis e pinagem 8/8) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -270,7 +270,19 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Verificação: `tsc` limpo, 181 testes vitest, `vite build` (JS 370 kB / 116 kB gzip); fluxo completo em Chromium headless com mouse real (tabela, NA→col 1 com prévia e modal, recusa de bobina na col 2, bobina na col 8 com entrada desabilitada, mover, marcar+lixeira, arrastar à lixeira) e só por teclado
 - Lição de processo: teste em jsdom não substitui verificação no navegador para interação de ponteiro — nenhum dos 172 testes pegou o bug
 
-**Falta:** Fatia 2 (#9 degraus e limite de colunas, #10 vários degraus na UI), Fatia 3 (#11–#14), Fatia 4 (#15–#20).
+**Concluído — #23: IDE, segundo clique, variáveis e pinagem 8/8 (plano §13, D-13, 2026-09-17)**
+- Segundo clique abre o modal; soltar item novo só marca
+- Painel de variáveis Nome | Endereço | Tipo (BOOL) | Valor ("—" até a F9), filtro por classe, mapa endereço → GPIO
+- **Pinagem 8/8** (`%IX0.0–7` → GPIO 0, 18, 19, 21, 22, 23, 32, 33; `%QX0.0–7` → GPIO 2, 4, 16, 17, 25, 26, 27, 13); revisão aditiva da Q-5 da spec 001; teste R-3 confere também o GPIO; **12 pinos novos sem validação em hardware**
+- Casca de IDE em tela inteira: abas Ladder/ST, status do servidor, painel de variáveis e console recolhíveis e redimensionáveis, temas escuro e claro por tokens; console registra `/health`, compilação e gravação (`PainelGravacao` removido)
+- Verificação: `tsc` limpo, 269 testes vitest, `vite build`; imagem reconstruída; pytest completo com `slow` 70 passed (rodado como root — ver pendência) e `not slow` 63 passed; depósito ok; Chromium com back-end real em rede isolada: layout 1280/1920 sem rolagem, segundo clique, variáveis `%IX0.7`/`%QX0.7` com GPIO 33/13 no mapa, alternância de tema, divisor e recolher, compilação real de `blink.st` (70 s, imagens no console) e ST inválido com diagnóstico no console e no painel de erro
+
+**Pendências registradas na #23**
+- Suíte `slow` falha com `--user` não-root: `ESP_BUILD_ROOT` na imagem é de root. Decidir entre `chown` no `Dockerfile` ou rodar como root
+- `ruff format --check` aponta 3 arquivos antigos (`tests/diferencial/executores.py`, `tests/test_deposito.py`, `tests/test_plc_runtime_host.py`)
+- Paleta mostra o símbolo duas vezes (glifo de texto e ícone SVG)
+
+**Falta:** Fatia 2 (#9 degraus e limite de colunas, #10 vários degraus na UI), Fatia 3 (#11 regras Q-6 e persistência, #12 persistência ligada, #13, #14), Fatia 4 (#15–#20).
 
 ---
 
@@ -389,3 +401,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-16 | Fatia 1 da spec 002 (#1–#8) | Editor Ladder mínimo na tela: núcleo puro (modelo, endereços, validação, edição) + SVG (grade, símbolos, paleta, variáveis, editor). `IO_ESPELHO` e `MINIMAL` construíveis pela UI (CA-1, CA-2), recusa de posição inválida visível (CA-5); teste de acoplamento `plc_io_map.h` ↔ `enderecos.ts` (R-3). 69 testes vitest, 60 pytest, build e depósito verdes. Frentes paralelas sem conflito de arquivo |
 | 2026-09-16 | Ajuste de interação #21 (spec 002) | Pedido do autor antes da fatia 2: paleta com símbolo, prévia sob cursor/foco derivada do núcleo, recusa abaixo do degrau com célula marcada (plano §11, D-11). Frentes D1 (símbolos/paleta) e D2 (grade/editor) em paralelo; ambas caíram por limite de API e foram retomadas. Revisão do orquestrador pegou ícone invisível no botão pressionado e, na verificação visual, mensagens 0-based sem a regra — corrigidas (frente N), com a regra de posição tornada fonte única. 107 testes vitest, build verde |
 | 2026-09-16 | #22 da spec 002 — só arrastar-e-soltar | Autor reverteu D-4/R-2 após uso (plano §12, D-12): arrasto por Pointer Events com teclado, clique marca + lixeira/Delete, tabela de variáveis (tipo e endereço) ao lado dos degraus, modal de variável. Frentes N, D1, D2, T em paralelo. Verificação no Chromium real achou bug que os testes não pegavam (segundo arrasto cancelado por arrasto nativo de seleção); primeira correção do agente partiu de causa errada e foi refutada no navegador; causa isolada por log de eventos e corrigida. Tabela alargada após captura. 181 testes vitest, build verde |
+| 2026-09-17 | #23 da spec 002 — IDE, segundo clique, variáveis, 8/8 E/S | Autor pediu redesign estilo IDE (referência visual sem cópia), modal só no segundo clique e variáveis simplificadas com até 8 entradas/8 saídas. Frentes F (pinagem 8/8 no firmware + Q-5 da spec 001), L (editor), V (variáveis), I (casca de IDE, console, temas) em paralelo; as quatro caíram por limite de API antes de escrever e foram retomadas. 269 testes vitest, pytest completo com `slow` 70 passed, compilação real verificada no console da IDE em Chromium |

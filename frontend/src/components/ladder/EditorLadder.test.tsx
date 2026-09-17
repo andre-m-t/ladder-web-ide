@@ -1,11 +1,39 @@
+import { useState } from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { diagramaVazio } from '../../ladder/edicao'
 import { IO_ESPELHO, MINIMAL } from '../../ladder/fixtures'
-import type { Diagrama, Elemento } from '../../ladder/modelo'
+import type { Diagrama, Elemento, Variavel } from '../../ladder/modelo'
 import { validarDiagrama } from '../../ladder/validacao'
 import EditorLadder from './EditorLadder'
+
+/** Harness de teste (sugerido pelo plano da tarefa #23): `EditorLadder` é
+ * controlado — este componente guarda o `diagrama` em `useState`, repassa
+ * `aoMudar` e também avisa um espião, para os testes lerem o último
+ * diagrama sem reimplementar a lógica de estado do editor. */
+function Harness({ inicial, espiao }: { inicial: Diagrama; espiao: (d: Diagrama) => void }) {
+  const [diagrama, setDiagrama] = useState(inicial)
+  function aoMudar(novo: Diagrama) {
+    setDiagrama(novo)
+    espiao(novo)
+  }
+  return <EditorLadder diagrama={diagrama} aoMudar={aoMudar} />
+}
+
+function renderEditor(inicial: Diagrama = diagramaVazio()) {
+  const aoMudar = vi.fn()
+  render(<Harness inicial={inicial} espiao={aoMudar} />)
+  return { aoMudar }
+}
+
+/** Diagrama de partida com variáveis já declaradas e nenhum elemento — a
+ * criação de variável pela UI (tabela/painel) é responsabilidade da frente
+ * que monta a IDE (`PainelVariaveis`), fora deste componente (plano §23). */
+function diagramaComVariaveis(variaveis: Variavel[]): Diagrama {
+  return { versao: 1, variaveis, rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
+}
 
 /** Normaliza ids de elemento para e1, e2, ... na ordem de varredura (rung,
  * depois linha, depois coluna), para comparar com a fixture sem depender de
@@ -31,7 +59,7 @@ function normalizarIds(diagrama: Diagrama): Diagrama {
   }
 }
 
-/** Última chamada de um `vi.fn()` usado como `aoMudar`. */
+/** Última chamada de um `vi.fn()` usado como espião de `aoMudar`. */
 function ultimoDiagrama(aoMudar: ReturnType<typeof vi.fn>): Diagrama {
   const chamadas = aoMudar.mock.calls
   expect(chamadas.length).toBeGreaterThan(0)
@@ -49,27 +77,34 @@ function arrastar(origem: Element, alvo: Element) {
   fireEvent.pointerUp(window, { pointerId: 1, clientX: 30, clientY: 30 })
 }
 
-/** Declara uma variável interna pela tabela (classe "Interna" já é o padrão da linha nova). */
-async function declararInterna(usuario: ReturnType<typeof userEvent.setup>, nome: string) {
-  await usuario.type(screen.getByLabelText('Nome da nova variável'), nome)
-  await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+/** Prefixo comum de uma célula ("Degrau 1, coluna 1"), a partir do rótulo de
+ * quando ela ainda estava vazia — usado para reencontrar a célula depois que
+ * um elemento é inserido nela (o rótulo muda de "...vazia" para o tipo). */
+function prefixoCelula(rotuloCelulaVazia: string): string {
+  return rotuloCelulaVazia.replace(/, vazia$/, '')
 }
 
-/** Declara uma variável localizada (entrada ou saída) pela tabela. */
-async function declararLocalizada(usuario: ReturnType<typeof userEvent.setup>, nome: string, endereco: string) {
-  const classe = endereco.startsWith('%IX') ? 'entrada' : 'saida'
-  await usuario.type(screen.getByLabelText('Nome da nova variável'), nome)
-  await usuario.selectOptions(screen.getByLabelText('Tipo da nova variável'), classe)
-  await usuario.selectOptions(screen.getByLabelText('Valor da nova variável'), endereco)
-  await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+function escapeRegExp(texto: string): string {
+  return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-/** Arrasta um item novo da paleta até uma célula vazia e escolhe a variável no
- * modal que abre. A busca da opção é restrita ao diálogo: o nome da variável
- * também aparece no botão "Remover variável X" da tabela, ambíguo se a busca
- * não for restrita. */
+function celulaPorPrefixo(prefixo: string): HTMLElement {
+  return screen.getByRole('button', { name: new RegExp(`^${escapeRegExp(prefixo)},`) })
+}
+
+/**
+ * Arrasta um item novo da paleta até uma célula vazia (D-13: fica marcado,
+ * sem abrir o modal), clica de novo — segundo clique, no item já marcado —
+ * para abrir `ModalVariavel`, e escolhe a variável.
+ */
 async function arrastarEEscolher(usuario: ReturnType<typeof userEvent.setup>, rotuloItem: RegExp, rotuloCelulaVazia: string, nomeVariavel: string | null) {
   arrastar(screen.getByRole('button', { name: rotuloItem }), screen.getByRole('button', { name: rotuloCelulaVazia }))
+
+  const celula = celulaPorPrefixo(prefixoCelula(rotuloCelulaVazia))
+  expect(celula).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+  await usuario.click(celula)
   const dialogo = screen.getByRole('dialog')
   const rotuloOpcao = nomeVariavel === null ? 'Sem variável' : new RegExp(nomeVariavel, 'i')
   await usuario.click(within(dialogo).getByRole('button', { name: rotuloOpcao }))
@@ -78,11 +113,7 @@ async function arrastarEEscolher(usuario: ReturnType<typeof userEvent.setup>, ro
 describe('EditorLadder — CA-1: espelho direto (IO_ESPELHO) construído só pela UI', () => {
   it('NA %IX0.1 -> bobina %QX0.1 resulta na fixture, sem problemas', async () => {
     const usuario = userEvent.setup()
-    const aoMudar = vi.fn()
-    render(<EditorLadder aoMudar={aoMudar} />)
-
-    await declararLocalizada(usuario, 'entrada', '%IX0.1')
-    await declararLocalizada(usuario, 'saida', '%QX0.1')
+    const { aoMudar } = renderEditor(diagramaComVariaveis(IO_ESPELHO.variaveis))
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', 'entrada')
     await arrastarEEscolher(usuario, /^bobina$/i, 'Degrau 1, coluna 8, vazia', 'saida')
@@ -96,11 +127,7 @@ describe('EditorLadder — CA-1: espelho direto (IO_ESPELHO) construído só pel
 describe('EditorLadder — CA-2: programa mínimo com variáveis internas (MINIMAL)', () => {
   it('NF entrada -> bobina saida, ambas internas, resulta na fixture, sem problemas', async () => {
     const usuario = userEvent.setup()
-    const aoMudar = vi.fn()
-    render(<EditorLadder aoMudar={aoMudar} />)
-
-    await declararInterna(usuario, 'entrada')
-    await declararInterna(usuario, 'saida')
+    const { aoMudar } = renderEditor(diagramaComVariaveis(MINIMAL.variaveis))
 
     await arrastarEEscolher(usuario, /^contato nf$/i, 'Degrau 1, coluna 1, vazia', 'entrada')
     await arrastarEEscolher(usuario, /^bobina$/i, 'Degrau 1, coluna 8, vazia', 'saida')
@@ -113,8 +140,7 @@ describe('EditorLadder — CA-2: programa mínimo com variáveis internas (MINIM
 
 describe('EditorLadder — CA-5: recusa não altera o diagrama e mostra o motivo', () => {
   it('soltar bobina na coluna 1: alerta abaixo do degrau, célula aria-invalid, diagrama intacto, modal não abre', () => {
-    const aoMudar = vi.fn()
-    render(<EditorLadder aoMudar={aoMudar} />)
+    const { aoMudar } = renderEditor()
 
     const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
     arrastar(screen.getByRole('button', { name: /^bobina$/i }), celula1)
@@ -127,10 +153,81 @@ describe('EditorLadder — CA-5: recusa não altera o diagrama e mostra o motivo
   })
 })
 
+describe('EditorLadder — segundo clique (D-13)', () => {
+  it('soltar item novo marca o elemento e NÃO abre o modal', () => {
+    renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('clique em item não marcado marca; clique de novo (já marcado) abre o modal', async () => {
+    const usuario = userEvent.setup()
+    renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    // desmarca (clicando fora) para testar o primeiro clique de marcação isoladamente
+    fireEvent.pointerDown(document.body)
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    expect(celula).toHaveAttribute('aria-selected', 'false')
+
+    await usuario.click(celula)
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await usuario.click(celula)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Enter com foco no item marcado abre o modal', async () => {
+    const usuario = userEvent.setup()
+    renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    celula.focus()
+
+    await usuario.keyboard('{Enter}')
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Enter num item ainda não marcado só marca (paridade com o clique)', async () => {
+    const usuario = userEvent.setup()
+    renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    fireEvent.pointerDown(document.body)
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    expect(celula).toHaveAttribute('aria-selected', 'false')
+    celula.focus()
+
+    await usuario.keyboard('{Enter}')
+
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('duplo clique continua abrindo (é o segundo clique rápido)', async () => {
+    const usuario = userEvent.setup()
+    renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    fireEvent.pointerDown(document.body)
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+
+    await usuario.dblClick(celula)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+})
+
 describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
   it('arrastar NA da paleta sobre célula vazia mostra prévia de inserir, sem alterar o diagrama', () => {
-    const aoMudar = vi.fn()
-    render(<EditorLadder aoMudar={aoMudar} />)
+    const { aoMudar } = renderEditor()
 
     const itemNA = screen.getByRole('button', { name: /^contato na$/i })
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
@@ -146,7 +243,7 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
   })
 
   it('arrastar bobina sobre a coluna 1 mostra prévia inválida com o motivo do núcleo', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const itemBobina = screen.getByRole('button', { name: /^bobina$/i })
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
@@ -165,7 +262,7 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
 describe('EditorLadder — mover elemento por arrasto', () => {
   it('move elemento de uma célula para outra, no mesmo degrau', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -179,7 +276,7 @@ describe('EditorLadder — mover elemento por arrasto', () => {
 
   it('mover para posição inválida recusa e mantém o elemento na origem', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -195,7 +292,7 @@ describe('EditorLadder — mover elemento por arrasto', () => {
 describe('EditorLadder — remover elemento', () => {
   it('arrastar até a lixeira remove o elemento', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -208,11 +305,12 @@ describe('EditorLadder — remover elemento', () => {
 
   it('marcar e acionar a lixeira remove o elemento', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
+    // arrastarEEscolher deixa o elemento marcado (a escolha no modal não desmarca)
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toHaveAttribute('aria-selected', 'true')
 
-    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' }))
     await usuario.click(screen.getByRole('button', { name: /lixeira/i }))
 
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
@@ -220,19 +318,18 @@ describe('EditorLadder — remover elemento', () => {
 
   it('marcar e pressionar Delete remove o elemento', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
+    // arrastarEEscolher deixa o elemento marcado e com foco (a escolha no modal devolve o foco à célula)
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
-    await usuario.click(celula)
     await usuario.keyboard('{Delete}')
 
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
   })
 
   it('arrastar item novo da paleta até a lixeira cancela, sem criar elemento', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const lixeira = screen.getByRole('button', { name: /lixeira/i })
     arrastar(screen.getByRole('button', { name: /^contato na$/i }), lixeira)
@@ -243,14 +340,12 @@ describe('EditorLadder — remover elemento', () => {
 })
 
 describe('EditorLadder — marcação por clique', () => {
-  it('clique marca (aria-selected) e clique fora da grade desmarca', async () => {
-    const usuario = userEvent.setup()
-    render(<EditorLadder />)
+  it('clique marca (aria-selected) e clique fora da grade desmarca', () => {
+    renderEditor()
 
-    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
 
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
-    await usuario.click(celula)
     expect(celula).toHaveAttribute('aria-selected', 'true')
 
     fireEvent.pointerDown(document.body)
@@ -259,7 +354,7 @@ describe('EditorLadder — marcação por clique', () => {
 
   it('clique em célula vazia não marca nada', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 3, vazia' }))
 
@@ -270,51 +365,32 @@ describe('EditorLadder — marcação por clique', () => {
 
   it('Esc desmarca', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
-    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
 
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
-    await usuario.click(celula)
     expect(celula).toHaveAttribute('aria-selected', 'true')
 
+    // Esc é tratado pelo container (captura o evento a partir do foco dentro
+    // dele) — o arrasto só move o foco por si; aqui focamos programaticamente
+    // para isolar o comportamento de Esc do de clique (que abriria o modal,
+    // já que o item está marcado pelo drop).
+    celula.focus()
     await usuario.keyboard('{Escape}')
     expect(celula).toHaveAttribute('aria-selected', 'false')
   })
 })
 
 describe('EditorLadder — abrir o modal', () => {
-  it('duplo clique num elemento abre o modal', async () => {
-    const usuario = userEvent.setup()
-    render(<EditorLadder />)
-
-    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
-
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
-    await usuario.dblClick(celula)
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-  })
-
-  it('Enter com foco no elemento abre o modal', async () => {
-    const usuario = userEvent.setup()
-    render(<EditorLadder />)
-
-    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
-
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
-    celula.focus()
-    await usuario.keyboard('{Enter}')
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-  })
-
   it('Esc fecha o modal e devolve o foco ao elemento', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
-    // o modal já abre sozinho ao soltar um item novo com sucesso
-    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
+    // reabre o modal com o segundo clique
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
+    await usuario.click(celula)
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
     await usuario.keyboard('{Escape}')
@@ -325,12 +401,9 @@ describe('EditorLadder — abrir o modal', () => {
 })
 
 describe('EditorLadder — arrasto por teclado, de ponta a ponta (sem ponteiro)', () => {
-  it('pega o item na paleta com Espaço, move com as setas, solta com Espaço e escolhe a variável no modal', async () => {
+  it('pega o item na paleta com Espaço, move com as setas e solta com Espaço: marca sem abrir modal; Enter abre e escolhe a variável', async () => {
     const usuario = userEvent.setup()
-    const aoMudar = vi.fn()
-    render(<EditorLadder aoMudar={aoMudar} />)
-
-    await declararInterna(usuario, 'entrada')
+    const { aoMudar } = renderEditor(diagramaComVariaveis([{ nome: 'entrada', tipo: 'BOOL' }]))
 
     const itemNA = screen.getByRole('button', { name: /^contato na$/i })
     itemNA.focus()
@@ -338,6 +411,11 @@ describe('EditorLadder — arrasto por teclado, de ponta a ponta (sem ponteiro)'
     await usuario.keyboard('{ArrowRight}{ArrowRight}')
     await usuario.keyboard(' ')
 
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 3, contato NA sem variável' })
+    expect(celula).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await usuario.keyboard('{Enter}')
     const dialogo = screen.getByRole('dialog')
     await usuario.click(within(dialogo).getByRole('button', { name: /entrada/i }))
 
@@ -351,20 +429,14 @@ describe('EditorLadder — arrasto por teclado, de ponta a ponta (sem ponteiro)'
   })
 })
 
-describe('EditorLadder — recusa na tabela de variáveis', () => {
-  it('declarar variável com nome já usado mostra o erro dentro da tabela', async () => {
-    const usuario = userEvent.setup()
-    render(<EditorLadder />)
+describe('EditorLadder — controlado (D-13): reage a mudanças externas de diagrama', () => {
+  it('exibe o diagrama recebido por prop, sem estado interno próprio', () => {
+    renderEditor(MINIMAL)
 
-    await declararInterna(usuario, 'entrada')
-    await declararInterna(usuario, 'entrada')
-
-    const tabela = screen.getByRole('region', { name: 'Variáveis' })
-    expect(within(tabela).getByRole('alert')).toHaveTextContent(/já existe uma variável/i)
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NF entrada' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina saida' })).toBeInTheDocument()
   })
 })
-
-
 
 /**
  * Bug real encontrado pelo orquestrador em Chromium (Playwright, `vite
@@ -390,7 +462,7 @@ describe('EditorLadder — recusa na tabela de variáveis', () => {
  */
 describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancelava o ponteiro', () => {
   it('pointerdown num item da paleta chama preventDefault (dispatchEvent devolve false)', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const item = screen.getByRole('button', { name: /^contato na$/i })
     const naoPrevenido = fireEvent.pointerDown(item, { pointerId: 1, clientX: 0, clientY: 0 })
@@ -399,7 +471,7 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
   })
 
   it('pointerdown num elemento existente na grade também chama preventDefault', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })
@@ -410,7 +482,7 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
   })
 
   it('pointerdown numa célula vazia não arma nada, então não precisa prevenir', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const celulaVazia = screen.getByRole('button', { name: 'Degrau 1, coluna 3, vazia' })
     const naoPrevenido = fireEvent.pointerDown(celulaVazia, { pointerId: 3, clientX: 0, clientY: 0 })
@@ -419,7 +491,7 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
   })
 
   it('itens da paleta, células da grade e a lixeira desligam seleção de texto e touch-action (select-none/touch-none)', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const item = screen.getByRole('button', { name: /^contato na$/i })
     expect(item.className).toMatch(/\bselect-none\b/)
@@ -435,7 +507,7 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
   })
 
   it('pointercancel no meio do arrasto zera o estado (sem prévia, sem alerta, sem modal), e o próximo arrasto funciona', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const itemNA = screen.getByRole('button', { name: /^contato na$/i })
     const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
@@ -453,25 +525,25 @@ describe('EditorLadder — bug real (Chromium): drag nativo de conteúdo cancela
 
     // um arrasto novo, do zero (mesmo pointerId reaproveitado, como um mouse real faria), funciona normalmente.
     arrastar(itemNA, celula1)
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 
 describe('EditorLadder — cobertura adicional depois do ciclo modal', () => {
   it('depois de uma recusa, um novo arrasto (com pointerenter) funciona normalmente', () => {
-    render(<EditorLadder />)
+    renderEditor()
 
     const celula1 = screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })
     arrastar(screen.getByRole('button', { name: /^bobina$/i }), celula1)
     expect(screen.getByRole('alert')).toHaveTextContent(/posição inválida/i)
 
     arrastar(screen.getByRole('button', { name: /^contato na$/i }), celula1)
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('mover célula -> célula depois do modal continua funcionando', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -485,7 +557,7 @@ describe('EditorLadder — cobertura adicional depois do ciclo modal', () => {
 
   it('arrasto por teclado depois do modal continua funcionando', async () => {
     const usuario = userEvent.setup()
-    render(<EditorLadder />)
+    renderEditor()
 
     await arrastarEEscolher(usuario, /^contato nf$/i, 'Degrau 1, coluna 1, vazia', null)
 
@@ -495,9 +567,22 @@ describe('EditorLadder — cobertura adicional depois do ciclo modal', () => {
     await usuario.keyboard('{ArrowRight}'.repeat(7))
     await usuario.keyboard(' ')
 
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const celulaBobina = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })
+    expect(celulaBobina).toHaveAttribute('aria-selected', 'true')
+
+    await usuario.keyboard('{Enter}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sem variável' }))
 
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
+  })
+})
+
+describe('EditorLadder — sem cores fixas (D-13)', () => {
+  it('nenhuma classe de cor fixa (só tokens ide-*) na árvore renderizada', () => {
+    const { container } = render(<Harness inicial={IO_ESPELHO} espiao={vi.fn()} />)
+
+    expect(container.innerHTML).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })

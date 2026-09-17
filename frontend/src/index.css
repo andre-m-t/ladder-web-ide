@@ -1,1 +1,75 @@
 @import 'tailwindcss';
+
+/*
+ * Tokens de cor da IDE (spec 002, plano §13, D-13).
+ *
+ * Componentes usam só as classes geradas por estes tokens
+ * (`bg-ide-painel`, `text-ide-texto`, `border-ide-borda`, `stroke-ide-fio`...),
+ * nunca cores fixas como `slate-*`: o tema escuro e o claro trocam apenas os
+ * valores abaixo, via `data-theme` no elemento <html>.
+ */
+@theme {
+  --color-ide-fundo: var(--ide-fundo);
+  --color-ide-painel: var(--ide-painel);
+  --color-ide-elevado: var(--ide-elevado);
+  --color-ide-borda: var(--ide-borda);
+  --color-ide-texto: var(--ide-texto);
+  --color-ide-suave: var(--ide-suave);
+  --color-ide-destaque: var(--ide-destaque);
+  --color-ide-destaque-texto: var(--ide-destaque-texto);
+  --color-ide-sucesso: var(--ide-sucesso);
+  --color-ide-aviso: var(--ide-aviso);
+  --color-ide-perigo: var(--ide-perigo);
+  --color-ide-fio: var(--ide-fio);
+  --color-ide-trilho: var(--ide-trilho);
+  --color-ide-previa: var(--ide-previa);
+  --font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Menlo, Consolas, monospace;
+}
+
+:root,
+[data-theme='light'] {
+  --ide-fundo: #f3f5f7;
+  --ide-painel: #ffffff;
+  --ide-elevado: #eef1f4;
+  --ide-borda: #d5dbe1;
+  --ide-texto: #1b2430;
+  --ide-suave: #5d6b7a;
+  --ide-destaque: #0f8a6a;
+  --ide-destaque-texto: #ffffff;
+  --ide-sucesso: #13804b;
+  --ide-aviso: #a86200;
+  --ide-perigo: #c62f2f;
+  --ide-fio: #3b4754;
+  --ide-trilho: #1f2a36;
+  --ide-previa: #2b7fd1;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --ide-fundo: #0e1318;
+  --ide-painel: #151b22;
+  --ide-elevado: #1c242d;
+  --ide-borda: #2a3440;
+  --ide-texto: #d8e0e8;
+  --ide-suave: #8594a3;
+  --ide-destaque: #2fd39b;
+  --ide-destaque-texto: #06231a;
+  --ide-sucesso: #3ddc84;
+  --ide-aviso: #f0b429;
+  --ide-perigo: #ff6b6b;
+  --ide-fio: #7d8a97;
+  --ide-trilho: #b8c4cf;
+  --ide-previa: #5aa9ff;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--ide-fundo);
+  color: var(--ide-texto);
+}

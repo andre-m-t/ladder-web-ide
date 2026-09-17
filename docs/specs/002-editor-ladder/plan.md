@@ -475,3 +475,48 @@ agora acionada durante o arrasto. Tarefa #22.
 - **Requisito atendido:** RF-2, RF-6, RF-7, RF-9, RF-10, RF-12; CA-1, CA-2,
   CA-5, CA-7.
 
+## 13. Revisão aditiva — IDE, segundo clique, variáveis simplificadas e 8/8 E/S (2026-09-17)
+
+O autor usou a #22 e pediu três ajustes antes da fatia 2. Tarefa #23. D-12
+(arrasto) continua; muda o gatilho do modal, o painel de variáveis e toda a
+casca visual.
+
+### D-13: IDE de tela inteira, segundo clique e variáveis BOOL com endereço
+- **Escolha:**
+  - **Segundo clique:** clique marca; clique no item já marcado (ou Enter)
+    abre o modal; duplo clique é o caso rápido. Soltar item novo **marca e não
+    abre** o modal.
+  - **Variáveis:** colunas Nome | Endereço | Tipo (`BOOL` fixo) | Valor (estado
+    atual, "—" até a F9 fornecer valor ao vivo); endereço opcional escolhido
+    entre os livres, agrupados em entradas e saídas; filtro por classe; mapa
+    endereço → GPIO.
+  - **8 entradas e 8 saídas** (`%IX0.0–7`, `%QX0.0–7`) com pinagem real no
+    firmware (revisão da Q-5 da spec 001, 2026-09-17); o teste R-3 passa a
+    conferir também o GPIO de cada endereço.
+  - **Casca de IDE** (`components/ide/`): tela inteira sem `max-w`; barra
+    superior com abas Ladder/ST, status do servidor, Compilar, Gravar,
+    alternadores e tema; painel de variáveis à direita e console embaixo,
+    ambos recolhíveis e redimensionáveis por divisor (ponteiro e teclado);
+    preferências de layout em `localStorage`.
+  - **Diagrama sobe para a IDE:** `EditorLadder` controlado; `PainelVariaveis`
+    como container sobre o núcleo.
+  - **Console de eventos do cliente:** `/health`, compilação (início, tempo,
+    imagens, cada diagnóstico) e gravação (progresso, erro classificado);
+    substitui o `PainelGravacao`. Servidor continua síncrono (Q-6 da spec 001);
+    transmitir a saída do `iec2c`/`idf.py` fica para spec futura.
+  - **Temas escuro e claro** por tokens CSS (`index.css`, `data-theme`),
+    escolhidos pela preferência do sistema e alternáveis.
+  - As abas Ladder/ST antecipam os "modos" da #12, que fica só com a
+    persistência do diagrama.
+- **Por quê:** avaliação de uso do autor — modal a cada inserção interrompia a
+  composição; "tipo/valor" da tabela anterior confundia; a tela em coluna
+  estreita não parecia ferramenta de trabalho. Modelo de referência
+  (`.claude/references/modelo.png`) usado como inspiração, sem cópia.
+- **Alternativas descartadas:** manter o modal na soltura (rejeitado pelo
+  autor); endereços 8/8 só no editor sem firmware (autor escolheu firmware
+  agora); streaming do servidor no console (muda contrato da API, spec própria);
+  biblioteca de painéis redimensionáveis (dependência nova; divisor próprio
+  basta).
+- **Requisito atendido:** RF-9, RF-10, RF-12; CA-1 (agora ponta a ponta na IDE),
+  CA-2, CA-5, CA-7; preserva RF-1 a RF-6 da spec 001.
+
