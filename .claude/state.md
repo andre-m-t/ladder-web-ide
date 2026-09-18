@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (spec 003 concluída — F8 ✅: Compilar e Gravar funcionando em projeto Ladder, com a equivalência medida) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-18 (spec 003 concluída — F8 ✅: Compilar e Gravar funcionando em projeto Ladder, com a equivalência medida) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -498,10 +498,9 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. Merge de `feat/002-editor-ladder` na `main`: a branch acumula a spec 002 (fatias 1–3) e a spec 003 inteira
-2. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**. Em seguida, uma spec curta para estender o serializador ao CTU e medir o `BLINK` serializado contra o `blink.st`
-3. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
-4. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
+1. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**. Em seguida, uma spec curta para estender o serializador ao CTU e medir o `BLINK` serializado contra o `blink.st`
+2. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
+3. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
 
 ## Bloqueado aguardando hardware
 
@@ -547,3 +546,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-18 | Fase 2 (Planejar) da spec 003 | Aprovação da spec commitada e enviada (`0f0c6e9`). `plan.md` escrito com D-1 a D-11: serializador puro que lê o degrau como circuito de nós (redução série-paralelo, com fallback por nó para ramos cruzados, que a edição permite); SET/RESET como `IF` na ordem dos degraus; recusa de palavra reservada IEC e de nomes que diferem só em maiúsculas (tensão registrada, sem RF próprio); arquivos dourados via `toMatchFileSnapshot` executados pelo pytest diferencial, o que quita a R-1; portão de compilação na IDE; aba "ST gerado"; diagnóstico → degrau. Nenhuma dependência nova. Plano em revisão; nenhum código |
 | 2026-09-18 | Plano 003 aprovado e Fatia 1 da spec 003 (S6a, #1–#6) | O autor aprovou o plano e liberou tarefas e implementação na mesma decisão; as recusas de D-5 entraram como revisão aditiva do RF-5. `tasks.md` com 10 tarefas. Frentes sonnet N ∥ B ∥ P. Entregues: serializador puro (redução série-paralelo com fallback por nó, ordem determinística por chave de origem, achado da frente N), 39 testes com prova por tabela-verdade, 5 arquivos dourados gerados pelo vitest e compilados no `iec2c` real, pytest diferencial **executando** no `plc_host_runner` com 0 divergências nos 5 cenários, inclusive a coincidência SET/RESET e a comparação com os STs de referência. **R-1 do plano 002 quitada.** 548 testes vitest, 72 no pytest, depósito ok. A aba "ST gerado" (#7) está pronta, com integração na IDE (#8, #9) em andamento |
 | 2026-09-18 | Fatia 2 da spec 003 (S6b, #7–#10) — F8 ✅ | Frentes sonnet P (aba "ST gerado") e T (App + e2e). Portão D-6 usando só erros de validação, para uma falha de compilação não travar o botão; Compilar em LD pelo mesmo `/compile/pacote`; diagnóstico do `iec2c` → degrau na aba Problemas. e2e confere o `source` enviado byte a byte contra o arquivo dourado. Chromium com back-end real em rede isolada: IO_ESPELHO (60 s, build frio) e SELO (11 s) compilados de diagramas Ladder, com as 3 imagens e Gravar habilitado; erro e vazio bloqueiam com motivo. 553 testes vitest, 72 no pytest, e2e 4 passed, depósito ok. Segundo caminho fim-a-fim fechado até onde é possível sem ESP32 |
+| 2026-09-18 | Integração à `main` | `feat/002-editor-ladder` integrada à `main` por fast-forward, levando a spec 002 (fatias 1–3, ajustes #21–#26) e a spec 003 inteira (F8 ✅); a branch foi apagada local e remotamente. A `main` passa a ser a única branch |
