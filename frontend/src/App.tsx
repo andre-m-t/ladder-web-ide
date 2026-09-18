@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
-import BarraSuperior, { type AbaEdicao } from './components/ide/BarraSuperior'
+import BarraSuperior from './components/ide/BarraSuperior'
 import ModalConfirmarDescarte from './components/ide/ModalConfirmarDescarte'
 import ModalNovoProjeto from './components/ide/ModalNovoProjeto'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
+import PainelLateral from './components/ide/PainelLateral'
+import PainelVariaveis from './components/ladder/PainelVariaveis'
 import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
@@ -51,16 +53,21 @@ type EstadoGravacao =
 type EstadoModalNovoProjeto = 'nenhum' | 'confirmarDescarte' | 'novoProjeto'
 
 // --- Preferências de interface (localStorage) -------------------------------
-// Só o layout do painel inferior — aberto/altura. A aba ativa dentro dele
-// (Problemas/Mensagens/Console) e a sub-aba de edição (Lógica/Variáveis) não
-// persistem: nascem de novo a cada carga, conforme a regra da tarefa #25/#26.
-// O tema tem seu próprio armazenamento em `lib/tema.ts`. Leitura e escrita em
-// try/catch: sem `localStorage` disponível, a IDE usa os padrões abaixo sem
-// quebrar.
+// Layout do painel de variáveis (aberto/largura) e do painel inferior
+// (aberto/altura). A aba ativa dentro do painel inferior
+// (Problemas/Mensagens/Console) não persiste: nasce de novo a cada carga,
+// conforme a regra da tarefa #25. O tema tem seu próprio armazenamento em
+// `lib/tema.ts`. Leitura e escrita em try/catch: sem `localStorage`
+// disponível, a IDE usa os padrões abaixo sem quebrar.
 
+const CHAVE_PAINEL_VARIAVEIS_ABERTO = 'ladderflow.painelAberto'
+const CHAVE_PAINEL_VARIAVEIS_LARGURA = 'ladderflow.painelLargura'
 const CHAVE_CONSOLE_ABERTO = 'ladderflow.consoleAberto'
 const CHAVE_CONSOLE_ALTURA = 'ladderflow.consoleAltura'
 
+const PAINEL_VARIAVEIS_LARGURA_PADRAO = 320
+const PAINEL_VARIAVEIS_LARGURA_MIN = 288 // 18rem
+const PAINEL_VARIAVEIS_LARGURA_MAX = 640 // 40rem
 const CONSOLE_ALTURA_PADRAO = 192
 const CONSOLE_ALTURA_MIN = 96 // 6rem
 
@@ -134,17 +141,19 @@ function abaInferiorInicial(projeto: Projeto, veioDoArmazenamento: boolean): Aba
 }
 
 /**
- * Shell de IDE do LadderFlow (spec 002, tarefas #23–#26): tela inteira com
- * barra superior (título/linguagem do projeto, sub-abas Lógica/Variáveis,
- * compilar/gravar, alternadores), editor central pela sub-aba ativa e console
- * de eventos do cliente recolhível e redimensionável embaixo.
+ * Shell de IDE do LadderFlow (spec 002, tarefas #23–#26; painel de variáveis
+ * devolvido ao lateral na revisão da tarefa #26 — o autor testou a sub-aba de
+ * largura inteira e pediu de volta o painel lateral): tela inteira com barra
+ * superior (título/linguagem do projeto, compilar/gravar, alternadores),
+ * editor central com o painel de variáveis ao lado (só em projeto Ladder,
+ * recolhível e redimensionável) e console de eventos do cliente recolhível e
+ * redimensionável embaixo.
  *
  * A partir da tarefa #26 a IDE trabalha com um **projeto** de linguagem única
  * (`projeto/projeto.ts`) em vez de manter Ladder e ST lado a lado nas mesmas
  * abas: o autor escolhe a linguagem em "Novo projeto" e todo o resto —
  * diagrama ou fonte, painel de variáveis, compilar/gravar — decorre dessa
- * escolha. O painel lateral de variáveis também saiu: seu conteúdo virou a
- * sub-aba "Variáveis", de largura inteira, ao lado de "Lógica".
+ * escolha.
  *
  * A saúde do servidor de compilação (`/health`) não aparece na barra: uma
  * linha por ferramenta (MATIEC, toolchain ESP32) vai para o console na carga
@@ -161,12 +170,20 @@ export default function App() {
   // armazenamento" nascem juntos, de uma só leitura).
   const [cargaInicial] = useState<ResultadoCargaProjeto>(() => carregarProjetoInicial())
   const [projeto, setProjeto] = useState<Projeto>(() => cargaInicial.projeto)
-  const [abaEdicao, setAbaEdicao] = useState<AbaEdicao>('logica')
   const [abaInferior, setAbaInferior] = useState<AbaInferior>(() =>
     abaInferiorInicial(cargaInicial.projeto, cargaInicial.veioDoArmazenamento),
   )
   const [foco, setFoco] = useState<FocoLadder | null>(null)
 
+  const [painelVariaveisAberto, setPainelVariaveisAberto] = useState(() =>
+    lerBooleano(CHAVE_PAINEL_VARIAVEIS_ABERTO, true),
+  )
+  const [painelVariaveisLargura, setPainelVariaveisLargura] = useState(() =>
+    Math.min(
+      PAINEL_VARIAVEIS_LARGURA_MAX,
+      Math.max(PAINEL_VARIAVEIS_LARGURA_MIN, lerNumero(CHAVE_PAINEL_VARIAVEIS_LARGURA, PAINEL_VARIAVEIS_LARGURA_PADRAO)),
+    ),
+  )
   const [consoleAberto, setConsoleAberto] = useState(() => lerBooleano(CHAVE_CONSOLE_ABERTO, true))
   const [consoleAltura, setConsoleAltura] = useState(() =>
     Math.max(CONSOLE_ALTURA_MIN, lerNumero(CHAVE_CONSOLE_ALTURA, CONSOLE_ALTURA_PADRAO)),
@@ -272,6 +289,11 @@ export default function App() {
     }
   }
 
+  useEffect(() => gravarPreferencia(CHAVE_PAINEL_VARIAVEIS_ABERTO, String(painelVariaveisAberto)), [painelVariaveisAberto])
+  useEffect(
+    () => gravarPreferencia(CHAVE_PAINEL_VARIAVEIS_LARGURA, String(painelVariaveisLargura)),
+    [painelVariaveisLargura],
+  )
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ABERTO, String(consoleAberto)), [consoleAberto])
   useEffect(() => gravarPreferencia(CHAVE_CONSOLE_ALTURA, String(consoleAltura)), [consoleAltura])
 
@@ -359,12 +381,10 @@ export default function App() {
     setTema(novoTema)
   }
 
-  /** Clicar num problema (herdado da tarefa #13, revisado na #26): troca para
-   * a sub-aba Lógica (se estiver em Variáveis) e pede ao `EditorLadder` para
+  /** Clicar num problema (herdado da tarefa #13): pede ao `EditorLadder` para
    * focar a célula do problema — `token` incrementa a cada escolha para
    * repetir o mesmo alvo duas vezes seguidas ainda disparar o foco. */
   function aoEscolherProblema(problema: Problema) {
-    setAbaEdicao('logica')
     focoToken.current += 1
     setFoco({ rungId: problema.rungId, elementoId: problema.elementoId, token: focoToken.current })
   }
@@ -387,8 +407,8 @@ export default function App() {
 
   /** Segundo (ou único, se o projeto atual já estava vazio) passo do fluxo
    * "Novo projeto": substitui o projeto, limpa o estado que só fazia sentido
-   * para o anterior (compilação, gravação, foco, sub-aba), fecha os modais,
-   * registra no Console e devolve o foco ao botão "Novo projeto" — ele não é
+   * para o anterior (compilação, gravação, foco), fecha os modais, registra
+   * no Console e devolve o foco ao botão "Novo projeto" — ele não é
    * referenciável por `ref` (mora em `BarraSuperior`, fora desta frente), daí
    * a busca pelo `aria-label` fixo do próprio botão. */
   function aoCriarProjeto(titulo: string, linguagem: Linguagem) {
@@ -397,7 +417,6 @@ export default function App() {
     setCompilacao({ fase: 'ocioso' })
     setGravacao({ fase: 'ocioso' })
     setFoco(null)
-    setAbaEdicao('logica')
     setModalNovoProjeto('nenhum')
     log('info', `Projeto «${novo.titulo}» (${linguagem.toUpperCase()}) criado.`)
     document.querySelector<HTMLButtonElement>('[aria-label="Novo projeto"]')?.focus()
@@ -408,8 +427,6 @@ export default function App() {
       <BarraSuperior
         titulo={projeto.titulo}
         linguagem={projeto.linguagem}
-        abaEdicao={abaEdicao}
-        aoMudarAbaEdicao={setAbaEdicao}
         aoNovoProjeto={aoNovoProjeto}
         compilando={compilando}
         aoCompilar={aoCompilar}
@@ -418,6 +435,8 @@ export default function App() {
         podeGravar={podeGravar}
         aoGravar={aoGravar}
         motivoIndisponivel={motivoIndisponivel}
+        painelVariaveisAberto={painelVariaveisAberto}
+        aoAlternarPainelVariaveis={() => setPainelVariaveisAberto((atual) => !atual)}
         painelInferiorAberto={consoleAberto}
         aoAlternarPainelInferior={() => setConsoleAberto((atual) => !atual)}
         tema={tema}
@@ -434,7 +453,6 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         <AreaEditor
           projeto={projeto}
-          abaEdicao={abaEdicao}
           aoMudarProjeto={setProjeto}
           problemas={problemas}
           foco={foco}
@@ -442,6 +460,18 @@ export default function App() {
           erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
           aoRecusar={recusar}
         />
+
+        {projeto.linguagem === 'ld' && (
+          <PainelLateral
+            aberto={painelVariaveisAberto}
+            largura={painelVariaveisLargura}
+            larguraMin={PAINEL_VARIAVEIS_LARGURA_MIN}
+            larguraMax={PAINEL_VARIAVEIS_LARGURA_MAX}
+            aoRedimensionar={setPainelVariaveisLargura}
+          >
+            <PainelVariaveis diagrama={projeto.diagrama} aoMudar={(diagrama) => setProjeto({ ...projeto, diagrama })} aoRecusar={recusar} />
+          </PainelLateral>
+        )}
       </div>
 
       <PainelInferior

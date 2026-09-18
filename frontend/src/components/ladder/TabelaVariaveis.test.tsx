@@ -479,14 +479,14 @@ describe('TabelaVariaveis — valor', () => {
 })
 
 describe('TabelaVariaveis — área rolável única', () => {
-  it('tabela (com a linha de adicionar) e mapa de pinos ficam dentro do mesmo contêiner overflow-y-auto', () => {
+  it('tabela (com a linha de adicionar) e mapa de pinos ficam dentro do mesmo contêiner rolável', () => {
     const { container } = renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])
 
     const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
     const linhaAdicionar = screen.getByLabelText('Nome da nova variável').closest('tr') as HTMLElement
     const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLElement
 
-    const rolavel = container.querySelector('.overflow-y-auto') as HTMLElement
+    const rolavel = container.querySelector('.overflow-auto') as HTMLElement
     expect(rolavel).toBeInTheDocument()
     expect(rolavel).toContainElement(linhaAdicionar)
     expect(rolavel).toContainElement(tabela)

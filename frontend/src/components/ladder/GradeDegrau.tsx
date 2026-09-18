@@ -334,14 +334,19 @@ function SeloProblema({ x, y, severidade }: { x: number; y: number; severidade: 
 
 /** Classe do retângulo da célula conforme marcação/prévia/recusa (D-11/D-13:
  * precedência recusa > prévia inválida > prévia remover > prévia inserir >
- * marcado > normal). Só tokens `ide-*` — nenhuma cor Tailwind fixa. */
-function classeRetangulo(ehTerminal: boolean, previa: Previa | undefined, recusada: boolean, marcado: boolean): string {
+ * marcado > normal). Só tokens `ide-*` — nenhuma cor Tailwind fixa.
+ *
+ * A coluna terminal (onde a bobina fica, D-13) não tem mais um preenchimento
+ * próprio (`fill-ide-elevado`) para se destacar das outras — pedido do
+ * autor: a célula da bobina deve se misturar com o resto da linha, sem uma
+ * caixa cinza chamando atenção sozinha. */
+function classeRetangulo(previa: Previa | undefined, recusada: boolean, marcado: boolean): string {
   if (recusada) return 'fill-ide-perigo/10 stroke-ide-perigo'
   if (previa?.tipo === 'invalida') return 'fill-ide-perigo/10 stroke-ide-perigo/60'
   if (previa?.tipo === 'remover') return 'fill-ide-perigo/10 stroke-ide-perigo/60'
   if (previa?.tipo === 'inserir') return 'fill-ide-previa/10 stroke-ide-previa'
   if (marcado) return 'fill-ide-destaque/10 stroke-ide-destaque'
-  return ehTerminal ? 'fill-ide-elevado stroke-ide-borda' : 'fill-transparent stroke-ide-borda'
+  return 'fill-transparent stroke-ide-borda'
 }
 
 /** Menor coluna livre sob o ponteiro, a partir de um `clientX` de tela e do
@@ -494,8 +499,8 @@ export default function GradeDegrau({
           width={larguraCelula}
           height={ALTURA_LINHA}
           strokeWidth={1}
-          strokeDasharray={ehTerminal ? undefined : '2,3'}
-          className={classeRetangulo(ehTerminal, previaAqui, recusada, ativo)}
+          strokeDasharray="2,3"
+          className={classeRetangulo(previaAqui, recusada, ativo)}
         />
         {elemento?.tipo === 'contato_na' && (
           <ContatoNA cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />

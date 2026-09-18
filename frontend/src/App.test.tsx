@@ -115,7 +115,6 @@ describe('App', () => {
 
     expect(screen.getByTitle('Sem título')).toBeInTheDocument()
     expect(screen.getByText('ld')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: /^contato na$/i })).toBeInTheDocument()
     expect(await screen.findByLabelText(/Degrau 1, coluna 1/)).toBeInTheDocument()
     expect(screen.getByRole('log', { name: 'Console' })).toBeInTheDocument()
@@ -247,14 +246,15 @@ describe('App', () => {
     expect(botaoGravar.getAttribute('title')).toMatch(/convertido em ST/i)
   })
 
-  it('criar projeto ST remove a aba Variáveis, mostra o editor com o esqueleto e habilita Compilar', async () => {
+  it('criar projeto ST remove o painel de variáveis, mostra o editor com o esqueleto e habilita Compilar', async () => {
     const usuario = userEvent.setup()
     render(<App />)
     await criarProjetoST(usuario, 'Programa 1')
 
     expect(screen.getByTitle('Programa 1')).toBeInTheDocument()
     expect(screen.getByText('st')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /variáveis/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /alternar painel de variáveis/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: 'Variáveis declaradas' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/structured text/i)).toHaveValue(ESQUELETO_ST)
     expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
   })
@@ -306,7 +306,6 @@ describe('App', () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'contador')
     await usuario.click(screen.getByRole('radio', { name: 'Memória' }))
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
@@ -320,14 +319,25 @@ describe('App', () => {
     })
   })
 
-  // -- Aba Variáveis (herdado das tarefas #22/#23, revisado na #26) --------
+  // -- Painel de variáveis (herdado das tarefas #22/#23, revisado na #26) --
 
-  it('aba Variáveis mostra a tabela de variáveis', async () => {
+  it('painel de variáveis mostra a tabela, visível por padrão ao lado do editor', async () => {
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    expect(screen.getByRole('table', { name: 'Variáveis declaradas' })).toBeInTheDocument()
+  })
+
+  it('alternar o painel de variáveis esconde e volta a mostrar a tabela', async () => {
     const usuario = userEvent.setup()
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
+    const botao = screen.getByRole('button', { name: /alternar painel de variáveis/i })
+    await usuario.click(botao)
+    expect(screen.queryByRole('table', { name: 'Variáveis declaradas' })).not.toBeInTheDocument()
+
+    await usuario.click(botao)
     expect(screen.getByRole('table', { name: 'Variáveis declaradas' })).toBeInTheDocument()
   })
 
@@ -347,25 +357,6 @@ describe('App', () => {
     const grupoErros = screen.getByRole('alert')
     expect(grupoErros).toBeInTheDocument()
     expect(within(grupoErros).getByText(/sem nenhuma bobina/)).toBeInTheDocument()
-  })
-
-  it('um problema clicado troca a sub-aba de volta para Lógica', async () => {
-    const usuario = userEvent.setup()
-    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
-
-    render(<App />)
-    await screen.findByLabelText(/Degrau 1, coluna 1/)
-
-    // o diagrama já veio do armazenamento com erro: a aba Problemas já nasce
-    // selecionada (regra herdada da tarefa #25) — troca para Variáveis antes,
-    // para provar que o clique no problema é quem volta para Lógica.
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
-    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'false')
-
-    await usuario.click(screen.getByRole('tab', { name: /^problemas \d+/i }))
-    await usuario.click(screen.getByRole('button', { name: /sem nenhuma bobina/i }))
-
-    expect(screen.getByRole('tab', { name: /lógica/i })).toHaveAttribute('aria-selected', 'true')
   })
 
   // -- Aba inicial do painel inferior (herdado da tarefa #25) ---------------
@@ -424,7 +415,6 @@ describe('App', () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
@@ -440,7 +430,6 @@ describe('App', () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
     await usuario.type(screen.getByLabelText('Nome da nova variável'), 'entrada')
     await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
 
@@ -448,7 +437,6 @@ describe('App', () => {
     await usuario.click(screen.getByRole('button', { name: /^cancelar$/i }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    await usuario.click(screen.getByRole('tab', { name: /variáveis/i }))
     expect(screen.getByText('entrada')).toBeInTheDocument()
   })
 

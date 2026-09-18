@@ -8,12 +8,14 @@
  * A partir da tarefa #26 a IDE trabalha com um **projeto** de linguagem única
  * (`ladderflow:projeto`, envelope `{ versao, titulo, linguagem, diagrama|fonte }`
  * — `frontend/src/projeto/projeto.ts`), não mais duas abas Ladder/ST lado a
- * lado. Este arquivo cobre:
+ * lado. O painel de variáveis é lateral, ao lado do editor Ladder (voltou a
+ * ser assim na revisão da própria tarefa #26 — a versão em aba de largura
+ * inteira foi testada e descartada pelo autor). Este arquivo cobre:
  *
  *   1. CA-8 (RF-13), projeto Ladder: monta o cenário "espelho direto"
- *      (IO_ESPELHO, §2 da spec) só pela UI — declara as variáveis pela aba
- *      "Variáveis", volta à aba "Lógica" e arrasta contato NA e bobina com
- *      arrasto real de mouse (o app usa Pointer Events próprios e chama
+ *      (IO_ESPELHO, §2 da spec) só pela UI — declara as variáveis no painel
+ *      lateral e arrasta contato NA e bobina no editor ao lado, com arrasto
+ *      real de mouse (o app usa Pointer Events próprios e chama
  *      `preventDefault` no `pointerdown`, então precisa ser um arrasto de
  *      verdade, com passos intermediários, não um clique/drop sintético) —
  *      confirma "Problemas 0", recarrega e checa que o mesmo diagrama
@@ -21,8 +23,8 @@
  *      'ld', diagrama }` em `localStorage['ladderflow:projeto']`.
  *   2. "Novo projeto", em seguida, a partir desse projeto com conteúdo:
  *      confirma o descarte, cria um projeto "Semáforo" em Texto Estruturado
- *      e confirma que o cabeçalho muda (título + chip "st"), a aba
- *      "Variáveis" desaparece (só existe em projeto Ladder), o editor de
+ *      e confirma que o cabeçalho muda (título + chip "st"), o painel de
+ *      variáveis desaparece (só existe em projeto Ladder), o editor de
  *      texto mostra o esqueleto ST e que o projeto novo também sobrevive a
  *      um `page.reload()`.
  *   3. `localStorage['ladderflow:projeto']` corrompido: a IDE descarta e abre
@@ -63,7 +65,7 @@ async function arrastar(page: Page, origem: Locator, alvo: Locator): Promise<voi
   await page.mouse.up()
 }
 
-/** Declara uma variável localizada pelo formulário da aba "Variáveis"
+/** Declara uma variável localizada pelo formulário do painel lateral
  * (`TabelaVariaveis.tsx`, linha "Adicionar variável"): nome, classe
  * (radiogroup Entrada/Saída/Memória) e, quando há pino, o endereço exato pelo
  * `<select>` — o primeiro endereço livre da classe nem sempre é o que o
@@ -94,29 +96,28 @@ async function inserirEVincular(page: Page, rotuloItem: string, rotuloCelulaVazi
 }
 
 test.describe('Projeto Ladder — CA-8 (RF-13): monta o espelho pela UI, sobrevive à recarga, depois "Novo projeto" troca para ST', () => {
-  test('IO_ESPELHO construído via aba Variáveis + arrasto real persiste; "Novo projeto" cria um projeto ST que também persiste', async ({
+  test('IO_ESPELHO construído via painel de variáveis + arrasto real persiste; "Novo projeto" cria um projeto ST que também persiste', async ({
     page,
   }) => {
     await page.goto('/')
     await page.evaluate(() => window.localStorage.clear())
     await page.reload()
 
-    // Projeto Ladder "Sem título" por padrão — só projeto Ladder mostra a
-    // sub-aba "Variáveis" (BarraSuperior.tsx).
+    // Projeto Ladder "Sem título" por padrão — só projeto Ladder mostra o
+    // painel de variáveis (BarraSuperior.tsx/PainelLateral.tsx).
     await expect(page.getByText('Sem título', { exact: true })).toBeVisible()
-    await expect(page.getByRole('tab', { name: 'Variáveis', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Alternar painel de variáveis' })).toBeVisible()
 
-    // Aba Variáveis: entrada em %IX0.1, saída em %QX0.1 — os mesmos
-    // endereços da fixture IO_ESPELHO (frontend/src/ladder/fixtures.ts).
-    await page.getByRole('tab', { name: 'Variáveis', exact: true }).click()
+    // Painel de variáveis, já visível ao lado do editor: entrada em %IX0.1,
+    // saída em %QX0.1 — os mesmos endereços da fixture IO_ESPELHO
+    // (frontend/src/ladder/fixtures.ts).
     await declararVariavelLocalizada(page, 'entrada', 'Entrada', '%IX0.1')
     await declararVariavelLocalizada(page, 'saida', 'Saída', '%QX0.1')
 
-    // Volta à Lógica: contato NA na coluna 1, vinculado a "entrada"; bobina
-    // na coluna 8 (terminal), vinculada a "saida". Soltar a bobina em
-    // qualquer célula a leva à coluna 8 (celulaDeSoltura, tarefa #25) — aqui
-    // ela já é soltada diretamente na terminal.
-    await page.getByRole('tab', { name: 'Lógica', exact: true }).click()
+    // Editor Ladder, ao lado do painel: contato NA na coluna 1, vinculado a
+    // "entrada"; bobina na coluna 8 (terminal), vinculada a "saida". Soltar
+    // a bobina em qualquer célula a leva à coluna 8 (celulaDeSoltura, tarefa
+    // #25) — aqui ela já é soltada diretamente na terminal.
     await inserirEVincular(page, 'Contato NA', 'Degrau 1, coluna 1, vazia', 'entrada')
     await inserirEVincular(page, 'Bobina', 'Degrau 1, coluna 8, vazia', 'saida')
 
@@ -171,8 +172,8 @@ test.describe('Projeto Ladder — CA-8 (RF-13): monta o espelho pela UI, sobrevi
     await expect(page.getByText('Semáforo', { exact: true })).toBeVisible()
     await expect(page.locator('header').getByText('st', { exact: true })).toBeVisible()
 
-    // A sub-aba "Variáveis" desaparece — só existe em projeto Ladder.
-    await expect(page.getByRole('tab', { name: 'Variáveis', exact: true })).toHaveCount(0)
+    // O painel de variáveis desaparece — só existe em projeto Ladder.
+    await expect(page.getByRole('button', { name: 'Alternar painel de variáveis' })).toHaveCount(0)
 
     // Editor de texto com o esqueleto ST (projeto/projeto.ts, ESQUELETO_ST).
     const textoStCriado = await page.locator('#editor-st').inputValue()
@@ -186,7 +187,7 @@ test.describe('Projeto Ladder — CA-8 (RF-13): monta o espelho pela UI, sobrevi
 
     await expect(page.getByText('Semáforo', { exact: true })).toBeVisible()
     await expect(page.locator('header').getByText('st', { exact: true })).toBeVisible()
-    await expect(page.getByRole('tab', { name: 'Variáveis', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Alternar painel de variáveis' })).toHaveCount(0)
 
     const textoStDepois = await page.locator('#editor-st').inputValue()
     expect(textoStDepois).toBe(textoStCriado)

@@ -12,14 +12,14 @@
 #
 # O que é verificado:
 #   - CA-8 (RF-13), projeto Ladder: declarar "entrada" (%IX0.1) e "saida"
-#     (%QX0.1) pela aba Variáveis, montar o espelho na aba Lógica arrastando
-#     contato NA e bobina, conferir "Problemas 0", recarregar e confirmar que
-#     os mesmos elementos continuam nas mesmas células e que o localStorage
-#     guarda o envelope `{ versao: 1, linguagem: 'ld', diagrama }`.
+#     (%QX0.1) no painel lateral de variáveis, montar o espelho no editor ao
+#     lado arrastando contato NA e bobina, conferir "Problemas 0", recarregar
+#     e confirmar que os mesmos elementos continuam nas mesmas células e que
+#     o localStorage guarda o envelope `{ versao: 1, linguagem: 'ld', diagrama }`.
 #   - "Novo projeto", a partir desse projeto com conteúdo: confirmar o
 #     descarte, criar um projeto "Semáforo" em Texto Estruturado e checar que
-#     o cabeçalho muda (título + chip "st"), a aba Variáveis desaparece, o
-#     editor de texto mostra o esqueleto ST, e que esse projeto novo também
+#     o cabeçalho muda (título + chip "st"), o painel de variáveis desaparece,
+#     o editor de texto mostra o esqueleto ST, e que esse projeto novo também
 #     sobrevive a um reload.
 #   - Caminho de descarte: um `localStorage['ladderflow:projeto']` corrompido
 #     volta, ao recarregar, a um projeto Ladder "Sem título" vazio, com o

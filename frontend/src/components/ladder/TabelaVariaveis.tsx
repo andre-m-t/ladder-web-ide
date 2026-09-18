@@ -1,20 +1,20 @@
 /**
- * Aba "Variáveis" — conteúdo visual (spec 002, plano D-14, tarefas #24/#25,
- * revisão tarefa #26, frente L).
+ * Conteúdo visual do painel de variáveis (spec 002, plano D-14, tarefas
+ * #24/#25, revisão tarefa #26, frente L).
  *
- * Tarefa #26: as variáveis deixam de viver num painel lateral estreito
- * (18–32rem) e passam a ser uma aba de largura inteira, ao lado de "Lógica"
- * (quem monta as abas é `components/ide/**`, fora desta frente). A tabela
- * ganhou uma coluna nova, "Uso" (Entrada/Saída/Memória, com cor discreta por
- * classe) — antes essa informação só aparecia embutida no texto da coluna
- * "Pino" (um selo "Memória" quando não havia endereço). Com a coluna própria,
- * "Pino" volta a falar só de hardware: "GPIO n" + endereço, ou "—" quando a
- * variável é Memória. A referência visual (`.claude/references/modelo_vars.png`,
- * inspiração de layout, sem cópia de código) mostra uma tabela de tags em
- * largura inteira com uma linha "Add Tag..." fixa no fim — aqui virou a linha
- * "Adicionar variável" (última do corpo da tabela, sempre visível, mesmo com
- * a lista vazia ou filtrada a zero linhas), e o mapa de pinos ganhou colunas
- * lado a lado em telas largas.
+ * Tarefa #26: passou brevemente por uma aba de largura inteira e voltou ao
+ * painel lateral estreito (18–40rem, `PainelLateral`) por pedido do autor
+ * depois de testar a versão em aba. A tabela ganhou uma coluna nova, "Uso"
+ * (Entrada/Saída/Memória, com cor discreta por classe) — antes essa
+ * informação só aparecia embutida no texto da coluna "Pino" (um selo
+ * "Memória" quando não havia endereço). Com a coluna própria, "Pino" volta a
+ * falar só de hardware: "GPIO n" + endereço, ou "—" quando a variável é
+ * Memória. A referência visual (`.claude/references/modelo_vars.png`,
+ * inspiração de layout, sem cópia de código) mostra uma tabela de tags com
+ * uma linha "Add Tag..." fixa no fim — aqui virou a linha "Adicionar
+ * variável" (última do corpo da tabela, sempre visível, mesmo com a lista
+ * vazia ou filtrada a zero linhas); no painel estreito, o mapa de pinos
+ * empilha as duas tabelas (Entradas/Saídas).
  *
  * Quem monta este componente e fala com o núcleo é `PainelVariaveis.tsx`:
  * este arquivo é puramente controlado pelas props, sem tocar `edicao.ts`
@@ -161,7 +161,10 @@ const OPCOES_CLASSE: { valor: ClasseVariavel; rotulo: string }[] = [
  * sempre visíveis, com navegação por setas como um `radiogroup` padrão (foco
  * acompanha a opção marcada só quando o foco já estava dentro do grupo, para
  * não roubar foco em cliques). Usado tanto na linha de adicionar quanto —
- * potencialmente — em qualquer outro lugar que precise escolher a classe. */
+ * potencialmente — em qualquer outro lugar que precise escolher a classe.
+ * `flex-wrap` (achado na verificação em Chromium real, painel lateral
+ * estreito): sem ele, os três botões vazavam da própria célula da tabela e
+ * sobrepunham o `<select>` de Pino ao lado, roubando o clique. */
 function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
   const grupoRef = useRef<HTMLDivElement>(null)
 
@@ -189,7 +192,7 @@ function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
       role="radiogroup"
       aria-label="Classe da nova variável"
       onKeyDown={aoTeclar}
-      className="flex gap-1"
+      className="flex flex-wrap gap-1"
     >
       {OPCOES_CLASSE.map((opcao) => {
         const marcado = valor === opcao.valor
@@ -620,9 +623,16 @@ export default function TabelaVariaveis({ variaveis, valores, aoDeclarar, aoAtua
       {/* Área rolável única: a tabela inteira (cabeçalho de colunas incluso) e
        * o mapa de pinos ficam no fluxo normal aqui dentro, então a área rola
        * por inteiro quando a lista cresce. Só o cabeçalho "Variáveis" e as
-       * abas de filtro acima ficam fixos, fora do scroll. */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <table aria-label="Variáveis declaradas" className="w-full table-fixed border-collapse text-sm">
+       * abas de filtro acima ficam fixos, fora do scroll.
+       *
+       * `overflow-x-auto` + `min-w` na tabela (achado na verificação em
+       * Chromium real, painel lateral estreito de 18–40rem, D-13): as seis
+       * colunas não cabem espremidas em ~288–320px sem esconder o pino
+       * (`GPIO n · %IX0.n`) — em vez de espremer até ficar ilegível, a
+       * tabela mantém uma largura mínima legível e a área rola na horizontal
+       * quando o painel é mais estreito que isso. */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table aria-label="Variáveis declaradas" className="w-full min-w-[600px] table-fixed border-collapse text-sm">
           <colgroup>
             <col className="w-[24%]" />
             <col className="w-[8%]" />

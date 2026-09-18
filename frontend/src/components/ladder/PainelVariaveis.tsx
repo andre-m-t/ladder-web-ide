@@ -9,9 +9,9 @@
  * mapa de pinos — é todo de `TabelaVariaveis.tsx`; este componente só
  * orquestra.
  *
- * Tarefa #26: deixou de ser o conteúdo de um painel lateral estreito
- * (`PainelLateral`, D-13) para ser o conteúdo da aba "Variáveis", de largura
- * inteira, ao lado de "Lógica" (só em projeto Ladder) — quem monta as abas e
+ * Tarefa #26: virou brevemente o conteúdo de uma aba "Variáveis" de largura
+ * inteira; o autor testou e pediu de volta o painel lateral estreito
+ * (`PainelLateral`, D-13, só em projeto Ladder) — quem monta o painel e
  * decide a largura é `components/ide/**`, fora desta frente. A assinatura de
  * props não muda: continua `{ diagrama, aoMudar, aoRecusar? }`, controlado.
  *

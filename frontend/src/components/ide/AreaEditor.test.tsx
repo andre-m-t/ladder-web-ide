@@ -14,11 +14,10 @@ function projetoST(fonte = ESQUELETO_ST): Projeto {
 }
 
 describe('AreaEditor', () => {
-  it('projeto LD na sub-aba "logica" mostra o tabpanel do EditorLadder', () => {
+  it('projeto LD mostra o EditorLadder', () => {
     render(
       <AreaEditor
         projeto={projetoLD()}
-        abaEdicao="logica"
         aoMudarProjeto={() => {}}
         problemas={[]}
         foco={null}
@@ -28,37 +27,13 @@ describe('AreaEditor', () => {
       />,
     )
 
-    const painel = screen.getByRole('tabpanel')
-    expect(painel).toHaveAttribute('id', 'painel-edicao-logica')
-    expect(painel).toHaveAttribute('aria-labelledby', 'aba-edicao-logica')
     expect(screen.getByRole('button', { name: /^contato na$/i })).toBeInTheDocument()
   })
 
-  it('projeto LD na sub-aba "variaveis" mostra o PainelVariaveis', () => {
-    render(
-      <AreaEditor
-        projeto={projetoLD()}
-        abaEdicao="variaveis"
-        aoMudarProjeto={() => {}}
-        problemas={[]}
-        foco={null}
-        compilando={false}
-        erroCompilacao={null}
-        aoRecusar={() => {}}
-      />,
-    )
-
-    const painel = screen.getByRole('tabpanel')
-    expect(painel).toHaveAttribute('id', 'painel-edicao-variaveis')
-    expect(painel).toHaveAttribute('aria-labelledby', 'aba-edicao-variaveis')
-    expect(screen.getByRole('table', { name: 'Variáveis declaradas' })).toBeInTheDocument()
-  })
-
-  it('projeto ST mostra o editor de texto dentro do tabpanel "logica", ignorando abaEdicao', () => {
+  it('projeto ST mostra o editor de texto', () => {
     render(
       <AreaEditor
         projeto={projetoST('PROGRAM x END_PROGRAM')}
-        abaEdicao="variaveis"
         aoMudarProjeto={() => {}}
         problemas={[]}
         foco={null}
@@ -68,8 +43,6 @@ describe('AreaEditor', () => {
       />,
     )
 
-    const painel = screen.getByRole('tabpanel')
-    expect(painel).toHaveAttribute('id', 'painel-edicao-logica')
     expect(screen.getByLabelText(/structured text/i)).toHaveValue('PROGRAM x END_PROGRAM')
   })
 
@@ -78,7 +51,6 @@ describe('AreaEditor', () => {
     render(
       <AreaEditor
         projeto={projetoST('conteudo st')}
-        abaEdicao="logica"
         aoMudarProjeto={aoMudarProjeto}
         problemas={[]}
         foco={null}
@@ -97,7 +69,6 @@ describe('AreaEditor', () => {
     const { rerender } = render(
       <AreaEditor
         projeto={projetoLD()}
-        abaEdicao="logica"
         aoMudarProjeto={() => {}}
         problemas={[]}
         foco={null}
@@ -111,7 +82,6 @@ describe('AreaEditor', () => {
     rerender(
       <AreaEditor
         projeto={projetoST('conteudo st')}
-        abaEdicao="logica"
         aoMudarProjeto={() => {}}
         problemas={[]}
         foco={null}
