@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (revisão pós-#26 da spec 002 — painel de variáveis volta a ser lateral, não aba; fundo da coluna da bobina removido) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-18 (spec 003 aprovada — Q-1 a Q-6 decididas; próximo portão: `/planejar 003`) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -349,7 +349,7 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 
 **Ferramentas:** nenhuma. TypeScript puro.
 
-**Spec em rascunho:** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 concluída em 2026-09-17, **aguardando aprovação do autor**. `plan.md`/`tasks.md` são placeholders. Nenhuma linha de código escrita.
+**Spec aprovada (2026-09-18):** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 escrita em 2026-09-17, Q-1 a Q-6 decididas e spec aprovada em 2026-09-18. `plan.md`/`tasks.md` ainda são placeholders. Nenhuma linha de código escrita. Próximo portão: `/planejar 003`.
 
 **Destravada.** Deixou de estar 🔒: o modelo de dados que ela consome (`frontend/src/ladder/modelo.ts`) já tem os cinco tipos de elemento — contato NA/NF, bobina simples, bobina SET, bobina RESET — e o ramo paralelo, desde as fatias 1–3 da spec 002. A dependência é sobre o **modelo**, não sobre a interface que o constrói; por isso a F8 não espera a Fatia 4.
 
@@ -361,7 +361,21 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 
 **Por que importa para o TCC:** quita a ressalva R-1 do plano 002. Até aqui a equivalência diagrama ↔ ST era **assumida** — o único ST de referência foi escrito à mão, provando que aquele texto se comporta como o `blink.st`, nunca que o diagrama produz aquele texto. A partir da F8 o texto comparado é o que a serialização realmente gera: suposição de projeto vira número medido.
 
-**Q-1 a Q-6 em aberto** (§9 da spec, para o autor decidir antes da Fase 2): visibilidade do ST gerado na tela; serializar diagrama com erro de validação; rastreio diagnóstico ↔ degrau; nomes de programa/recurso e intervalo da TASK fixos ou por projeto; semântica de SET/RESET no texto; diagrama e degrau vazios.
+**Decisões da spec 003 (2026-09-18, §9 da spec):**
+- **Q-1:** ST gerado visível, somente leitura, atualizado a cada edição.
+- **Q-2:** erro de validação recusa na tela. Compilar fica indisponível com o motivo, nada vai ao servidor, e avisos não bloqueiam.
+- **Q-3:** rastreio por degrau, com mapa degrau → linhas e comentário por degrau no texto.
+- **Q-4:** nomes e intervalo fixos (`prog0`/`Config0`/`Res0`/`task0`, `T#20ms`, como `minimal.st`).
+- **Q-5:** SET/RESET em ordem dos degraus, e vence a última escrita do ciclo.
+- **Q-6:** degrau vazio é omitido, e diagrama sem elemento é "nada a compilar".
+
+CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
+
+**Esboço técnico levado ao `/planejar 003`** (ainda não aprovado):
+- núcleo puro `frontend/src/ladder/serializador.ts`;
+- arquivos dourados `.st` gerados pelo TS e conferidos pelo vitest, medidos por um pytest diferencial com `comparar_execucoes` (CA-1 a CA-4). É esse elo que quita a R-1;
+- integração em `App.tsx` pelo mesmo `/compile/pacote`;
+- duas fatias: S6a (núcleo + diferencial) e S6b (IDE + e2e + depósito).
 
 ---
 
@@ -435,11 +449,10 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. **Decidir Q-1 a Q-6 da spec 003** e aprovar a spec — é o portão que libera a Fase 2
-2. `/planejar 003` → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002
-3. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**, e o CTU permite estender o serializador a contadores
-4. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
-5. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
+1. `/planejar 003` → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002 (spec aprovada em 2026-09-18; esboço técnico registrado no F8)
+2. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**, e o CTU permite estender o serializador a contadores
+3. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
+4. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
 
 ## Bloqueado aguardando hardware
 
@@ -481,3 +494,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-17 | Fase 1 da spec 003 — Serializador Ladder → ST | Rodada da #26 fechada e empurrada (`dc0bb6e`). Autor reordenou a fila: **F8 antes da Fatia 4**, porque o editor já constrói e valida mas Compilar/Gravar seguem desabilitados em projeto Ladder, e porque a #17 (ST escrito à mão) perde o motivo de existir quando o serializador existir. `docs/specs/003-serializador-ladder-st/spec.md` escrita por frente de especificação: 12 RF, 9 CA (CA-1 a CA-4 medidos pelo arcabouço diferencial contra compilador e runtime reais), subconjunto sem CTU, Q-1 a Q-6 em aberto. F8 sai de 🔒 — a dependência é o modelo de dados, não a Fatia 4. Nenhuma linha de código; aguardando aprovação do autor para liberar a Fase 2 |
 | 2026-09-17 | #26 da spec 002 — projeto e IDE reorganizada | Autor trouxe referências visuais: cabeçalho defasado, variáveis como aba e painel inferior mais dividido. Q-2 revista: um projeto por linguagem, criado por Novo projeto (descarte confirmado, título e linguagem), isolando a compilação. Frentes P (projeto) ∥ M (modais) ∥ H (cabeçalho/painel) ∥ L (variáveis) → A (integração) → E (e2e); a primeira tentativa das quatro caiu por limite de sessão antes de escrever e foi redespachada. Esqueleto ST validado no iec2c. 499 testes vitest, e2e com 4 cenários, Chromium nos dois temas |
 | 2026-09-18 | Revisão pós-#26 — painel de variáveis volta a ser lateral | Autor testou a sub-aba "Variáveis" de largura inteira e pediu de volta o painel lateral recolhível/redimensionável de antes da #26 (`PainelLateral` restaurada, sub-abas Lógica/Variáveis saem de `BarraSuperior`). Achado só no Chromium real: `SeletorClasse` vazava da célula e cobria o `<select>` de Pino, interceptando o clique — corrigido com `flex-wrap`; tabela ganhou `min-w-[600px]` com rolagem horizontal própria para não esconder o pino num painel de 288–320px. Pedido à parte: fundo cinza da coluna da bobina (coluna terminal) removido, célula igual às outras. 499 testes vitest, e2e 3 passed (Chromium real), depósito ok |
+| 2026-09-18 | Aprovação da spec 003 — decisões Q-1 a Q-6 | Revisão de onde o projeto estava: da spec 002 só resta a Fatia 4, adiada pelo autor em favor da F8, então nenhuma fatia pendente da sprint. Autor decidiu as seis questões conforme a recomendação: ST gerado visível somente leitura; erro de validação recusado na tela; rastreio de diagnóstico por degrau; nomes e `T#20ms` fixos; SET/RESET em ordem dos degraus, com a última escrita vencendo; degrau vazio omitido e diagrama vazio como "nada a compilar". CA-4/7/8 com revisão aditiva datada; spec aprovada; esboço técnico registrado no F8 para o `/planejar 003`. Só documentação, nenhum código |

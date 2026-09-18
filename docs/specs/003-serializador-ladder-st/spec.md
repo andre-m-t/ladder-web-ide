@@ -1,6 +1,6 @@
 # Spec 003 — Serializador Ladder → ST
 
-> **Status:** rascunho
+> **Status:** aprovada (2026-09-18). Q-1 a Q-6 decididas no §9
 > **Autor:** André  ·  **Data:** 2026-09-17
 > **Princípios aplicáveis:** §2, §3, §4, §5, §6, §11
 
@@ -203,6 +203,22 @@ registrado como consequência desta spec, não coberto por ela.
   então o texto produzido referencia exatamente esses endereços e nenhum
   outro.
 
+> **Revisão aditiva (2026-09-18), após as decisões do §9.** O texto original
+> de CA-4, CA-7 e CA-8 fica mantido acima. Com as questões decididas, eles
+> passam a ser verificados assim:
+> - **CA-4 (Q-5):** no ciclo em que as condições do SET e do RESET coincidem,
+>   a variável fica com o valor da bobina do degrau mais abaixo.
+> - **CA-7 (Q-2):** com erro de validação, Compilar fica indisponível com
+>   motivo que aponta para a lista de problemas, e nenhuma requisição chega ao
+>   serviço de compilação. Com apenas avisos, a compilação segue.
+> - **CA-8 (Q-6):** um degrau vazio não aparece no texto produzido. Um
+>   diagrama sem nenhum elemento resulta em "nada a compilar", sem texto, com
+>   Compilar indisponível e esse motivo exposto.
+> - **Acréscimos decorrentes de Q-1 e Q-3:** num projeto Ladder, o texto
+>   gerado aparece somente leitura e muda quando o diagrama muda. Um
+>   diagnóstico do compilador com linha é apresentado como referente ao
+>   degrau que gerou aquela linha.
+
 ## 6. Requisitos não-funcionais
 
 - A serialização ocorre inteiramente no navegador, sem requisição ao
@@ -281,10 +297,16 @@ data, decisão e justificativa; não apague o enunciado.
   aprendendo a associar o diagrama ao texto equivalente), ou a serialização
   é inteiramente interna, e a pessoa só vê o resultado da compilação em si,
   sem nunca ver o texto intermediário?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** visível, **somente leitura**. Num projeto Ladder, a interface
+  mostra o texto ST gerado pela serialização, atualizado a cada edição do
+  diagrama. Ele não pode ser editado ali (a edição manual continua fora de
+  escopo, §7).
+- **Justificativa:** tem valor didático, porque deixa quem aprende associar o
+  diagrama ao texto equivalente, e ajuda a depurar o próprio serializador.
+  Custa pouco: a serialização roda no navegador e é determinística (§6), então
+  mostrar o texto não exige nenhuma requisição nova.
 
 ### Q-2 — Serializar um diagrama com problema de severidade "erro"
 - **Enunciado:** quando o diagrama de origem tem ao menos um problema de
@@ -294,10 +316,18 @@ data, decisão e justificativa; não apague o enunciado.
   antes de qualquer coisa ser enviada ao compilador externo, ou a tentativa
   segue adiante e deixa o compilador externo ser quem efetivamente rejeita
   o programa resultante?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** **recusar na tela.** Com ao menos um problema de severidade
+  "erro", Compilar fica indisponível, com o motivo exposto e apontando para a
+  lista de problemas, e nada é enviado ao servidor. Problemas de severidade
+  "aviso" não bloqueiam.
+- **Justificativa:** o editor já sabe o que está errado e diz onde. O
+  compilador externo não conhece conceitos como "degrau incompleto": ou
+  rejeitaria o texto com uma mensagem que não se lê de volta no diagrama, ou,
+  pior, aceitaria um programa diferente do que a pessoa montou. Recusar antes
+  também garante que um erro devolvido pelo compilador num projeto Ladder
+  indique defeito do serializador, e não do diagrama.
 
 ### Q-3 — Rastreio entre diagnóstico do compilador e trecho do diagrama
 - **Enunciado:** o texto ST gerado carrega alguma forma de marcação que
@@ -307,10 +337,19 @@ data, decisão e justificativa; não apague o enunciado.
   elemento" — ou essa relação não é mantida nesta spec, e um erro de
   compilação num projeto Ladder aparece apenas como texto do compilador,
   sem apontar para o diagrama?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** a relação é mantida **no nível do degrau**. A serialização
+  produz, junto com o texto, a correspondência entre cada degrau e as linhas
+  do texto que ele gerou, e marca cada trecho com um comentário que identifica
+  o degrau. Um diagnóstico do compilador com linha é apresentado como
+  referente àquele degrau. A relação no nível do elemento fica fora desta
+  spec.
+- **Justificativa:** o compilador externo já devolve a linha do diagnóstico, e
+  o serviço de compilação já o estrutura (spec 001). Como a Q-2 barra erros
+  estruturais antes do envio, um erro de compilação aqui indica defeito do
+  serializador, e apontar o degrau basta para localizá-lo. Descer ao nível do
+  elemento custaria mais do que ganharia nesse cenário.
 
 ### Q-4 — Nomes fixos ou configuráveis para programa/recurso/tarefa e intervalo de execução
 - **Enunciado:** os programas de referência já existentes no projeto usam
@@ -319,10 +358,15 @@ data, decisão e justificativa; não apague o enunciado.
   sempre usar esses mesmos valores fixos, independentemente do projeto, ou
   algum deles (em especial o intervalo de execução) deve poder ser
   configurado por projeto?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** **fixos.** Nome de programa, de configuração, de recurso e de
+  tarefa, e o intervalo de 20 ms, são os mesmos dos programas de referência já
+  existentes no projeto, independentemente do projeto.
+- **Justificativa:** menos superfície de interface e de teste. O firmware e o
+  arcabouço diferencial já trabalham com esses valores, e o intervalo da
+  tarefa não é algo que o público-alvo ajuste na PoC. Torná-los configuráveis
+  depois é aditivo e não quebra projetos salvos.
 
 ### Q-5 — Semântica exata de SET/RESET no texto gerado
 - **Enunciado:** a validação do editor já trata SET e RESET da mesma
@@ -334,10 +378,18 @@ data, decisão e justificativa; não apague o enunciado.
   de RESET, sempre a ordem dos degraus no diagrama, ou outra regra), de modo
   que o comportamento do texto gerado continue sendo o que o aviso já
   descreve?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** **ordem dos degraus**, de cima para baixo. Cada bobina SET ou
+  RESET é traduzida no lugar do seu degrau, como uma escrita condicional ("se
+  a condição do degrau for verdadeira, forçar/apagar") que não altera a
+  variável quando a condição é falsa. Se SET e RESET da mesma variável ficarem
+  verdadeiros no mesmo ciclo, vence o que estiver no degrau mais abaixo, ou
+  seja, a última escrita do ciclo. O CA-4 mede exatamente esse ciclo.
+- **Justificativa:** é a semântica de varredura dos controladores reais e a
+  mesma que o aviso de SET/RESET autodependente do editor já descreve. A
+  pessoa controla o resultado pela ordem em que monta os degraus, sem regra
+  escondida de prioridade, e a tradução não reordena nada.
 
 ### Q-6 — Resultado da serialização de diagrama vazio ou degrau vazio
 - **Enunciado:** um diagrama sem nenhum degrau, ou com ao menos um degrau
@@ -346,10 +398,17 @@ data, decisão e justificativa; não apague o enunciado.
   quando serializado — e, se sim, o que esse texto faz — ou a serialização
   desses casos é tratada como uma condição própria, distinta de "diagrama
   válido pronto para compilar"?
-- **Status:** aberta
-- **Data da decisão:** —
-- **Decisão:** —
-- **Justificativa:** —
+- **Status:** decidida
+- **Data da decisão:** 2026-09-18
+- **Decisão:** um **degrau vazio é omitido** do texto e não produz nada. Um
+  **diagrama sem nenhum elemento**, seja sem degraus, seja só com degraus
+  vazios, é uma condição própria, "nada a compilar": Compilar fica
+  indisponível com esse motivo, e a serialização não produz texto.
+- **Justificativa:** o compilador externo recusa corpo de programa vazio
+  (verificado na tarefa #26 da spec 002, ao montar o esqueleto de projeto ST).
+  Inventar uma instrução de preenchimento esconderia o caso e mandaria ao
+  dispositivo um programa que não faz nada. Omitir o degrau vazio mantém a
+  leitura da spec 002, em que ele é espaço em branco, não erro.
 
 ## 10. Conformidade com a Constituição
 
