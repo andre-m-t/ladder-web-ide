@@ -40,9 +40,9 @@ export interface AreaEditorProps {
   foco: FocoLadder | null
   compilando: boolean
   erroCompilacao: ErroDeCompilacao | null
-  /** Recusa de uma jogada do editor Ladder (tarefas #25/#26): a IDE mostra o
-   * motivo na aba Mensagens, em vez do editor mostrar o texto sozinho.
-   * Repassado cru a `EditorLadder`. */
+  /** Recusa de uma jogada do editor Ladder (tarefas #25/#26, revisado na
+   * #27): a IDE mostra o motivo como um toast no canto da tela, em vez do
+   * editor mostrar o texto sozinho. Repassado cru a `EditorLadder`. */
   aoRecusar: (motivo: string) => void
 }
 

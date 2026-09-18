@@ -41,9 +41,11 @@
  * visual (`role="alert"`) que mostrava o motivo de uma recusa abaixo do
  * degrau saiu — toda recusa (soltar/mover/criar ramo/alça/remover degrau)
  * agora só é repassada à prop `aoRecusar`, para quem monta a IDE decidir onde
- * mostrar (na tarefa #26, a aba Mensagens do painel inferior). O anúncio `sr-only` (`aria-live`) e a
- * marcação `aria-invalid` momentânea da célula recusada continuam — são para
- * leitor de tela e destaque visual, não texto solto no editor.
+ * mostrar (na tarefa #26, a aba Mensagens do painel inferior; na tarefa #27,
+ * um toast no canto da tela — ver `lib/toasts.ts`/`Toasts.tsx`). O anúncio
+ * `sr-only` (`aria-live`) e a marcação `aria-invalid` momentânea da célula
+ * recusada continuam — são para leitor de tela e destaque visual, não texto
+ * solto no editor.
  *
  * **Bobina sempre na coluna 8 (tarefa #25):** soltar (ou mover) uma bobina —
  * de qualquer origem, sobre qualquer célula do degrau, mesmo numa linha de
@@ -364,7 +366,8 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * A marcação é **momentânea** de fato: desde a #25 ela não tem mais texto ao
    * lado, e uma célula vermelha parada na tela até a próxima jogada era lida
    * como estado do diagrama, não como resposta ao gesto. O motivo em texto
-   * permanece na aba Mensagens (#26), que não expira. */
+   * hoje é um toast (tarefa #27, D-18) — some sozinho em 5s, diferente da
+   * marca momentânea desta célula, que sempre foi mais curta. */
   function reportarRecusa(nova: RecusaCelula) {
     setRecusa(nova)
     aoRecusarRef.current?.(nova.motivo)

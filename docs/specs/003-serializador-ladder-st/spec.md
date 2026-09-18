@@ -322,6 +322,19 @@ data, decisão e justificativa; não apague o enunciado.
   Custa pouco: a serialização roda no navegador e é determinística (§6), então
   mostrar o texto não exige nenhuma requisição nova.
 
+> **Revisão aditiva da Q-1 (2026-09-18), após uso da F8 pelo autor.** A
+> decisão acima continua registrada. O texto ST gerado **deixa de ficar
+> visível** na interface: o autor concluiu, usando a ferramenta, que ver o
+> texto intermediário não ajuda o usuário. Em seu lugar, o projeto pode ser
+> **baixado** por um botão no cabeçalho, com a escolha entre a versão Ladder
+> (o projeto em JSON, no mesmo formato em que ele é salvo) e a versão ST (o
+> texto que a serialização produz, o mesmo enviado ao compilador). Num
+> diagrama com erro ou vazio, o download do ST fica indisponível com o mesmo
+> motivo do Compilar (Q-2, Q-6). O RF-9 continua atendido: a pessoa sabe que
+> a serialização ocorreu pelo estado do Compilar e pode obter o resultado
+> pelo download. O rastreio da Q-3 continua citando degrau e linha, e a linha
+> é a do arquivo baixado.
+
 ### Q-2 — Serializar um diagrama com problema de severidade "erro"
 - **Enunciado:** quando o diagrama de origem tem ao menos um problema de
   severidade "erro" já identificado pela validação existente do editor

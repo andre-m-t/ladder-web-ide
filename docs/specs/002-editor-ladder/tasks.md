@@ -192,6 +192,15 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     compila no `iec2c`; e2e cobre projeto LD, criação de ST, corrompido e
     migração; verificação em Chromium nos dois temas.
 
+- [x] **#27 — [M][T] Recusas em toasts; aba Mensagens removida (plano §18, D-18; 2026-09-18)**
+  - Arquivos: `frontend/src/lib/toasts.ts` e `components/ide/Toasts.tsx` (novos)
+    e testes; `App.tsx`, `PainelInferiorConteudo.tsx`; remoção de
+    `ListaMensagens.tsx`; comentários de `EditorLadder.tsx`/`AreaEditor.tsx`/`Console.tsx`
+  - Depende de: #26
+  - Pronto quando: a recusa aparece como toast na hora e some em 5 s (pausa
+    sob o cursor); o painel inferior só tem Problemas e Console; nada do
+    Console vira toast; verificação com mouse real no Chromium, nos dois temas.
+
 ## Fatia 2 — S5a: múltiplos degraus e mover
 
 - [x] **#9 — [N] Degraus, mover e limite de colunas**

@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (spec 003 concluída — F8 ✅: Compilar e Gravar funcionando em projeto Ladder, com a equivalência medida) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-18 (revisão de UX pós-F8: download LD/ST no lugar da aba "ST gerado"; recusas em toasts no lugar da aba Mensagens) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -326,6 +326,18 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Pedido à parte, no mesmo giro: removido o preenchimento cinza (`fill-ide-elevado`) que destacava sozinha a coluna terminal (onde a bobina fica) — `classeRetangulo`/`strokeDasharray` deixam de tratar `ehTerminal` como caso especial; a célula da bobina agora usa a mesma linha tracejada e fundo transparente das outras colunas
 - Verificação: `tsc` limpo, 499 testes vitest, e2e 3 passed (Chromium real: IO_ESPELHO montado com painel lateral, seletor de classe sem sobrepor o pino, "Novo projeto" some com o painel em projeto ST), depósito ok (`PainelLateral.tsx` volta ao manifesto)
 
+**Concluído — #27: recusas em toasts, aba Mensagens removida (plano §18, D-18, 2026-09-18)**
+- O autor concluiu que, na aba Mensagens, o usuário não percebia em tempo real por que uma ação não surtia efeito. As recusas do editor e do painel de variáveis passam a aparecer como **toasts** no canto inferior direito.
+- Só as recusas viram toast. O **Console não muda** e nada dele vira toast (decisão explícita do autor).
+- O componente é próprio (`lib/toasts.ts` puro + `components/ide/Toasts.tsx`), sem dependência nova:
+  - níveis `info | sucesso | aviso | erro`;
+  - aviso some em 5 s, com pausa sob o cursor ou com foco, e retoma do tempo restante. Erro fica até ser fechado;
+  - repetição seguida não empilha, só reinicia o tempo. A pilha tem no máximo 3;
+  - `aria-live="polite"`.
+- O painel inferior fica com **Problemas | Console**. `ListaMensagens.tsx` e o contador de não lidas saem. A marca vermelha de 3 s na célula recusada continua.
+- É a opção "toast" que o autor tinha avaliado e preterido na #25, retomada depois da experiência com a barra de status (#25) e com a aba (#26).
+- **Verificação:** `tsc` limpo, 587 testes vitest, build, e2e 5 passed (com um cenário novo de recusa → toast com mouse real), depósito ok. No Chromium, conferido nos dois temas, e o toast some sozinho.
+
 **Falta:** Fatia 4 (#15 SET/RESET, #16 CTU e `BLINK`, #17 `blink_ladder.st`, #18 SET/RESET/CTU no editor, #19 manifesto, #20 fechamento).
 
 > **Adiada por decisão do autor (2026-09-17).** A Fatia 4 sai da frente da fila e
@@ -425,6 +437,14 @@ CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
   - **IO_ESPELHO compilado de verdade** (60,4 s em build frio) e **SELO** (11,3 s incremental), cada um com as 3 imagens (`0x1000`/`0x8000`/`0x10000`) e Gravar habilitado;
   - aba ST gerado conferida visualmente com o SELO.
 - **Não verificado:** gravação em ESP32 físico (sem hardware, como em toda a F5).
+
+**Concluído — revisão pós-F8: download no lugar da aba "ST gerado" (#11, plano D-12, 2026-09-18)**
+- O autor concluiu, usando a ferramenta, que ver o ST intermediário não ajuda o usuário. **Revisão aditiva da Q-1**: a aba "ST gerado" sai, e `VisualizacaoST.tsx` é removido.
+- Botão **Baixar** no cabeçalho, entre Compilar e Gravar (`MenuDownload.tsx`, menu acessível):
+  - **Ladder (.json)**, só em projeto LD: o envelope do projeto, no formato de `salvarProjeto`;
+  - **Structured Text (.st)**: o texto serializado em LD, ou a fonte em projeto ST.
+- Em LD, a opção .st fica desabilitada com o mesmo motivo do Compilar (erro, vazio ou recusa). O nome do arquivo vem do título (`lib/download.ts`), e o download é feito no cliente, sem servidor. Cada download registra uma linha no Console.
+- **Verificação:** o e2e baixa o .st de IO_ESPELHO montado pela UI e confere **byte a byte** contra o arquivo dourado. No Chromium, o menu foi conferido nos dois temas, com o .st desabilitado e o motivo "Nada a compilar".
 
 ---
 
@@ -547,3 +567,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-18 | Plano 003 aprovado e Fatia 1 da spec 003 (S6a, #1–#6) | O autor aprovou o plano e liberou tarefas e implementação na mesma decisão; as recusas de D-5 entraram como revisão aditiva do RF-5. `tasks.md` com 10 tarefas. Frentes sonnet N ∥ B ∥ P. Entregues: serializador puro (redução série-paralelo com fallback por nó, ordem determinística por chave de origem, achado da frente N), 39 testes com prova por tabela-verdade, 5 arquivos dourados gerados pelo vitest e compilados no `iec2c` real, pytest diferencial **executando** no `plc_host_runner` com 0 divergências nos 5 cenários, inclusive a coincidência SET/RESET e a comparação com os STs de referência. **R-1 do plano 002 quitada.** 548 testes vitest, 72 no pytest, depósito ok. A aba "ST gerado" (#7) está pronta, com integração na IDE (#8, #9) em andamento |
 | 2026-09-18 | Fatia 2 da spec 003 (S6b, #7–#10) — F8 ✅ | Frentes sonnet P (aba "ST gerado") e T (App + e2e). Portão D-6 usando só erros de validação, para uma falha de compilação não travar o botão; Compilar em LD pelo mesmo `/compile/pacote`; diagnóstico do `iec2c` → degrau na aba Problemas. e2e confere o `source` enviado byte a byte contra o arquivo dourado. Chromium com back-end real em rede isolada: IO_ESPELHO (60 s, build frio) e SELO (11 s) compilados de diagramas Ladder, com as 3 imagens e Gravar habilitado; erro e vazio bloqueiam com motivo. 553 testes vitest, 72 no pytest, e2e 4 passed, depósito ok. Segundo caminho fim-a-fim fechado até onde é possível sem ESP32 |
 | 2026-09-18 | Integração à `main` | `feat/002-editor-ladder` integrada à `main` por fast-forward, levando a spec 002 (fatias 1–3, ajustes #21–#26) e a spec 003 inteira (F8 ✅); a branch foi apagada local e remotamente. A `main` passa a ser a única branch |
+| 2026-09-18 | Revisão de UX pós-F8 — download e toasts (spec 002 #27, spec 003 #11) | Duas revisões aditivas pedidas pelo autor depois de usar a F8: (1) Q-1 da spec 003 revista, com a aba "ST gerado" trocada pelo botão **Baixar** no cabeçalho (Ladder .json / Structured Text .st, com o .st sob o mesmo portão do Compilar; D-12); (2) aba Mensagens trocada por **toasts** próprios só para as recusas, com o Console inalterado (D-18). Frentes sonnet D ∥ M → T. Nenhuma dependência nova. 587 testes vitest, e2e 5 passed (download conferido byte a byte com o arquivo dourado; recusa → toast com mouse real), depósito ok, capturas nos dois temas |

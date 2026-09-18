@@ -6,11 +6,12 @@
  * `iec2c`/`idf.py` — o servidor continua síncrono (spec 001, Q-6); isto é só
  * o que o cliente já observa.
  *
- * Deixou de ter cabeçalho e botão "Limpar" próprios (tarefa #26): as três
- * abas do painel inferior (Problemas/Mensagens/Console) passaram a
- * compartilhar uma única lixeira "Limpar" na faixa de abas
- * (`PainelInferiorConteudo`), que decide qual conteúdo limpar conforme a aba
- * ativa — este componente virou puramente a lista, com estado vazio próprio.
+ * Deixou de ter cabeçalho e botão "Limpar" próprios (tarefa #26): as abas do
+ * painel inferior (Problemas/Console, desde a tarefa #27 — Mensagens e "ST
+ * gerado" saíram, ver `PainelInferiorConteudo`) passaram a compartilhar uma
+ * única lixeira "Limpar" na faixa de abas (`PainelInferiorConteudo`), que
+ * decide qual conteúdo limpar conforme a aba ativa — este componente virou
+ * puramente a lista, com estado vazio próprio.
  */
 import { useEffect, useRef } from 'react'
 

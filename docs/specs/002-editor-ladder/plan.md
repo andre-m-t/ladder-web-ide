@@ -663,3 +663,39 @@ Pedido do autor com referências visuais (`.claude/references/modelo_header.png`
   (duas fontes de verdade com o `VAR ... END_VAR` do texto); esconder Compilar
   em projeto Ladder.
 - **Requisito atendido:** RF-9, RF-12, RF-13; Q-2 (revisão aditiva).
+
+## 18. Revisão aditiva — recusas em toasts, aba Mensagens removida (2026-09-18)
+
+Pedido do autor depois de usar a IDE com a F8 (spec 003) pronta. Tarefa #27.
+Revisa, em D-17, a aba **Mensagens** do painel inferior. O texto de D-17
+continua valendo como registro do que foi decidido em 2026-09-17.
+
+### D-18: recusas de ação como toasts
+- **Escolha:**
+  - as recusas de ação do editor e do painel de variáveis (`aoRecusar`), que
+    iam para a aba Mensagens, passam a aparecer como **toasts** no canto
+    inferior direito, no momento em que acontecem;
+  - só as recusas viram toast. O **Console** não muda e nada dele vira toast
+    (decisão explícita do autor);
+  - o componente é próprio (`lib/toasts.ts`, puro, e
+    `components/ide/Toasts.tsx`), sem dependência nova, com os níveis
+    `info | sucesso | aviso | erro` prontos. Hoje só chega `aviso`;
+  - `aviso`/`info`/`sucesso` somem em 5 s, com pausa sob o cursor ou com
+    foco. `erro` fica até ser fechado;
+  - mensagem idêntica seguida não empilha, só reinicia o tempo. A pilha tem no
+    máximo 3 toasts;
+  - acessibilidade: região `aria-live="polite"`; `role="alert"` só em erro;
+  - a aba Mensagens e o contador de não lidas saem. O painel inferior fica
+    com **Problemas | Console** (a aba "ST gerado" da spec 003 sai na mesma
+    rodada; ver revisão da Q-1 na spec 003);
+  - a marca vermelha de 3 s na célula recusada (#26) continua.
+- **Por quê:** na aba, a recusa acontecia longe dos olhos e o estudante não
+  percebia, em tempo real, por que o arrasto não surtiu efeito. O toast
+  aparece junto da ação e some sozinho. É a opção "toast" que o autor avaliou
+  e preteriu na #25; a experiência com a barra de status (#25) e com a aba
+  (#26) mostrou que ela resolve melhor.
+- **Alternativas descartadas:** biblioteca pronta (ex.: `sonner`), que é
+  dependência nova e tem visual menos alinhado aos tokens da IDE; espelhar o
+  Console em toasts, que seria barulhento.
+- **Requisito atendido:** RF-9 (recusa visível e explicada), sem mudar o que o
+  núcleo recusa.

@@ -14,6 +14,11 @@ function propsBase(): BarraSuperiorProps {
     gravando: false,
     podeGravar: false,
     aoGravar: vi.fn(),
+    opcoesDownload: [
+      { id: 'ld', rotulo: 'Ladder (.json)' },
+      { id: 'st', rotulo: 'Structured Text (.st)' },
+    ],
+    aoBaixar: vi.fn(),
     painelVariaveisAberto: true,
     aoAlternarPainelVariaveis: vi.fn(),
     painelInferiorAberto: true,
@@ -120,6 +125,23 @@ describe('BarraSuperior', () => {
 
     await usuario.click(botao)
     expect(props.aoAlternarPainelInferior).toHaveBeenCalledTimes(1)
+  })
+
+  it('o menu Baixar aparece entre Compilar e Gravar, e escolher uma opção chama aoBaixar', async () => {
+    const usuario = userEvent.setup()
+    const props = propsBase()
+    render(<BarraSuperior {...props} />)
+
+    const botoes = screen.getAllByRole('button')
+    const indiceCompilar = botoes.findIndex((botao) => /^compilar$/i.test(botao.getAttribute('aria-label') ?? ''))
+    const indiceBaixar = botoes.findIndex((botao) => /baixar projeto/i.test(botao.getAttribute('aria-label') ?? ''))
+    const indiceGravar = botoes.findIndex((botao) => /gravar no esp32/i.test(botao.getAttribute('aria-label') ?? ''))
+    expect(indiceCompilar).toBeLessThan(indiceBaixar)
+    expect(indiceBaixar).toBeLessThan(indiceGravar)
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    await usuario.click(screen.getByRole('menuitem', { name: /structured text/i }))
+    expect(props.aoBaixar).toHaveBeenCalledWith('st')
   })
 
   it('todo botão do header tem um ícone svg marcado aria-hidden', () => {

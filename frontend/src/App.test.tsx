@@ -1,13 +1,26 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { IO_ESPELHO, MINIMAL, SET_RESET } from './ladder/fixtures'
+import { IO_ESPELHO, SET_RESET } from './ladder/fixtures'
 import { COLUNA_TERMINAL, type Diagrama } from './ladder/modelo'
 import { CHAVE_DIAGRAMA } from './ladder/persistencia'
 import { serializar } from './ladder/serializador'
+import { baixarTexto, conteudoProjetoJson } from './lib/download'
 import { CHAVE_PROJETO, ESQUELETO_ST, type Projeto } from './projeto/projeto'
+
+// `baixarTexto` toca o DOM (Blob/URL.createObjectURL) — mockado para os
+// testes do menu Baixar (spec 003, D-12/tarefa #11) verificarem só o que
+// `App` decide baixar, sem exercer o download real (já coberto por
+// `lib/download.test.ts`). `nomeDeArquivo`/`conteudoProjetoJson` continuam
+// reais (`importActual`), para os testes comporem o valor esperado do mesmo
+// jeito que o `App` faz.
+vi.mock('./lib/download', async (importActual) => {
+  const real = await importActual<typeof import('./lib/download')>()
+  return { ...real, baixarTexto: vi.fn() }
+})
+const baixarTextoMock = vi.mocked(baixarTexto)
 
 function respostaJson(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
@@ -90,6 +103,7 @@ async function criarProjetoST(usuario: UserEvent, titulo = 'Programa ST') {
 
 describe('App', () => {
   beforeEach(() => {
+    baixarTextoMock.mockClear()
     try {
       window.localStorage.clear()
     } catch {
@@ -236,6 +250,7 @@ describe('App', () => {
   })
 
   it('em projeto LD com diagrama vazio, Compilar e Gravar ficam desabilitados com "Nada a compilar" (D-6/D-7, CA-8)', async () => {
+    const usuario = userEvent.setup()
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
@@ -246,10 +261,12 @@ describe('App', () => {
     expect(botaoCompilar.getAttribute('title')).toMatch(/nada a compilar/i)
     expect(botaoGravar.getAttribute('title')).toMatch(/nada a compilar/i)
 
-    // A aba "ST gerado" também mostra o motivo (CA-8, acréscimo de Q-1).
-    await userEvent.setup().click(screen.getByRole('tab', { name: 'ST gerado' }))
-    const painelST = screen.getByRole('tabpanel', { name: 'ST gerado' })
-    expect(within(painelST).getByText(/nada a compilar/i)).toBeInTheDocument()
+    // O menu Baixar também mostra o motivo na opção .st (CA-8, D-12 na
+    // revisão da Q-1): mesmo portão de D-6.
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    const itemSt = screen.getByRole('menuitem', { name: /structured text/i })
+    expect(itemSt).toHaveAttribute('aria-disabled', 'true')
+    expect(itemSt.getAttribute('title')).toMatch(/nada a compilar/i)
   })
 
   // -- Compilação em projeto Ladder (spec 003, tarefa #8) -------------------
@@ -320,24 +337,64 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
   })
 
-  it('Q-1: a aba "ST gerado" mostra o texto serializado e muda quando o projeto (diagrama) muda', async () => {
-    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+  // -- Menu Baixar (spec 003, D-12, revisão da Q-1; tarefa #11) -------------
+
+  it('Q-1 revista: em diagrama com erro, a opção .st do menu Baixar fica desabilitada com o motivo', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
     const usuario = userEvent.setup()
-    const { unmount } = render(<App />)
-    await screen.findByLabelText(/Degrau 1, coluna 1/)
-
-    await usuario.click(screen.getByRole('tab', { name: 'ST gerado' }))
-    const areaST = screen.getByLabelText('Structured Text gerado a partir do diagrama (somente leitura)')
-    expect(areaST).toHaveTextContent('saida := entrada;')
-    unmount()
-
-    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(MINIMAL)))
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
-    await usuario.click(screen.getByRole('tab', { name: 'ST gerado' }))
-    const areaSTDepois = screen.getByLabelText('Structured Text gerado a partir do diagrama (somente leitura)')
-    expect(areaSTDepois).toHaveTextContent('saida := NOT entrada;')
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    const itemSt = screen.getByRole('menuitem', { name: /structured text/i })
+    expect(itemSt).toHaveAttribute('aria-disabled', 'true')
+    expect(itemSt.getAttribute('title')).toMatch(/problema/i)
+  })
+
+  it('Q-1 revista: escolher "Structured Text (.st)" chama baixarTexto com serializar(IO_ESPELHO).st e o nome do título', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO, 'Esteira 1')))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    await usuario.click(screen.getByRole('menuitem', { name: /structured text/i }))
+
+    const esperado = serializar(IO_ESPELHO)
+    if (!esperado.ok) throw new Error('IO_ESPELHO deveria serializar com sucesso')
+    expect(baixarTextoMock).toHaveBeenCalledWith('esteira-1.st', esperado.st, 'text/plain;charset=utf-8')
+  })
+
+  it('Q-1 revista: escolher "Ladder (.json)" chama baixarTexto com conteudoProjetoJson(projeto) e o nome do título', async () => {
+    const projeto = projetoLD(IO_ESPELHO, 'Esteira 1')
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projeto))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    await usuario.click(screen.getByRole('menuitem', { name: /ladder \(\.json\)/i }))
+
+    expect(baixarTextoMock).toHaveBeenCalledWith(
+      'esteira-1.ladderflow.json',
+      conteudoProjetoJson(projeto),
+      'application/json',
+    )
+  })
+
+  it('Q-1 revista: em projeto ST, o menu Baixar só tem a opção .st, que baixa projeto.fonte', async () => {
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario, 'Programa ST')
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1)
+    const itemSt = within(menu).getByRole('menuitem', { name: /structured text/i })
+
+    await usuario.click(itemSt)
+
+    expect(baixarTextoMock).toHaveBeenCalledWith('programa-st.st', ESQUELETO_ST, 'text/plain;charset=utf-8')
   })
 
   it('Q-3: diagnóstico do compilador na linha do degrau 2 aparece como problema desse degrau, e clicar nele foca o degrau', async () => {
@@ -394,8 +451,6 @@ describe('App', () => {
     expect(screen.queryByRole('table', { name: 'Variáveis declaradas' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/structured text/i)).toHaveValue(ESQUELETO_ST)
     expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
-    // Projeto ST não tem diagrama: a aba "ST gerado" (só existe em LD) nem aparece (D-9).
-    expect(screen.queryByRole('tab', { name: 'ST gerado' })).not.toBeInTheDocument()
   })
 
   // -- Persistência (herdado da tarefa #12/#25, revisado na #26) -----------
@@ -588,23 +643,41 @@ describe('App', () => {
     expect(within(log).getByText(/Projeto «Programa 2» \(ST\) criado\./)).toBeInTheDocument()
   })
 
-  // -- Mensagens (recusas do editor, tarefa #26) ----------------------------
+  // -- Toasts de recusa (spec 002, D-18, tarefa #27) ------------------------
 
-  it('uma recusa (Remover degrau 1 com um degrau só) aparece na aba Mensagens com contador, que zera ao abrir a aba', async () => {
-    const usuario = userEvent.setup()
+  it('uma recusa (Remover degrau 1 com um degrau só) aparece como toast visível, e não vai ao Console', async () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
     // único degrau do diagrama: `removerDegrau` recusa ("precisa de pelo
     // menos um degrau") — gesto realista pela UI, sem chamar o núcleo direto.
-    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+    // `fireEvent` (síncrono) em vez de `userEvent`: o teste seguinte precisa
+    // de fake timers já ativos no momento do clique, e misturar os dois
+    // exigiria configurar `userEvent` para avançá-los.
+    fireEvent.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
 
-    const abaMensagens = screen.getByRole('tab', { name: /mensagens/i })
-    expect(abaMensagens).toHaveTextContent('Mensagens 1')
+    const toast = screen.getByRole('status')
+    expect(toast).toHaveTextContent(/pelo menos um degrau/i)
 
-    await usuario.click(abaMensagens)
-    const log = screen.getByRole('log', { name: 'Mensagens' })
-    expect(within(log).getByText(/pelo menos um degrau/i)).toBeInTheDocument()
-    expect(abaMensagens).not.toHaveTextContent('Mensagens 1')
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(within(log).queryByText(/pelo menos um degrau/i)).not.toBeInTheDocument()
+  })
+
+  it('o toast de recusa some sozinho depois de 5 s', async () => {
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+      expect(screen.getByRole('status')).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

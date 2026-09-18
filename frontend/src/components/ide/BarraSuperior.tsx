@@ -1,21 +1,27 @@
 /**
  * Barra superior da IDE (spec 002, tarefa #26; painel lateral restaurado na
- * revisão da mesma tarefa): a IDE trabalha com um **projeto** de linguagem
- * única (LD ou ST — `projeto/projeto.ts`, frente P), criado por "Novo
- * projeto". Uma única faixa (~44px): marca "LadderFlow", "Novo projeto",
- * separador, título do projeto (truncado) + chip da linguagem; à direita,
- * Compilar/Gravar, separador, alternar painel de variáveis (só em projeto
- * Ladder — ST não tem variáveis de E/S mapeadas em ladder), alternar painel
- * inferior, separador, tema.
+ * revisão da mesma tarefa; menu Baixar acrescentado na tarefa #11 da spec
+ * 003): a IDE trabalha com um **projeto** de linguagem única (LD ou ST —
+ * `projeto/projeto.ts`, frente P), criado por "Novo projeto". Uma única
+ * faixa (~44px): marca "LadderFlow", "Novo projeto", separador, título do
+ * projeto (truncado) + chip da linguagem; à direita, Compilar, Baixar,
+ * Gravar, separador, alternar painel de variáveis (só em projeto Ladder —
+ * ST não tem variáveis de E/S mapeadas em ladder), alternar painel inferior,
+ * separador, tema.
  *
  * O painel de variáveis em si (conteúdo e redimensionamento) mora em
  * `PainelLateral`, ao lado do editor, em `App`; esta barra só expõe o botão
- * que abre/fecha.
+ * que abre/fecha. O menu Baixar (`MenuDownload`, entre Compilar e Gravar,
+ * D-12) é igualmente só apresentacional aqui — `opcoesDownload` (o que
+ * existe e o que está desabilitado) e `aoBaixar` (o que cada escolha faz)
+ * vêm prontos de `App`.
  *
  * `motivoIndisponivel`, quando definido (ex.: nenhum projeto aberto),
  * desabilita Compilar e Gravar juntos — motivo no `title` de cada botão e
  * exposto via `aria-describedby` a um texto `sr-only` — além das regras de
- * sempre (`compilando`, `podeGravar`).
+ * sempre (`compilando`, `podeGravar`). A opção ".st" do menu Baixar usa o
+ * mesmo motivo, via `opcoesDownload`, mas isso é decidido por `App`, não
+ * por este componente.
  *
  * Puramente apresentacional: todo estado (painel de variáveis, progresso de
  * compilação/gravação, tema) mora em `App`, que decide o que cada botão faz.
@@ -24,6 +30,7 @@ import { FilePlus, Hammer, Loader2, Moon, PanelBottom, PanelRight, Sun, Usb } fr
 
 import type { Tema } from '../../lib/tema'
 import type { Linguagem } from '../../projeto/projeto'
+import MenuDownload, { type OpcaoDownload } from './MenuDownload'
 
 export interface BarraSuperiorProps {
   titulo: string
@@ -36,6 +43,10 @@ export interface BarraSuperiorProps {
   progressoGravacao?: number
   podeGravar: boolean
   aoGravar: () => void
+  /** Opções do menu Baixar (D-12), montadas por `App` conforme a linguagem
+   * do projeto e o portão de compilação. */
+  opcoesDownload: OpcaoDownload[]
+  aoBaixar: (id: OpcaoDownload['id']) => void
   /** Definido quando Compilar/Gravar não podem agir por um motivo além dos
    * de sempre (ex.: nenhum projeto aberto) — desabilita os dois botões. */
   motivoIndisponivel?: string
@@ -67,6 +78,8 @@ export default function BarraSuperior({
   progressoGravacao,
   podeGravar,
   aoGravar,
+  opcoesDownload,
+  aoBaixar,
   motivoIndisponivel,
   painelVariaveisAberto,
   aoAlternarPainelVariaveis,
@@ -128,6 +141,8 @@ export default function BarraSuperior({
           )}
           <span className="hidden sm:inline">{rotuloCompilar}</span>
         </button>
+
+        <MenuDownload opcoes={opcoesDownload} aoEscolher={aoBaixar} />
 
         <button
           type="button"

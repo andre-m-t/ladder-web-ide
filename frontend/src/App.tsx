@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
 import BarraSuperior from './components/ide/BarraSuperior'
+import type { OpcaoDownload } from './components/ide/MenuDownload'
 import ModalConfirmarDescarte from './components/ide/ModalConfirmarDescarte'
 import ModalNovoProjeto from './components/ide/ModalNovoProjeto'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
 import PainelLateral from './components/ide/PainelLateral'
+import Toasts from './components/ide/Toasts'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
 import type { Diagrama } from './ladder/modelo'
 import { degrauDaLinha, serializar, type TrechoDegrau } from './ladder/serializador'
@@ -22,8 +24,10 @@ import {
   type ToolInfo,
 } from './lib/api'
 import { registrar, type EntradaConsole } from './lib/console'
+import { baixarTexto, conteudoProjetoJson, nomeDeArquivo } from './lib/download'
 import { ErroGravacao, gravar, webSerialDisponivel } from './lib/gravador'
 import { aplicarTema, temaInicial, type Tema } from './lib/tema'
+import { adicionarToast, removerToast, type Toast } from './lib/toasts'
 import {
   carregarProjeto,
   novoProjeto,
@@ -57,9 +61,9 @@ type EstadoModalNovoProjeto = 'nenhum' | 'confirmarDescarte' | 'novoProjeto'
 
 // --- Preferências de interface (localStorage) -------------------------------
 // Layout do painel de variáveis (aberto/largura) e do painel inferior
-// (aberto/altura). A aba ativa dentro do painel inferior
-// (Problemas/Mensagens/Console) não persiste: nasce de novo a cada carga,
-// conforme a regra da tarefa #25. O tema tem seu próprio armazenamento em
+// (aberto/altura). A aba ativa dentro do painel inferior (Problemas/Console,
+// desde a tarefa #27) não persiste: nasce de novo a cada carga, conforme a
+// regra da tarefa #25. O tema tem seu próprio armazenamento em
 // `lib/tema.ts`. Leitura e escrita em try/catch: sem `localStorage`
 // disponível, a IDE usa os padrões abaixo sem quebrar.
 
@@ -224,8 +228,7 @@ export default function App() {
   const [compilacao, setCompilacao] = useState<EstadoCompilacao>({ fase: 'ocioso' })
   const [gravacao, setGravacao] = useState<EstadoGravacao>({ fase: 'ocioso' })
   const [entradasConsole, setEntradasConsole] = useState<EntradaConsole[]>([])
-  const [mensagens, setMensagens] = useState<EntradaConsole[]>([])
-  const [naoLidasMensagens, setNaoLidasMensagens] = useState(0)
+  const [toasts, setToasts] = useState<Toast[]>([])
   const [modalNovoProjeto, setModalNovoProjeto] = useState<EstadoModalNovoProjeto>('nenhum')
 
   const problemasValidacao = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
@@ -245,10 +248,11 @@ export default function App() {
     [problemasValidacao, problemasCompilacao],
   )
 
-  /** Serialização do diagrama (spec 003, D-9/D-6/D-10), só em projeto Ladder
-   * — `undefined` em projeto ST, o mesmo contrato que `PainelInferiorConteudo`
-   * usa para decidir se a aba "ST gerado" existe. Recalculada a cada mudança
-   * do projeto, junto com `problemasValidacao`. */
+  /** Serialização do diagrama (spec 003, D-6/D-10; D-12 na revisão da tarefa
+   * #11), só em projeto Ladder — `undefined` em projeto ST. Além de
+   * alimentar o portão de Compilar/Gravar, é a fonte da opção "Structured
+   * Text (.st)" do menu Baixar quando o projeto é Ladder (`opcoesDownload`).
+   * Recalculada a cada mudança do projeto, junto com `problemasValidacao`. */
   const stGerado = useMemo(
     () => (projeto.linguagem === 'ld' ? serializar(projeto.diagrama) : undefined),
     [projeto],
@@ -261,17 +265,6 @@ export default function App() {
     setProblemasCompilacao([])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projeto])
-
-  // Fallback da aba "ST gerado" (D-9): só existe em projeto Ladder. Se o
-  // projeto deixou de ser Ladder (ex.: "Novo projeto" → ST) enquanto essa aba
-  // estava selecionada, cai para o Console — o mesmo defensivo que
-  // `PainelInferiorConteudo` já faz por conta própria, replicado aqui para a
-  // preferência de aba do `App` não ficar apontando para uma aba inexistente.
-  useEffect(() => {
-    if (projeto.linguagem !== 'ld' && abaInferior === 'st') {
-      setAbaInferior('console')
-    }
-  }, [projeto.linguagem, abaInferior])
 
   const cargaInicialRegistrada = useRef(false)
   /** Falha de `salvarProjeto` já registrada no console: evita inundar o
@@ -286,20 +279,17 @@ export default function App() {
   }
 
   /** Recusa de uma jogada do editor Ladder ou do painel de variáveis (tarefas
-   * #25/#26, `aoRecusar`): grava na lista de Mensagens (nível `aviso`) e
-   * incrementa o contador de não lidas, sem trocar de aba — quem decide ver o
-   * motivo abre a aba Mensagens por conta própria. */
+   * #25/#26, revisado na #27, `aoRecusar`): aparece como um toast (nível
+   * `aviso`), no momento em que acontece — a aba Mensagens saiu do painel
+   * inferior (D-18). Nada disto vai ao Console, que continua reservado aos
+   * eventos que o próprio cliente observa (compilação, gravação, saúde do
+   * servidor). */
   function recusar(motivo: string) {
-    setMensagens((atual) => registrar(atual, 'aviso', motivo))
-    setNaoLidasMensagens((atual) => atual + 1)
+    setToasts((atual) => adicionarToast(atual, 'aviso', motivo))
   }
 
-  /** Troca a aba do painel inferior — abrir "mensagens" zera o contador de
-   * não lidas (tarefa #26): a contagem é "recusas desde a última vez que a
-   * aba foi aberta", então abrir já conta como "lida". */
-  function aoMudarAbaInferior(aba: AbaInferior) {
-    setAbaInferior(aba)
-    if (aba === 'mensagens') setNaoLidasMensagens(0)
+  function fecharToast(id: number) {
+    setToasts((atual) => removerToast(atual, id))
   }
 
   useEffect(() => {
@@ -406,6 +396,53 @@ export default function App() {
     }
     return undefined
   }, [projeto.linguagem, problemasValidacao, stGerado])
+
+  /**
+   * Opções do menu Baixar (spec 003, D-12/tarefa #11): em projeto Ladder,
+   * o envelope do projeto em JSON e o texto Structured Text — este último
+   * com o mesmo motivo de indisponibilidade do portão de Compilar/Gravar
+   * (`motivoIndisponivel`, D-6), porque as duas coisas dependem da mesma
+   * serialização válida. Em projeto ST, só a opção .st, sempre disponível
+   * (a fonte já existe, editada à mão).
+   */
+  const opcoesDownload: OpcaoDownload[] = useMemo(() => {
+    if (projeto.linguagem === 'st') {
+      return [{ id: 'st', rotulo: 'Structured Text (.st)' }]
+    }
+    return [
+      { id: 'ld', rotulo: 'Ladder (.json)' },
+      { id: 'st', rotulo: 'Structured Text (.st)', desabilitadaMotivo: motivoIndisponivel },
+    ]
+  }, [projeto.linguagem, motivoIndisponivel])
+
+  /**
+   * Dispara o download escolhido no menu Baixar (D-12): `.json` é sempre o
+   * envelope do projeto atual (só existe a opção em projeto Ladder); `.st` é
+   * `stGerado.st` em projeto Ladder (guardado por `motivoIndisponivel` —
+   * defensivo aqui também, o mesmo espírito de `aoCompilar`) ou
+   * `projeto.fonte` direto em projeto ST. Uma linha "Baixado …" vai ao
+   * Console, no mesmo padrão informativo do resto da IDE.
+   */
+  function aoBaixar(id: OpcaoDownload['id']) {
+    if (id === 'ld') {
+      if (projeto.linguagem !== 'ld') return
+      const nome = nomeDeArquivo(projeto.titulo, 'ladderflow.json')
+      baixarTexto(nome, conteudoProjetoJson(projeto), 'application/json')
+      log('info', `Baixado ${nome}.`)
+      return
+    }
+
+    let fonte: string
+    if (projeto.linguagem === 'st') {
+      fonte = projeto.fonte
+    } else {
+      if (stGerado === undefined || !stGerado.ok) return
+      fonte = stGerado.st
+    }
+    const nome = nomeDeArquivo(projeto.titulo, 'st')
+    baixarTexto(nome, fonte, 'text/plain;charset=utf-8')
+    log('info', `Baixado ${nome}.`)
+  }
 
   /**
    * Compila o projeto atual (D-10): a fonte vem da caixa de texto num
@@ -561,6 +598,8 @@ export default function App() {
         progressoGravacao={gravacao.fase === 'gravando' ? gravacao.progresso : undefined}
         podeGravar={podeGravar}
         aoGravar={aoGravar}
+        opcoesDownload={opcoesDownload}
+        aoBaixar={aoBaixar}
         motivoIndisponivel={motivoIndisponivel}
         painelVariaveisAberto={painelVariaveisAberto}
         aoAlternarPainelVariaveis={() => setPainelVariaveisAberto((atual) => !atual)}
@@ -610,17 +649,15 @@ export default function App() {
       >
         <PainelInferiorConteudo
           aba={abaInferior}
-          aoMudarAba={aoMudarAbaInferior}
+          aoMudarAba={setAbaInferior}
           problemas={problemas}
           aoEscolherProblema={aoEscolherProblema}
-          stGerado={stGerado}
-          mensagens={mensagens}
-          naoLidasMensagens={naoLidasMensagens}
-          aoLimparMensagens={() => setMensagens([])}
           entradasConsole={entradasConsole}
           aoLimparConsole={() => setEntradasConsole([])}
         />
       </PainelInferior>
+
+      <Toasts toasts={toasts} aoFechar={fecharToast} />
 
       {modalNovoProjeto === 'confirmarDescarte' && (
         <ModalConfirmarDescarte

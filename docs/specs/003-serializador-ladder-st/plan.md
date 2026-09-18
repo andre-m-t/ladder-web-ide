@@ -175,6 +175,29 @@ mudar, o pytest acusa.
   - copiar à mão reintroduziria o elo manual que a R-1 quer eliminar.
 - **Requisito atendido:** RF-1 a RF-4 medidos (CA-1 a CA-4); quita a R-1 do plano 002.
 
+### D-12: download do projeto no lugar da aba "ST gerado" (revisão aditiva, 2026-09-18)
+- **Escolha:**
+  - D-9 deixa de valer: a aba "ST gerado" sai do painel inferior. O texto de
+    D-9 continua como registro;
+  - botão **Baixar** no cabeçalho, entre Compilar e Gravar, que abre um menu
+    acessível (`components/ide/MenuDownload.tsx`) com:
+    - **Ladder (.json)**, só em projeto LD: o envelope do projeto, no formato
+      de `salvarProjeto`;
+    - **Structured Text (.st)**: `stGerado.st` em projeto LD, `projeto.fonte`
+      em projeto ST;
+  - em LD, a opção .st fica desabilitada com `motivoIndisponivel` (o mesmo
+    portão de D-6);
+  - o nome do arquivo vem do título, em ASCII minúsculo com `-` (ex.:
+    `semaforo.st`, `semaforo.ladderflow.json`);
+  - o download é feito no cliente, por `lib/download.ts` (`Blob` +
+    `URL.createObjectURL`), sem requisição ao servidor (§6).
+- **Por quê:** revisão aditiva da Q-1 na spec. O texto na tela não ajudava o
+  usuário; o arquivo continua disponível para quem quiser levá-lo a outra
+  ferramenta ou estudá-lo.
+- **Alternativas descartadas:** PLCopen XML (IEC 61131-10) como versão LD,
+  que pediria uma spec própria; imagem do diagrama, que não pode ser reaberta.
+- **Requisito atendido:** RF-9 (Q-1 revista).
+
 ## 5. Contratos
 
 ```ts

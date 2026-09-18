@@ -110,6 +110,19 @@ Comandos:
     - verificação em Chromium real com back-end real: compilação de um diagrama LD, aba ST gerado e Compilar indisponível com erro e com vazio;
     - F8 ✅ no painel, R-1 do plano 002 quitada e a nota da #17 da spec 002 atualizada.
 
+## Revisão pós-F8 (2026-09-18)
+
+- [x] **#11 — [D][T] Download LD/ST; aba "ST gerado" removida (plano D-12; Q-1 revista)**
+  - Arquivos: `frontend/src/lib/download.ts` e `components/ide/MenuDownload.tsx`
+    (novos) e testes; `components/ide/BarraSuperior.tsx`,
+    `PainelInferiorConteudo.tsx`, `App.tsx`; remoção de `VisualizacaoST.tsx`;
+    `frontend/e2e/compilar.spec.ts`
+  - Depende de: #10
+  - Pronto quando: o menu Baixar oferece .json (só LD) e .st, com o .st
+    desabilitado junto do portão de Compilar; o .st baixado de `IO_ESPELHO`
+    é idêntico, byte a byte, ao arquivo dourado (e2e); a aba "ST gerado" não
+    existe mais; verificação no Chromium.
+
 ---
 
 ## Rastreabilidade
@@ -126,6 +139,7 @@ Comandos:
 | #8 | RF-6, RF-7, RF-8, RF-9, RF-10 | CA-5, CA-7, CA-8 |
 | #9 | RF-6 | CA-5 |
 | #10 | todos | todos |
+| #11 | RF-9 (Q-1 revista) | — |
 
 ## Paralelismo previsto
 

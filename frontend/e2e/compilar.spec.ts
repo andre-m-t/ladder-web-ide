@@ -1,15 +1,20 @@
 /**
  * Teste ponta a ponta do Compilar em projeto Ladder (spec 003, tarefa #9,
- * plano D-6/D-9/D-10): monta o cenário de referência "espelho direto"
- * (IO_ESPELHO, `frontend/src/ladder/fixtures.ts`) só pela UI — mesmo padrão
- * de `recarga.spec.ts` (arrasto real, painel lateral de variáveis) — e
- * confere que Compilar envia a `/compile/pacote` o texto que o serializador
- * (`frontend/src/ladder/serializador.ts`) realmente produz para esse
- * diagrama: comparado byte a byte contra o arquivo dourado
+ * plano D-6/D-10; menu Baixar acrescentado na tarefa #11, D-12): monta o
+ * cenário de referência "espelho direto" (IO_ESPELHO,
+ * `frontend/src/ladder/fixtures.ts`) só pela UI — mesmo padrão de
+ * `recarga.spec.ts` (arrasto real, painel lateral de variáveis) — e confere
+ * duas coisas que dependem do mesmo serializador
+ * (`frontend/src/ladder/serializador.ts`): o texto que Compilar envia a
+ * `/compile/pacote`, e o arquivo `.st` que o menu Baixar entrega para
+ * download — ambos comparados byte a byte contra o arquivo dourado
  * `backend/tests/fixtures/serializados/io_espelho.st` (spec 003, D-11), sem
  * reimplementar o serializador aqui. `rodar.sh` monta o repositório inteiro
  * em `/repo` (não só `frontend/`, ver o script), então o arquivo dourado
  * existe no contêiner no mesmo caminho relativo usado abaixo.
+ *
+ * A aba "ST gerado" saiu do painel inferior nesta mesma rodada de UX (D-12,
+ * revisão da Q-1) — o texto ST só é visto, hoje, baixando o arquivo.
  *
  * O back-end fica fora do ar (mesma nota de `recarga.spec.ts`): `/compile/pacote`
  * é interceptado por `page.route` com um pacote fabricado no formato de
@@ -113,7 +118,7 @@ async function montarIoEspelho(page: Page): Promise<void> {
 }
 
 test.describe('Compilar em projeto Ladder (spec 003, CA-5): IO_ESPELHO envia o ST serializado a /compile/pacote', () => {
-  test('monta IO_ESPELHO pela UI, compila com /compile/pacote interceptado e confere o corpo, o Console e a aba "ST gerado"', async ({
+  test('monta IO_ESPELHO pela UI, baixa o .st pelo menu Baixar, compila com /compile/pacote interceptado e confere o corpo e o Console', async ({
     page,
   }) => {
     await page.goto('/')
@@ -127,14 +132,24 @@ test.describe('Compilar em projeto Ladder (spec 003, CA-5): IO_ESPELHO envia o S
     await page.getByRole('tab', { name: /^Problemas/ }).click()
     await expect(page.getByRole('tab', { name: 'Problemas 0' })).toHaveAttribute('aria-selected', 'true')
 
-    // Aba "ST gerado" (D-9/Q-1): visível em projeto Ladder, com o texto que o
-    // serializador produz para este diagrama — o mesmo `saida := entrada;`
-    // do degrau único do arquivo dourado.
-    await page.getByRole('tab', { name: 'ST gerado' }).click()
-    const painelST = page.getByRole('tabpanel', { name: 'ST gerado' })
-    await expect(painelST).toContainText('saida := entrada;')
+    await page.screenshot({ path: 'test-results/compilar-01-ld-montado.png', fullPage: true })
 
-    await page.screenshot({ path: 'test-results/compilar-01-ld-montado-com-st-gerado.png', fullPage: true })
+    // Menu Baixar (D-12, tarefa #11): a opção "Structured Text (.st)" baixa
+    // exatamente o texto que o serializador produz para este diagrama — o
+    // mesmo arquivo dourado que `serializador.dourados.test.ts` grava e que
+    // o pytest diferencial roda contra o `plc_host_runner`. A aba "ST
+    // gerado" saiu do painel inferior nesta rodada (Q-1 revista); o único
+    // jeito de ver o texto hoje é baixando o arquivo.
+    await page.getByRole('button', { name: 'Baixar projeto' }).click()
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'Structured Text (.st)' }).click(),
+    ])
+    expect(download.suggestedFilename()).toMatch(/\.st$/)
+    const caminhoBaixado = await download.path()
+    if (caminhoBaixado === null) throw new Error('download sem caminho local (falhou?)')
+    const conteudoBaixado = readFileSync(caminhoBaixado, 'utf-8')
+    expect(conteudoBaixado).toBe(ST_DOURADO_IO_ESPELHO)
 
     // Intercepta /compile/pacote (sem back-end no ar, D-10: mesmo caminho do ST).
     let corpoRecebido: unknown
@@ -184,5 +199,30 @@ test.describe('Compilar em projeto Ladder (spec 003, CA-5): IO_ESPELHO envia o S
       // "problema"/"nada a compilar" — confirma que o pacote existe.
       await expect(botaoGravar).toHaveAttribute('title', 'Gravar no ESP32')
     }
+  })
+})
+
+test.describe('Recusa do editor vira toast (spec 002, D-18)', () => {
+  test('soltar um contato na coluna terminal (reservada a bobinas) recusa e mostra um toast com "posição inválida"', async ({ page }) => {
+    await page.goto('/')
+    await page.evaluate(() => window.localStorage.clear())
+    await page.reload()
+
+    await expect(page.getByText('Sem título', { exact: true })).toBeVisible()
+
+    // A coluna terminal (8) é reservada a bobinas — soltar um contato ali é
+    // recusado pelo núcleo (`ladder/validacao.ts`), e a recusa aparece como
+    // um toast (não mais na aba Mensagens, que saiu do painel inferior).
+    await arrastar(
+      page,
+      page.getByRole('button', { name: 'Contato NA', exact: true }),
+      page.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }),
+    )
+
+    const toast = page.getByRole('status')
+    await expect(toast).toBeVisible()
+    await expect(toast).toContainText(/posição inválida/i)
+
+    await page.screenshot({ path: 'test-results/compilar-03-recusa-toast.png', fullPage: true })
   })
 })
