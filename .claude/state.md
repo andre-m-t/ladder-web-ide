@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (plano 003 escrito, em revisão; spec 003 aprovada e enviada em `0f0c6e9`) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-18 (spec 003 concluída — F8 ✅: Compilar e Gravar funcionando em projeto Ladder, com a equivalência medida) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -40,12 +40,12 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F5 | Gravação via navegador | servidor + navegador | 🟡 |
 | F6 | Tela mínima (fatia vertical) | navegador | ✅ |
 | F7 | Editor Ladder visual | navegador | 🟡 |
-| F8 | Serializador Ladder → ST | navegador | 🟡 |
+| F8 | Serializador Ladder → ST | navegador | ✅ |
 | F9 | Simulador de ciclo de varredura | navegador | ⬜ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
 
-**Leitura rápida:** a fatia vertical está fechada até onde é possível sem ESP32. No navegador, cola-se ST, compila-se no servidor e o pacote (imagens + offsets) chega à tela. O botão Gravar vai até a tentativa de conexão Web Serial e falha de forma clara sem dispositivo. No servidor, o mesmo pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. Nenhum dispositivo físico foi gravado: o transporte Web Serial é a única camada sem cobertura.
+**Leitura rápida:** a fatia vertical está fechada até onde é possível sem ESP32. Desde 2026-09-18 (F8), ela vale também para **diagramas Ladder**: o diagrama é serializado para ST no navegador e segue o mesmo caminho, com a equivalência medida no runtime. No navegador, cola-se ST (ou monta-se o diagrama), compila-se no servidor e o pacote (imagens + offsets) chega à tela. O botão Gravar vai até a tentativa de conexão Web Serial e falha de forma clara sem dispositivo. No servidor, o mesmo pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. Nenhum dispositivo físico foi gravado: o transporte Web Serial é a única camada sem cobertura.
 
 ---
 
@@ -316,7 +316,8 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - **Limitação conhecida (D-15):** `set_reset_autodependente` usa o degrau inteiro como "caminho"; com ramo paralelo o aviso fica conservador demais em alguns casos. Reavaliar depois da fatia 4
 - Diagrama salvo descartado é sobrescrito na primeira gravação (o aviso já foi dado; não há cópia do conteúdo corrompido)
 - **Um projeto por vez:** não há biblioteca de projetos, nem abrir/salvar arquivo — "Novo projeto" substitui o atual. Fora do escopo da spec 002
-- Compilar e Gravar seguem indisponíveis em projeto Ladder até a **F8** existir
+- ~~Compilar e Gravar seguem indisponíveis em projeto Ladder até a **F8** existir~~ — resolvido em 2026-09-18 pela spec 003 (F8 ✅)
+- Ramos de linhas diferentes que se cruzam ou aninham: o conector vertical da linha 2 atravessa o traço da linha 1 e pode ser lido como junção, embora o ramo ligue só ao trilho principal (semântica fixada em D-1 do plano 003 e testada). É pendência de **desenho** do editor, levantada no plano 003
 - `carregarDiagrama` confere só a forma de degraus e variáveis, não cada elemento
 
 **Concluído — revisão pós-#26: painel de variáveis volta a ser lateral (2026-09-18)**
@@ -338,10 +339,18 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 > tarefa não é apagada; será revista quando a Fatia 4 for retomada, já com o
 > serializador disponível. O CTU (#16) continua sendo pré-requisito para
 > estender o serializador a contadores.
+>
+> **Atualização (2026-09-18), com a F8 pronta.** A R-1 do plano 002 está
+> quitada: `backend/tests/test_serializador_diferencial.py` executa no runtime
+> o ST que o serializador gera. Ao retomar a Fatia 4, a #17 deve ser reescrita
+> como "`BLINK` serializado × `blink.st`, pelo mesmo teste diferencial", e o
+> `blink_ladder.st` escrito à mão sai de cena. Isso depende da #16 (CTU no
+> modelo) e da extensão do serializador para CTU (trabalho novo, fora da
+> spec 003).
 
 ---
 
-## F8 — Serializador Ladder → ST 🟡
+## F8 — Serializador Ladder → ST ✅
 
 **Camada:** navegador · **Autoral:** sim
 
@@ -349,7 +358,7 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 
 **Ferramentas:** nenhuma. TypeScript puro.
 
-**Spec aprovada (2026-09-18):** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 escrita em 2026-09-17, Q-1 a Q-6 decididas e spec aprovada em 2026-09-18. `plan.md`/`tasks.md` ainda são placeholders. Nenhuma linha de código escrita. Plano escrito em 2026-09-18 e **em revisão**. Próximo portão: aprovação do plano → `/tarefas 003`.
+**Spec 003 concluída (2026-09-18):** [`spec.md`](../docs/specs/003-serializador-ladder-st/spec.md), [`plan.md`](../docs/specs/003-serializador-ladder-st/plan.md) e [`tasks.md`](../docs/specs/003-serializador-ladder-st/tasks.md), com as 10 tarefas feitas. Spec aprovada com Q-1 a Q-6 decididas e revisão aditiva do RF-5; plano aprovado; as duas fatias foram implementadas no mesmo dia. **Fecha o segundo caminho fim-a-fim: editar Ladder → serializar → compilar → gravar** (a gravação física segue bloqueada por falta de hardware, como em toda a F5).
 
 **Destravada.** Deixou de estar 🔒: o modelo de dados que ela consome (`frontend/src/ladder/modelo.ts`) já tem os cinco tipos de elemento — contato NA/NF, bobina simples, bobina SET, bobina RESET — e o ramo paralelo, desde as fatias 1–3 da spec 002. A dependência é sobre o **modelo**, não sobre a interface que o constrói; por isso a F8 não espera a Fatia 4.
 
@@ -398,6 +407,24 @@ CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
 - **Código de problema:** `CodigoProblema` ganhou `erro_compilacao`, só o tipo.
 - **Depósito:** `serializador.ts` em `REQUIRED_FILES`.
 - **Verificação:** `tsc` limpo, 548 testes vitest (inclui a aba da #7, ainda não integrada), pytest `not slow` com 72 passed, `--verificar` ok.
+
+**Concluído — Fatia 2 / S6b, IDE (#7–#10, 2026-09-18)**
+- **Aba "ST gerado"** (`components/ide/VisualizacaoST.tsx` + `PainelInferiorConteudo`), só em projeto LD:
+  - `<pre>` somente leitura, com a numeração de linha fora da seleção;
+  - recusa ou vazio aparecem como motivo, sem `role="alert"`.
+- **`App.tsx`:**
+  - `serializar` em `useMemo`;
+  - portão D-6, que usa só os erros de validação. Os de compilação não travam o botão;
+  - Compilar em LD pelo **mesmo** `compilarPacote`;
+  - diagnósticos do `iec2c` viram problemas `erro_compilacao` com o degrau (Q-3), limpos a cada edição ou compilação. A aba Problemas abre quando algum aponta para um degrau.
+- **e2e** `frontend/e2e/compilar.spec.ts`: IO_ESPELHO montado pela UI, com `source` enviado a `/compile/pacote` **idêntico, byte a byte**, ao arquivo dourado `io_espelho.st`.
+- **Verificação:** `tsc` limpo, 553 testes vitest, `vite build` (JS 442 kB / 135 kB gzip), e2e 4 passed, pytest `not slow` 72 passed, `--verificar` ok.
+- **Chromium com back-end real** (rede Docker `--internal`, sem porta publicada):
+  - diagrama com erro → Compilar desabilitado com "1 problema no diagrama — ver aba Problemas";
+  - diagrama vazio → "Nada a compilar";
+  - **IO_ESPELHO compilado de verdade** (60,4 s em build frio) e **SELO** (11,3 s incremental), cada um com as 3 imagens (`0x1000`/`0x8000`/`0x10000`) e Gravar habilitado;
+  - aba ST gerado conferida visualmente com o SELO.
+- **Não verificado:** gravação em ESP32 físico (sem hardware, como em toda a F5).
 
 ---
 
@@ -471,8 +498,8 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. Aprovar o plano 003 → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002
-2. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**, e o CTU permite estender o serializador a contadores
+1. Merge de `feat/002-editor-ladder` na `main`: a branch acumula a spec 002 (fatias 1–3) e a spec 003 inteira
+2. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**. Em seguida, uma spec curta para estender o serializador ao CTU e medir o `BLINK` serializado contra o `blink.st`
 3. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
 4. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
 
@@ -519,3 +546,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-18 | Aprovação da spec 003 — decisões Q-1 a Q-6 | Revisão de onde o projeto estava: da spec 002 só resta a Fatia 4, adiada pelo autor em favor da F8, então nenhuma fatia pendente da sprint. Autor decidiu as seis questões conforme a recomendação: ST gerado visível somente leitura; erro de validação recusado na tela; rastreio de diagnóstico por degrau; nomes e `T#20ms` fixos; SET/RESET em ordem dos degraus, com a última escrita vencendo; degrau vazio omitido e diagrama vazio como "nada a compilar". CA-4/7/8 com revisão aditiva datada; spec aprovada; esboço técnico registrado no F8 para o `/planejar 003`. Só documentação, nenhum código |
 | 2026-09-18 | Fase 2 (Planejar) da spec 003 | Aprovação da spec commitada e enviada (`0f0c6e9`). `plan.md` escrito com D-1 a D-11: serializador puro que lê o degrau como circuito de nós (redução série-paralelo, com fallback por nó para ramos cruzados, que a edição permite); SET/RESET como `IF` na ordem dos degraus; recusa de palavra reservada IEC e de nomes que diferem só em maiúsculas (tensão registrada, sem RF próprio); arquivos dourados via `toMatchFileSnapshot` executados pelo pytest diferencial, o que quita a R-1; portão de compilação na IDE; aba "ST gerado"; diagnóstico → degrau. Nenhuma dependência nova. Plano em revisão; nenhum código |
 | 2026-09-18 | Plano 003 aprovado e Fatia 1 da spec 003 (S6a, #1–#6) | O autor aprovou o plano e liberou tarefas e implementação na mesma decisão; as recusas de D-5 entraram como revisão aditiva do RF-5. `tasks.md` com 10 tarefas. Frentes sonnet N ∥ B ∥ P. Entregues: serializador puro (redução série-paralelo com fallback por nó, ordem determinística por chave de origem, achado da frente N), 39 testes com prova por tabela-verdade, 5 arquivos dourados gerados pelo vitest e compilados no `iec2c` real, pytest diferencial **executando** no `plc_host_runner` com 0 divergências nos 5 cenários, inclusive a coincidência SET/RESET e a comparação com os STs de referência. **R-1 do plano 002 quitada.** 548 testes vitest, 72 no pytest, depósito ok. A aba "ST gerado" (#7) está pronta, com integração na IDE (#8, #9) em andamento |
+| 2026-09-18 | Fatia 2 da spec 003 (S6b, #7–#10) — F8 ✅ | Frentes sonnet P (aba "ST gerado") e T (App + e2e). Portão D-6 usando só erros de validação, para uma falha de compilação não travar o botão; Compilar em LD pelo mesmo `/compile/pacote`; diagnóstico do `iec2c` → degrau na aba Problemas. e2e confere o `source` enviado byte a byte contra o arquivo dourado. Chromium com back-end real em rede isolada: IO_ESPELHO (60 s, build frio) e SELO (11 s) compilados de diagramas Ladder, com as 3 imagens e Gravar habilitado; erro e vazio bloqueiam com motivo. 553 testes vitest, 72 no pytest, e2e 4 passed, depósito ok. Segundo caminho fim-a-fim fechado até onde é possível sem ESP32 |

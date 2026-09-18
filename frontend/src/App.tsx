@@ -8,6 +8,8 @@ import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
 import PainelLateral from './components/ide/PainelLateral'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
+import type { Diagrama } from './ladder/modelo'
+import { degrauDaLinha, serializar, type TrechoDegrau } from './ladder/serializador'
 import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
@@ -15,6 +17,7 @@ import {
   ErroHttpCompilacao,
   ErroRedeCompilacao,
   fetchHealth,
+  type Diagnostico,
   type Pacote,
   type ToolInfo,
 } from './lib/api'
@@ -140,6 +143,35 @@ function abaInferiorInicial(projeto: Projeto, veioDoArmazenamento: boolean): Aba
   return temErro ? 'problemas' : 'console'
 }
 
+/** "1 problema" / "N problemas" (plural correto) — D-6, regra 1. */
+function pluralizarProblema(quantidade: number): string {
+  return quantidade === 1 ? 'problema' : 'problemas'
+}
+
+/**
+ * Diagnósticos do compilador (`Diagnostico.line`), levados de volta ao degrau
+ * que os gerou (D-8/Q-3): usa `degrauDaLinha(mapaLinhas, line)` e, quando o
+ * degrau existe no diagrama atual, monta a mensagem com o número 1-based do
+ * degrau; quando a linha cai fora de qualquer trecho (declarações, cabeçalho,
+ * esqueleto da `CONFIGURATION`), a mensagem cita só a linha. Diagnósticos sem
+ * `line` (`null`) não geram `Problema` — não há como relacioná-los a um
+ * degrau, e a mensagem do envelope já foi para o Console em `aoCompilar`.
+ */
+function problemasDeDiagnosticos(diagnosticos: Diagnostico[], mapaLinhas: TrechoDegrau[], diagrama: Diagrama): Problema[] {
+  const problemas: Problema[] = []
+  for (const diagnostico of diagnosticos) {
+    if (diagnostico.line === null) continue
+    const rungId = degrauDaLinha(mapaLinhas, diagnostico.line) ?? ''
+    const indiceDegrau = rungId === '' ? -1 : diagrama.rungs.findIndex((rung) => rung.id === rungId)
+    const mensagem =
+      indiceDegrau >= 0
+        ? `Erro do compilador no degrau ${indiceDegrau + 1} (linha ${diagnostico.line}): ${diagnostico.message}`
+        : `Erro do compilador na linha ${diagnostico.line}: ${diagnostico.message}`
+    problemas.push({ codigo: 'erro_compilacao', severidade: 'erro', rungId, elementoId: null, mensagem })
+  }
+  return problemas
+}
+
 /**
  * Shell de IDE do LadderFlow (spec 002, tarefas #23–#26; painel de variáveis
  * devolvido ao lateral na revisão da tarefa #26 — o autor testou a sub-aba de
@@ -196,7 +228,50 @@ export default function App() {
   const [naoLidasMensagens, setNaoLidasMensagens] = useState(0)
   const [modalNovoProjeto, setModalNovoProjeto] = useState<EstadoModalNovoProjeto>('nenhum')
 
-  const problemas = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
+  const problemasValidacao = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
+
+  /** Diagnósticos do compilador já traduzidos para `Problema` (D-8/Q-3), só
+   * em projeto Ladder. Limpos a cada mudança de projeto (efeito abaixo) e no
+   * início de cada nova tentativa de compilar (`aoCompilar`) — nunca ficam
+   * "presos" de uma compilação anterior. */
+  const [problemasCompilacao, setProblemasCompilacao] = useState<Problema[]>([])
+
+  /** Lista completa passada ao editor e ao painel inferior (contador da aba
+   * "Problemas" incluído): validação estrutural + diagnósticos de compilação
+   * traduzidos por degrau. O portão de compilação (D-6, regra 1) usa só
+   * `problemasValidacao` — ver `motivoIndisponivel`. */
+  const problemas = useMemo(
+    () => [...problemasValidacao, ...problemasCompilacao],
+    [problemasValidacao, problemasCompilacao],
+  )
+
+  /** Serialização do diagrama (spec 003, D-9/D-6/D-10), só em projeto Ladder
+   * — `undefined` em projeto ST, o mesmo contrato que `PainelInferiorConteudo`
+   * usa para decidir se a aba "ST gerado" existe. Recalculada a cada mudança
+   * do projeto, junto com `problemasValidacao`. */
+  const stGerado = useMemo(
+    () => (projeto.linguagem === 'ld' ? serializar(projeto.diagrama) : undefined),
+    [projeto],
+  )
+
+  // D-8: uma nova versão do projeto invalida os diagnósticos de compilação
+  // anteriores — eles apontavam para um `mapaLinhas` de uma serialização que
+  // já não é a atual.
+  useEffect(() => {
+    setProblemasCompilacao([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projeto])
+
+  // Fallback da aba "ST gerado" (D-9): só existe em projeto Ladder. Se o
+  // projeto deixou de ser Ladder (ex.: "Novo projeto" → ST) enquanto essa aba
+  // estava selecionada, cai para o Console — o mesmo defensivo que
+  // `PainelInferiorConteudo` já faz por conta própria, replicado aqui para a
+  // preferência de aba do `App` não ficar apontando para uma aba inexistente.
+  useEffect(() => {
+    if (projeto.linguagem !== 'ld' && abaInferior === 'st') {
+      setAbaInferior('console')
+    }
+  }, [projeto.linguagem, abaInferior])
 
   const cargaInicialRegistrada = useRef(false)
   /** Falha de `salvarProjeto` já registrada no console: evita inundar o
@@ -303,16 +378,53 @@ export default function App() {
   const webSerialOk = webSerialDisponivel()
   const podeGravar = temPacoteValido && webSerialOk && !gravando
 
-  /** Compilação de Ladder só existe depois de convertido para ST (F8, futuro)
-   * — até lá, `motivoIndisponivel` desabilita Compilar/Gravar juntos na
-   * `BarraSuperior` para projeto LD. */
-  const motivoIndisponivel: string | undefined =
-    projeto.linguagem === 'ld' ? 'Compilação de Ladder disponível quando o diagrama for convertido em ST (F8)' : undefined
+  /**
+   * Portão de Compilar/Gravar em projeto Ladder (spec 003, D-6), na primeira
+   * regra que valer:
+   *   1. há problema de severidade "erro" na **validação** (nunca nos
+   *      diagnósticos de compilação — senão, depois de uma falha, Compilar
+   *      ficaria travado até o autor editar o diagrama de novo, mesmo que o
+   *      motivo da falha já tenha ido para a aba Problemas);
+   *   2. a serialização devolve "vazio" (D-7/Q-6) — "Nada a compilar…";
+   *   3. a serialização recusa (D-5) — o motivo dela;
+   *   4. nenhuma das anteriores: `undefined`, Compilar habilitado.
+   * Avisos de validação nunca bloqueiam. Em projeto ST, continua `undefined`
+   * (compilar sempre disponível, como antes desta spec).
+   */
+  const motivoIndisponivel: string | undefined = useMemo(() => {
+    if (projeto.linguagem !== 'ld') return undefined
 
+    const errosDeValidacao = problemasValidacao.filter((problema) => problema.severidade === 'erro')
+    if (errosDeValidacao.length > 0) {
+      return `${errosDeValidacao.length} ${pluralizarProblema(errosDeValidacao.length)} no diagrama — ver aba Problemas`
+    }
+    if (stGerado !== undefined && !stGerado.ok && stGerado.vazio) {
+      return 'Nada a compilar: o diagrama não tem elementos'
+    }
+    if (stGerado !== undefined && !stGerado.ok) {
+      return stGerado.motivo
+    }
+    return undefined
+  }, [projeto.linguagem, problemasValidacao, stGerado])
+
+  /**
+   * Compila o projeto atual (D-10): a fonte vem da caixa de texto num
+   * projeto ST, ou do texto que `serializar` já produziu (`stGerado.st`) num
+   * projeto Ladder — o mesmo `compilarPacote`, o mesmo log e o mesmo estado
+   * de compilação para as duas linguagens, sem caminho novo (RF-6). A guarda
+   * de `stGerado` é só defensiva: com o portão de D-6 no lugar, `aoCompilar`
+   * não deveria ser alcançável com a serialização recusada ou vazia.
+   */
   async function aoCompilar() {
-    if (projeto.linguagem !== 'st') return
-    const fonte = projeto.fonte
+    let fonte: string
+    if (projeto.linguagem === 'st') {
+      fonte = projeto.fonte
+    } else {
+      if (stGerado === undefined || !stGerado.ok) return
+      fonte = stGerado.st
+    }
 
+    setProblemasCompilacao([])
     setCompilacao({ fase: 'compilando' })
     setGravacao({ fase: 'ocioso' })
     log('info', 'Compilação iniciada.')
@@ -341,6 +453,21 @@ export default function App() {
         log('erro', `Falha na compilação após ${decorrido}s — etapa ${envelope.stage} (${envelope.code}): ${envelope.message}`)
         for (const diagnostico of envelope.diagnostics) {
           log('erro', `${diagnostico.line ?? '?'}:${diagnostico.column ?? '?'} — ${diagnostico.message}`)
+        }
+
+        // D-8/Q-3: em projeto Ladder, cada diagnóstico com linha volta a ser
+        // um problema do degrau que a gerou, somado à lista da aba Problemas.
+        // Se algum deles apontar para um degrau real (rungId não vazio),
+        // abre a aba Problemas — é o jeito de "ver o motivo" chegar até quem
+        // acionou Compilar sem precisar procurar; um diagnóstico só de
+        // declaração/cabeçalho (sem degrau) não abre nada por conta própria,
+        // porque não há onde focar na tela além da mensagem já no Console.
+        if (projeto.linguagem === 'ld' && stGerado !== undefined && stGerado.ok) {
+          const novosProblemas = problemasDeDiagnosticos(envelope.diagnostics, stGerado.mapaLinhas, projeto.diagrama)
+          setProblemasCompilacao(novosProblemas)
+          if (novosProblemas.some((problema) => problema.rungId !== '')) {
+            setAbaInferior('problemas')
+          }
         }
       } else {
         log('erro', `Falha na compilação após ${decorrido}s: ${erroTratado.message}`)
@@ -486,6 +613,7 @@ export default function App() {
           aoMudarAba={aoMudarAbaInferior}
           problemas={problemas}
           aoEscolherProblema={aoEscolherProblema}
+          stGerado={stGerado}
           mensagens={mensagens}
           naoLidasMensagens={naoLidasMensagens}
           aoLimparMensagens={() => setMensagens([])}

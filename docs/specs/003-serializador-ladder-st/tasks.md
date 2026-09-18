@@ -1,6 +1,6 @@
 # Tarefas 003 — Serializador Ladder → ST
 
-> **Status:** aprovado (2026-09-18) — em execução (Fatia 1 concluída; #6 da Fatia 2 concluída)
+> **Status:** aprovado (2026-09-18) — concluído (Fatias 1 e 2, 2026-09-18)
 > **Plano de origem:** [`plan.md`](./plan.md) (aprovado em 2026-09-18; o autor liberou `/tarefas` e `/implementar` na mesma decisão)
 
 Lista de execução. Cada tarefa é pequena, tem arquivos-alvo, dependências
@@ -76,7 +76,7 @@ Comandos:
   - Depende de: #1
   - Pronto quando: o tipo cresce sem `validarDiagrama` produzir o código novo, e `degrauDaLinha` está testado (linha dentro, fora e nas bordas de um trecho).
 
-- [ ] **#7 — [P] Aba "ST gerado"**
+- [x] **#7 — [P] Aba "ST gerado"**
   - Arquivos: `frontend/src/components/ide/PainelInferior.tsx`, `PainelInferiorConteudo.tsx`, testes
   - Depende de: #1 (contrato)
   - Pronto quando:
@@ -85,7 +85,7 @@ Comandos:
     - acessível no padrão das abas existentes;
     - testes cobrem a presença e ausência da aba, o texto e o motivo.
 
-- [ ] **#8 — [T] Compilar em Ladder, portão e rastreio**
+- [x] **#8 — [T] Compilar em Ladder, portão e rastreio**
   - Arquivos: `frontend/src/App.tsx`, `App.test.tsx`
   - Depende de: #6, #7
   - Pronto quando:
@@ -97,12 +97,12 @@ Comandos:
 
     Testes: CA-5 (texto enviado = `serializar(IO_ESPELHO).st`, Gravar habilitado após sucesso), CA-7 (erro bloqueia sem chamar a API; aviso não bloqueia), CA-8 (tela), Q-1 (a aba muda após uma edição) e Q-3 (diagnóstico na linha do degrau 2 → problema do degrau 2).
 
-- [ ] **#9 — [T] e2e**
+- [x] **#9 — [T] e2e**
   - Arquivos: `frontend/e2e/*.spec.ts`
   - Depende de: #8
   - Pronto quando: em projeto LD com `IO_ESPELHO` montado pela UI, Compilar envia a `/compile/pacote` (interceptado por `page.route`) um corpo com `source` igual a `backend/tests/fixtures/serializados/io_espelho.st`; a resposta fabricada habilita Gravar; `bash frontend/e2e/rodar.sh` fica verde.
 
-- [ ] **#10 — Fechamento da feature**
+- [x] **#10 — Fechamento da feature**
   - Arquivos: `.claude/state.md`, este `tasks.md`
   - Depende de: #1–#9
   - Pronto quando:

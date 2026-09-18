@@ -3,9 +3,10 @@ import userEvent, { type UserEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
-import { IO_ESPELHO } from './ladder/fixtures'
+import { IO_ESPELHO, MINIMAL, SET_RESET } from './ladder/fixtures'
 import { COLUNA_TERMINAL, type Diagrama } from './ladder/modelo'
 import { CHAVE_DIAGRAMA } from './ladder/persistencia'
+import { serializar } from './ladder/serializador'
 import { CHAVE_PROJETO, ESQUELETO_ST, type Projeto } from './projeto/projeto'
 
 function respostaJson(corpo: unknown, status = 200): Response {
@@ -234,7 +235,7 @@ describe('App', () => {
     expect(within(painelErro).getByText(/12:5/)).toBeInTheDocument()
   })
 
-  it('em projeto LD, Compilar e Gravar ficam desabilitados com o motivo', async () => {
+  it('em projeto LD com diagrama vazio, Compilar e Gravar ficam desabilitados com "Nada a compilar" (D-6/D-7, CA-8)', async () => {
     render(<App />)
     await screen.findByLabelText(/Degrau 1, coluna 1/)
 
@@ -242,8 +243,144 @@ describe('App', () => {
     const botaoGravar = screen.getByRole('button', { name: /gravar no esp32/i })
     expect(botaoCompilar).toBeDisabled()
     expect(botaoGravar).toBeDisabled()
-    expect(botaoCompilar.getAttribute('title')).toMatch(/convertido em ST/i)
-    expect(botaoGravar.getAttribute('title')).toMatch(/convertido em ST/i)
+    expect(botaoCompilar.getAttribute('title')).toMatch(/nada a compilar/i)
+    expect(botaoGravar.getAttribute('title')).toMatch(/nada a compilar/i)
+
+    // A aba "ST gerado" também mostra o motivo (CA-8, acréscimo de Q-1).
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'ST gerado' }))
+    const painelST = screen.getByRole('tabpanel', { name: 'ST gerado' })
+    expect(within(painelST).getByText(/nada a compilar/i)).toBeInTheDocument()
+  })
+
+  // -- Compilação em projeto Ladder (spec 003, tarefa #8) -------------------
+
+  it('CA-5: projeto LD com IO_ESPELHO habilita Compilar; ao clicar, compilarPacote recebe serializar(IO_ESPELHO).st', async () => {
+    const pacote = {
+      chip: 'esp32',
+      flash: { mode: 'dio', freq: '40m', size: '4MB' },
+      images: [{ name: 'bootloader.bin', offset: 4096, size: 2048, sha256: 'x', data_base64: '' }],
+    }
+    let corpoRecebido: unknown
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) {
+        corpoRecebido = init?.body === undefined ? undefined : JSON.parse(init.body as string)
+        return Promise.resolve(respostaJson(pacote))
+      }
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const botaoCompilar = screen.getByRole('button', { name: /^compilar$/i })
+    expect(botaoCompilar).not.toBeDisabled()
+
+    await usuario.click(botaoCompilar)
+
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(await within(log).findByText(/Compilação concluída/)).toBeInTheDocument()
+
+    const esperado = serializar(IO_ESPELHO)
+    if (!esperado.ok) throw new Error('IO_ESPELHO deveria serializar com sucesso')
+    expect((corpoRecebido as { source: string }).source).toBe(esperado.st)
+  })
+
+  it('CA-7: diagrama com erro desabilita Compilar com motivo mencionando "problema", sem chamar compilarPacote', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
+
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const botaoCompilar = screen.getByRole('button', { name: /^compilar$/i })
+    expect(botaoCompilar).toBeDisabled()
+    expect(botaoCompilar.getAttribute('title')).toMatch(/problema/i)
+
+    expect(fetchMock.mock.calls.some((chamada) => urlDaRequisicao(chamada[0]).endsWith('/compile/pacote'))).toBe(false)
+  })
+
+  it('CA-7: diagrama só com aviso (SET/RESET autodependente) mantém Compilar habilitado', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_SO_COM_AVISO)))
+
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
+  })
+
+  it('Q-1: a aba "ST gerado" mostra o texto serializado e muda quando o projeto (diagrama) muda', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    const { unmount } = render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('tab', { name: 'ST gerado' }))
+    const areaST = screen.getByLabelText('Structured Text gerado a partir do diagrama (somente leitura)')
+    expect(areaST).toHaveTextContent('saida := entrada;')
+    unmount()
+
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(MINIMAL)))
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('tab', { name: 'ST gerado' }))
+    const areaSTDepois = screen.getByLabelText('Structured Text gerado a partir do diagrama (somente leitura)')
+    expect(areaSTDepois).toHaveTextContent('saida := NOT entrada;')
+  })
+
+  it('Q-3: diagnóstico do compilador na linha do degrau 2 aparece como problema desse degrau, e clicar nele foca o degrau', async () => {
+    const resultado = serializar(SET_RESET)
+    if (!resultado.ok) throw new Error('SET_RESET deveria serializar com sucesso')
+    const trechoDegrau2 = resultado.mapaLinhas[1]
+
+    const envelope = {
+      stage: 'matiec',
+      code: 'compile_error',
+      message: 'ST inválido',
+      diagnostics: [
+        { file: 'plc.st', line: trechoDegrau2.linhaInicio, column: 1, severity: 'error', message: 'erro fabricado no degrau 2' },
+      ],
+      raw: { stdout: '', stderr: '' },
+    }
+
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) return Promise.resolve(respostaJson(envelope, 422))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(SET_RESET)))
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
+
+    // A aba Problemas abre por conta própria (o problema aponta para um degrau real).
+    const painelProblemas = await screen.findByRole('tabpanel', { name: /^problemas/i })
+    const problema = within(painelProblemas).getByRole('button', { name: /degrau 2/i })
+    expect(problema).toBeInTheDocument()
+
+    await usuario.click(problema)
+
+    await waitFor(() => {
+      expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Degrau 2, coluna 1/)
+    })
   })
 
   it('criar projeto ST remove o painel de variáveis, mostra o editor com o esqueleto e habilita Compilar', async () => {
@@ -257,6 +394,8 @@ describe('App', () => {
     expect(screen.queryByRole('table', { name: 'Variáveis declaradas' })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/structured text/i)).toHaveValue(ESQUELETO_ST)
     expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
+    // Projeto ST não tem diagrama: a aba "ST gerado" (só existe em LD) nem aparece (D-9).
+    expect(screen.queryByRole('tab', { name: 'ST gerado' })).not.toBeInTheDocument()
   })
 
   // -- Persistência (herdado da tarefa #12/#25, revisado na #26) -----------
