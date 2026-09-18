@@ -1,0 +1,53 @@
+# Fixture diferencial do cenario RAMO_OU (spec 003, tarefa #2/#3).
+# Ver backend/tests/diferencial/README.md para o formato.
+#
+# RAMO_OU: a AT %IX0.0, b AT %IX0.1 -> q AT %QX0.0, semantica q = a OR b.
+# Degrau com NA "a" no trilho principal e um ramo na linha 1 com NA "b",
+# ligado so ao trilho (contrato do Ramo, D-1 do plano). Prova a reducao
+# serie-paralelo do caso "ramo simples": arestas paralelas -> OR.
+#
+# As 4 combinacoes de (a, b) provam a tabela verdade completa do OR:
+# 00 -> 0 (nenhum contato fecha, bobina desenergizada);
+# 10 -> 1 (so "a" fecha, o trilho principal conduz);
+# 01 -> 1 (so "b" fecha, o ramo conduz);
+# 11 -> 1 (os dois fecham, ainda assim so um "1" na bobina).
+
+st = "ramo_ou.st"
+descricao = "q = a OR b (contato no trilho + ramo com contato), as 4 combinacoes."
+ciclos = 4
+
+[[entradas]]
+de = 1
+ate = 1
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 2
+ate = 2
+valores = { "%IX0.0" = true, "%IX0.1" = false }
+
+[[entradas]]
+de = 3
+ate = 3
+valores = { "%IX0.0" = false, "%IX0.1" = true }
+
+[[entradas]]
+de = 4
+ate = 4
+valores = { "%IX0.0" = true, "%IX0.1" = true }
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 3
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 4
+valores = { "%QX0.0" = true }

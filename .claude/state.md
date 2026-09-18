@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (spec 003 aprovada — Q-1 a Q-6 decididas; próximo portão: `/planejar 003`) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-18 (plano 003 escrito, em revisão; spec 003 aprovada e enviada em `0f0c6e9`) · **Branch ativa:** `feat/002-editor-ladder` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -349,7 +349,7 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 
 **Ferramentas:** nenhuma. TypeScript puro.
 
-**Spec aprovada (2026-09-18):** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 escrita em 2026-09-17, Q-1 a Q-6 decididas e spec aprovada em 2026-09-18. `plan.md`/`tasks.md` ainda são placeholders. Nenhuma linha de código escrita. Próximo portão: `/planejar 003`.
+**Spec aprovada (2026-09-18):** [`docs/specs/003-serializador-ladder-st/spec.md`](../docs/specs/003-serializador-ladder-st/spec.md) — Fase 1 escrita em 2026-09-17, Q-1 a Q-6 decididas e spec aprovada em 2026-09-18. `plan.md`/`tasks.md` ainda são placeholders. Nenhuma linha de código escrita. Plano escrito em 2026-09-18 e **em revisão**. Próximo portão: aprovação do plano → `/tarefas 003`.
 
 **Destravada.** Deixou de estar 🔒: o modelo de dados que ela consome (`frontend/src/ladder/modelo.ts`) já tem os cinco tipos de elemento — contato NA/NF, bobina simples, bobina SET, bobina RESET — e o ramo paralelo, desde as fatias 1–3 da spec 002. A dependência é sobre o **modelo**, não sobre a interface que o constrói; por isso a F8 não espera a Fatia 4.
 
@@ -371,11 +371,33 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 
 CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
 
-**Esboço técnico levado ao `/planejar 003`** (ainda não aprovado):
-- núcleo puro `frontend/src/ladder/serializador.ts`;
-- arquivos dourados `.st` gerados pelo TS e conferidos pelo vitest, medidos por um pytest diferencial com `comparar_execucoes` (CA-1 a CA-4). É esse elo que quita a R-1;
-- integração em `App.tsx` pelo mesmo `/compile/pacote`;
-- duas fatias: S6a (núcleo + diferencial) e S6b (IDE + e2e + depósito).
+**Plano em revisão (2026-09-18):** [`plan.md`](../docs/specs/003-serializador-ladder-st/plan.md), com D-1 a D-11 e duas fatias.
+- **Núcleo:** puro, em `frontend/src/ladder/serializador.ts`.
+- **Topologia (D-1):** o degrau é lido como circuito de nós, com redução série-paralelo. Ramos cruzados usam fallback por nó. O ramo liga só ao trilho principal.
+- **Arquivos dourados (D-11):** gerados pelo vitest com `toMatchFileSnapshot` e executados pelo pytest diferencial. Quitam a R-1.
+- **Recusas (D-5):** palavra reservada da IEC e nomes que diferem só em maiúsculas. É regra nova no cliente, registrada como tensão no §9 do plano.
+- **Fatias:**
+  - S6a (núcleo medido: CA-1 a CA-4, CA-6, CA-8, CA-9);
+  - S6b (IDE: CA-5, CA-7, aba ST gerado, rastreio por degrau).
+- **Risco novo:** ramos de linhas diferentes que se cruzam são desenhados de forma ambígua no editor (pendência de desenho da spec 002).
+
+**Aprovação (2026-09-18).** O autor aprovou o plano e liberou `/tarefas` e `/implementar` das duas fatias na mesma decisão. Também decidiu registrar as recusas de D-5 como **revisão aditiva do RF-5** na spec. `tasks.md` escrito com 10 tarefas e as frentes N, B, P e T.
+
+**Concluído — Fatia 1 / S6a, núcleo medido (#1–#6, 2026-09-18)**
+- **`frontend/src/ladder/serializador.ts`:**
+  - `serializar` implementa D-1 a D-8, com a redução série-paralelo e o fallback por nó;
+  - a ordem dos operandos segue uma chave de origem (coluna, linha) propagada pelas fusões. Achado da frente N: sem ela, `a OR b` poderia sair `b OR a` conforme o caminho da redução;
+  - `degrauDaLinha` para o rastreio Q-3.
+- **Testes do serializador:** 39 no vitest. A topologia (simples, aninhada, cruzada, lacuna) é conferida por **tabela-verdade completa** contra uma enumeração de caminhos. Cobrem também as recusas D-5, os vazios, o determinismo, ASCII, CA-9 e o pior caso.
+- **Fixtures e arquivos dourados:** `RAMO_OU`, `SET_RESET` e `SELO` em `fixtures.ts`. Os 5 arquivos dourados em `backend/tests/fixtures/serializados/` foram **gerados pelo vitest** (`toMatchFileSnapshot`) e todos compilam no `iec2c` real.
+- **Teste diferencial:** `test_serializador_diferencial.py` roda os dourados no `plc_host_runner`, **executando de verdade** (o binário é compilado sob demanda na imagem), com **0 divergências**:
+  - io_espelho, minimal, ramo_ou, set_reset (inclusive o ciclo de coincidência, em que vence o RESET do degrau de baixo) e selo, contra os gabaritos TOML;
+  - io_espelho e minimal também contra a execução do ST de referência da spec 001.
+  - **É a medição que quita a R-1 do plano 002**: o ST medido passa a ser o que o serializador gera.
+- **Organização dos TOMLs:** os novos ficam em `diferencial/fixtures/serializador/`, fora do glob de `test_diferencial.py`, que usa o diretório de ST antigo.
+- **Código de problema:** `CodigoProblema` ganhou `erro_compilacao`, só o tipo.
+- **Depósito:** `serializador.ts` em `REQUIRED_FILES`.
+- **Verificação:** `tsc` limpo, 548 testes vitest (inclui a aba da #7, ainda não integrada), pytest `not slow` com 72 passed, `--verificar` ok.
 
 ---
 
@@ -449,7 +471,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 ## Próximos passos, em ordem
 
-1. `/planejar 003` → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002 (spec aprovada em 2026-09-18; esboço técnico registrado no F8)
+1. Aprovar o plano 003 → `/tarefas 003` → `/implementar 003` — **F8**, que destrava Compilar/Gravar em projeto Ladder e quita a R-1 do plano 002
 2. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**, e o CTU permite estender o serializador a contadores
 3. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
 4. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
@@ -495,3 +517,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-17 | #26 da spec 002 — projeto e IDE reorganizada | Autor trouxe referências visuais: cabeçalho defasado, variáveis como aba e painel inferior mais dividido. Q-2 revista: um projeto por linguagem, criado por Novo projeto (descarte confirmado, título e linguagem), isolando a compilação. Frentes P (projeto) ∥ M (modais) ∥ H (cabeçalho/painel) ∥ L (variáveis) → A (integração) → E (e2e); a primeira tentativa das quatro caiu por limite de sessão antes de escrever e foi redespachada. Esqueleto ST validado no iec2c. 499 testes vitest, e2e com 4 cenários, Chromium nos dois temas |
 | 2026-09-18 | Revisão pós-#26 — painel de variáveis volta a ser lateral | Autor testou a sub-aba "Variáveis" de largura inteira e pediu de volta o painel lateral recolhível/redimensionável de antes da #26 (`PainelLateral` restaurada, sub-abas Lógica/Variáveis saem de `BarraSuperior`). Achado só no Chromium real: `SeletorClasse` vazava da célula e cobria o `<select>` de Pino, interceptando o clique — corrigido com `flex-wrap`; tabela ganhou `min-w-[600px]` com rolagem horizontal própria para não esconder o pino num painel de 288–320px. Pedido à parte: fundo cinza da coluna da bobina (coluna terminal) removido, célula igual às outras. 499 testes vitest, e2e 3 passed (Chromium real), depósito ok |
 | 2026-09-18 | Aprovação da spec 003 — decisões Q-1 a Q-6 | Revisão de onde o projeto estava: da spec 002 só resta a Fatia 4, adiada pelo autor em favor da F8, então nenhuma fatia pendente da sprint. Autor decidiu as seis questões conforme a recomendação: ST gerado visível somente leitura; erro de validação recusado na tela; rastreio de diagnóstico por degrau; nomes e `T#20ms` fixos; SET/RESET em ordem dos degraus, com a última escrita vencendo; degrau vazio omitido e diagrama vazio como "nada a compilar". CA-4/7/8 com revisão aditiva datada; spec aprovada; esboço técnico registrado no F8 para o `/planejar 003`. Só documentação, nenhum código |
+| 2026-09-18 | Fase 2 (Planejar) da spec 003 | Aprovação da spec commitada e enviada (`0f0c6e9`). `plan.md` escrito com D-1 a D-11: serializador puro que lê o degrau como circuito de nós (redução série-paralelo, com fallback por nó para ramos cruzados, que a edição permite); SET/RESET como `IF` na ordem dos degraus; recusa de palavra reservada IEC e de nomes que diferem só em maiúsculas (tensão registrada, sem RF próprio); arquivos dourados via `toMatchFileSnapshot` executados pelo pytest diferencial, o que quita a R-1; portão de compilação na IDE; aba "ST gerado"; diagnóstico → degrau. Nenhuma dependência nova. Plano em revisão; nenhum código |
+| 2026-09-18 | Plano 003 aprovado e Fatia 1 da spec 003 (S6a, #1–#6) | O autor aprovou o plano e liberou tarefas e implementação na mesma decisão; as recusas de D-5 entraram como revisão aditiva do RF-5. `tasks.md` com 10 tarefas. Frentes sonnet N ∥ B ∥ P. Entregues: serializador puro (redução série-paralelo com fallback por nó, ordem determinística por chave de origem, achado da frente N), 39 testes com prova por tabela-verdade, 5 arquivos dourados gerados pelo vitest e compilados no `iec2c` real, pytest diferencial **executando** no `plc_host_runner` com 0 divergências nos 5 cenários, inclusive a coincidência SET/RESET e a comparação com os STs de referência. **R-1 do plano 002 quitada.** 548 testes vitest, 72 no pytest, depósito ok. A aba "ST gerado" (#7) está pronta, com integração na IDE (#8, #9) em andamento |

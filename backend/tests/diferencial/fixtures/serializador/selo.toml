@@ -1,0 +1,87 @@
+# Fixture diferencial do cenario SELO (spec 003, tarefa #2/#3).
+# Ver backend/tests/diferencial/README.md para o formato.
+#
+# SELO: partida AT %IX0.0, parada AT %IX0.1 -> motor AT %QX0.0.
+# Degrau unico: NA "partida" no trilho principal, com um ramo na linha 1
+# contendo NA "motor" (a realimentacao que da nome ao "selo"), depois NF
+# "parada" em serie, alimentando a bobina "motor". Semantica:
+#   motor = (partida OR motor) AND NOT parada
+# E o caso extra de CA-4: ramo (OR) mais realimentacao da propria bobina,
+# em serie (AND) com um contato NF -- cobre serie-e-paralelo no mesmo
+# degrau, differente do SET/RESET em dois degraus.
+#
+# Gabarito denso, ciclo a ciclo:
+# ciclo 1 (00): motor comeca em 0, nada aciona -- 0.
+# ciclo 2 (10): partida liga o motor -- 1.
+# ciclo 3 (00): motor se mantem ligado pela propria realimentacao (selo) -- 1.
+# ciclo 4 (01): parada desliga o motor -- 0.
+# ciclo 5 (00): sem partida, motor fica desligado (sem selo para reter) -- 0.
+# ciclo 6 (11): partida e parada juntas -- parada vence (AND NOT parada) -- 0.
+# ciclo 7 (10): partida liga de novo, a partir de motor=0 -- 1.
+
+st = "selo.st"
+descricao = "motor = (partida OR motor) AND NOT parada -- selo com ramo e realimentacao."
+ciclos = 7
+
+[[entradas]]
+de = 1
+ate = 1
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 2
+ate = 2
+valores = { "%IX0.0" = true, "%IX0.1" = false }
+
+[[entradas]]
+de = 3
+ate = 3
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 4
+ate = 4
+valores = { "%IX0.0" = false, "%IX0.1" = true }
+
+[[entradas]]
+de = 5
+ate = 5
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 6
+ate = 6
+valores = { "%IX0.0" = true, "%IX0.1" = true }
+
+[[entradas]]
+de = 7
+ate = 7
+valores = { "%IX0.0" = true, "%IX0.1" = false }
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 3
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 4
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 5
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 6
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 7
+valores = { "%QX0.0" = true }

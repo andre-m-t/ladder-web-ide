@@ -42,6 +42,10 @@ export type CodigoProblema =
   | 'bobina_escreve_entrada'
   | 'bobina_duplicada'
   | 'set_reset_autodependente'
+  /** Diagnóstico do `iec2c` sobre o ST serializado, levado ao degrau que gerou
+   * a linha (spec 003, D-8/Q-3). Produzido pela IDE a partir de uma falha de
+   * compilação — nunca por `validarDiagrama`. */
+  | 'erro_compilacao'
 
 export interface Problema {
   codigo: CodigoProblema

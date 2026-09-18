@@ -1,0 +1,95 @@
+# Fixture diferencial do cenario SET_RESET (spec 003, tarefa #2/#3).
+# Ver backend/tests/diferencial/README.md para o formato.
+#
+# SET_RESET: liga AT %IX0.0, desliga AT %IX0.1 -> q AT %QX0.0.
+# Degrau 1: NA "liga" -> bobina_set q (IF liga THEN q := TRUE; END_IF;).
+# Degrau 2: NA "desliga" -> bobina_reset q (IF desliga THEN q := FALSE; END_IF;).
+# Os degraus sao emitidos na ordem do diagrama, sem reordenar (D-2 do plano);
+# a ultima escrita do ciclo vence (Q-5 da spec) -- como RESET esta no degrau
+# de baixo, ele escreve depois e vence numa coincidencia liga=desliga=1.
+#
+# Gabarito denso, ciclo a ciclo, para provar cada regime:
+# ciclo 1 (00): nem liga nem desliga -- q permanece 0 (estado inicial).
+# ciclo 2 (10): liga seta q -- 1.
+# ciclo 3 (00): nem um nem outro -- q RETEM o valor anterior (1).
+# ciclo 4 (01): desliga reseta q -- 0.
+# ciclo 5 (00): retencao do valor 0.
+# ciclo 6 (11): coincidencia -- RESET (degrau 2, escreve depois) vence -- 0.
+# ciclo 7 (10): liga seta de novo -- 1.
+# ciclo 8 (11): coincidencia de novo, a partir de q=1 -- RESET vence -- 0.
+
+st = "set_reset.st"
+descricao = "SET (degrau 1) e RESET (degrau 2) sobre q; coincidencia: RESET vence (Q-5)."
+ciclos = 8
+
+[[entradas]]
+de = 1
+ate = 1
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 2
+ate = 2
+valores = { "%IX0.0" = true, "%IX0.1" = false }
+
+[[entradas]]
+de = 3
+ate = 3
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 4
+ate = 4
+valores = { "%IX0.0" = false, "%IX0.1" = true }
+
+[[entradas]]
+de = 5
+ate = 5
+valores = { "%IX0.0" = false, "%IX0.1" = false }
+
+[[entradas]]
+de = 6
+ate = 6
+valores = { "%IX0.0" = true, "%IX0.1" = true }
+
+[[entradas]]
+de = 7
+ate = 7
+valores = { "%IX0.0" = true, "%IX0.1" = false }
+
+[[entradas]]
+de = 8
+ate = 8
+valores = { "%IX0.0" = true, "%IX0.1" = true }
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 3
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 4
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 5
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 6
+valores = { "%QX0.0" = false }
+
+[[saidas_esperadas]]
+ciclo = 7
+valores = { "%QX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 8
+valores = { "%QX0.0" = false }

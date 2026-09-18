@@ -145,6 +145,7 @@ REQUIRED_FILES=(
   "frontend/src/lib/gravador.ts"
   "frontend/src/App.tsx"
   "frontend/src/ladder/persistencia.ts"
+  "frontend/src/ladder/serializador.ts"
   "frontend/src/projeto/projeto.ts"
   "frontend/src/components/ide/ListaProblemas.tsx"
 )

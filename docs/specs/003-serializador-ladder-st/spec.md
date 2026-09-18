@@ -146,6 +146,20 @@ registrado como consequência desta spec, não coberto por ela.
   serialização não introduz, nem precisa validar de novo, endereço fora do
   conjunto que o editor já restringe ao construir o diagrama.
 
+> **Revisão aditiva do RF-5 (2026-09-18), na aprovação do plano.** O texto
+> original do RF-5 continua valendo. A recusa com mensagem clara passa a
+> cobrir também **nomes de variável que o compilador externo não aceita,
+> embora o editor os aceite**:
+> - palavras reservadas da IEC 61131-3 (como `AND`, `NOT`, `TRUE`, `IF`);
+> - os nomes fixos do programa e da configuração (Q-4);
+> - dois nomes que diferem só em maiúsculas e minúsculas, porque
+>   identificadores IEC não fazem essa distinção.
+>
+> A recusa identifica a variável e não produz texto parcial. Renomear em
+> silêncio foi descartado, porque quebraria a correspondência entre diagrama e
+> texto que a Q-1 torna visível. Origem: decisão D-5 do `plan.md`, registrada
+> ali como tensão e trazida para a spec por decisão do autor.
+
 ## 5. Critérios de aceitação
 
 - **CA-1 (RF-1/RF-2/RF-3/RF-4).** Dado o diagrama de referência "espelho
