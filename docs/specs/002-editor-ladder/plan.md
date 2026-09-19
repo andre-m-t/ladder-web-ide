@@ -699,3 +699,8 @@ continua valendo como registro do que foi decidido em 2026-09-17.
   Console em toasts, que seria barulhento.
 - **Requisito atendido:** RF-9 (recusa visível e explicada), sem mudar o que o
   núcleo recusa.
+
+> **Ajuste de D-18 (2026-09-18, mesmo dia):** a pedido do autor, os toasts
+> passam do canto inferior direito para o **canto superior esquerdo**, logo
+> abaixo do cabeçalho (`top-14`, para não cobrir "Novo projeto"). O
+> comportamento não muda.

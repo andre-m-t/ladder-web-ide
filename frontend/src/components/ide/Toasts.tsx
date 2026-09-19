@@ -7,7 +7,9 @@
  * temporizador por toast, e delega o fechamento a `aoFechar` — controlado,
  * o estado da lista vive em `App`, como o `Console` com `entradas`.
  *
- * Empilhados no canto inferior direito, mais novo embaixo (ordem natural do
+ * Empilhados no canto superior esquerdo, logo abaixo do cabeçalho (`top-14`,
+ * para não cobrir "Novo projeto" — pedido do autor, 2026-09-18), mais novo
+ * embaixo (ordem natural do
  * array: `lib/toasts.ts` acrescenta ao fim). Ícone e cor por nível repetem o
  * padrão do `Console` (e da antiga aba Mensagens) (tokens `text-ide-suave/sucesso/
  * aviso/perigo`), com uma borda esquerda colorida a mais, já que aqui a cor
@@ -63,7 +65,7 @@ export default function Toasts({ toasts, aoFechar }: ToastsProps) {
     <div
       aria-live="polite"
       aria-relevant="additions"
-      className="fixed bottom-4 right-4 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
+      className="fixed left-4 top-14 z-50 flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
     >
       {toasts.map((toast) => (
         <ItemToast key={toast.id} toast={toast} aoFechar={aoFechar} />
