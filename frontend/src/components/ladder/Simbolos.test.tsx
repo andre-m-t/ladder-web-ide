@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
+import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
 
 const PROPS_BASE = { cx: 20, cy: 20, variavel: 'M1', selecionado: false }
 
@@ -139,12 +139,54 @@ describe('Simbolos', () => {
     expect(container.querySelector('text')?.textContent).toBe('?')
   })
 
+  it('BobinaSet desenha a marca "S" dentro do círculo, além do rótulo da variável', () => {
+    const { container } = render(
+      <svg>
+        <BobinaSet {...PROPS_BASE} />
+      </svg>,
+    )
+
+    const textos = Array.from(container.querySelectorAll('text')).map((t) => t.textContent)
+    expect(textos).toContain('S')
+    expect(textos).toContain('M1')
+    expect(container.querySelectorAll('path')).toHaveLength(2)
+  })
+
+  it('BobinaReset desenha a marca "R" dentro do círculo', () => {
+    const { container } = render(
+      <svg>
+        <BobinaReset {...PROPS_BASE} />
+      </svg>,
+    )
+
+    const textos = Array.from(container.querySelectorAll('text')).map((t) => t.textContent)
+    expect(textos).toContain('R')
+  })
+
+  it('fantasma de BobinaSet/BobinaReset não desenha o rótulo da variável, mas mantém a marca', () => {
+    const { container: setContainer } = render(
+      <svg>
+        <BobinaSet {...PROPS_BASE} fantasma />
+      </svg>,
+    )
+    const { container: resetContainer } = render(
+      <svg>
+        <BobinaReset {...PROPS_BASE} fantasma />
+      </svg>,
+    )
+
+    expect(Array.from(setContainer.querySelectorAll('text')).map((t) => t.textContent)).toEqual(['S'])
+    expect(Array.from(resetContainer.querySelectorAll('text')).map((t) => t.textContent)).toEqual(['R'])
+  })
+
   it('nenhuma classe de cor fixa (só tokens ide-*), em qualquer combinação de estado', () => {
     const { container } = render(
       <svg>
         <ContatoNA {...PROPS_BASE} endereco="%IX0.1" selecionado />
         <ContatoNF {...PROPS_BASE} fantasma />
         <Bobina {...PROPS_BASE} perigo />
+        <BobinaSet {...PROPS_BASE} selecionado />
+        <BobinaReset {...PROPS_BASE} fantasma />
       </svg>,
     )
 

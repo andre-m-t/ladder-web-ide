@@ -2,11 +2,25 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Elemento, Variavel } from '../../ladder/modelo'
+import { PV_MAX, PV_MIN } from '../../ladder/ctu'
+import type { Elemento, ElementoCtu, ElementoSimples, Variavel } from '../../ladder/modelo'
 import ModalVariavel from './ModalVariavel'
 
-function elemento(tipo: Elemento['tipo'], variavel: string | null = null): Elemento {
+function elemento(tipo: ElementoSimples['tipo'], variavel: string | null = null): Elemento {
   return { id: 'e1', tipo, celula: { linha: 0, coluna: 0 }, variavel }
+}
+
+function elementoCtu(overrides: Partial<ElementoCtu> = {}): ElementoCtu {
+  return {
+    id: 'e1',
+    tipo: 'ctu',
+    celula: { linha: 0, coluna: 7 },
+    linhaReset: 1,
+    instancia: 'ctu0',
+    pv: 12,
+    saida: null,
+    ...overrides,
+  }
 }
 
 function variavel(nome: string, endereco?: string): Variavel {
@@ -165,6 +179,108 @@ describe('ModalVariavel — Tab preso no diálogo', () => {
     await usuario.tab({ shift: true })
 
     expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+  })
+})
+
+describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
+  it('título "contador CTU", saída na lista (entradas desabilitadas, como bobina), com o motivo específico do contador', () => {
+    const variaveis = [variavel('entrada', '%IX0.0'), variavel('atingiu')]
+    render(<ModalVariavel elemento={elementoCtu()} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+
+    const dialogo = screen.getByRole('dialog')
+    expect(document.getElementById(dialogo.getAttribute('aria-labelledby') as string)).toHaveTextContent(/contador ctu/i)
+    const botaoEntrada = screen.getByRole('button', { name: /^entrada/i })
+    expect(botaoEntrada).toBeDisabled()
+    expect(botaoEntrada).toHaveTextContent(/entradas não podem ser escritas pelo contador/i)
+    expect(screen.getByRole('button', { name: /^atingiu/i })).not.toBeDisabled()
+  })
+
+  it('escolher uma variável na lista vincula a saída (mesmo caminho de aoEscolher)', async () => {
+    const usuario = userEvent.setup()
+    const aoEscolher = vi.fn()
+    const variaveis = [variavel('atingiu')]
+    render(<ModalVariavel elemento={elementoCtu()} variaveis={variaveis} aoEscolher={aoEscolher} aoFechar={vi.fn()} />)
+
+    await usuario.click(screen.getByRole('button', { name: /^atingiu/i }))
+
+    expect(aoEscolher).toHaveBeenCalledWith('atingiu')
+  })
+
+  it('mostra o campo "Limite (PV)" com o valor atual, min/max do núcleo', () => {
+    render(<ModalVariavel elemento={elementoCtu({ pv: 7 })} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+
+    const campo = screen.getByLabelText('Limite (PV)') as HTMLInputElement
+    expect(campo).toHaveValue(7)
+    expect(campo).toHaveAttribute('min', String(PV_MIN))
+    expect(campo).toHaveAttribute('max', String(PV_MAX))
+  })
+
+  it('não mostra o campo "Limite (PV)" para um elemento que não é CTU', () => {
+    render(<ModalVariavel elemento={elemento('bobina')} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+
+    expect(screen.queryByLabelText('Limite (PV)')).not.toBeInTheDocument()
+  })
+
+  it('"Aplicar limite" chama aoAlterarLimite com o número digitado, sem fechar o modal', async () => {
+    const usuario = userEvent.setup()
+    const aoAlterarLimite = vi.fn()
+    const aoFechar = vi.fn()
+    render(
+      <ModalVariavel
+        elemento={elementoCtu()}
+        variaveis={[]}
+        aoEscolher={vi.fn()}
+        aoFechar={aoFechar}
+        aoAlterarLimite={aoAlterarLimite}
+      />,
+    )
+
+    const campo = screen.getByLabelText('Limite (PV)')
+    await usuario.clear(campo)
+    await usuario.type(campo, '20')
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))
+
+    expect(aoAlterarLimite).toHaveBeenCalledWith(20)
+    expect(aoFechar).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('Enter no campo do limite também confirma', async () => {
+    const usuario = userEvent.setup()
+    const aoAlterarLimite = vi.fn()
+    render(
+      <ModalVariavel elemento={elementoCtu()} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} aoAlterarLimite={aoAlterarLimite} />,
+    )
+
+    const campo = screen.getByLabelText('Limite (PV)')
+    await usuario.clear(campo)
+    await usuario.type(campo, '5{Enter}')
+
+    expect(aoAlterarLimite).toHaveBeenCalledWith(5)
+  })
+
+  it('um valor fora do intervalo ainda é repassado ao callback — quem recusa é o núcleo, não o modal', async () => {
+    const usuario = userEvent.setup()
+    const aoAlterarLimite = vi.fn()
+    render(
+      <ModalVariavel elemento={elementoCtu()} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} aoAlterarLimite={aoAlterarLimite} />,
+    )
+
+    const campo = screen.getByLabelText('Limite (PV)')
+    await usuario.clear(campo)
+    await usuario.type(campo, String(PV_MAX + 1))
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))
+
+    expect(aoAlterarLimite).toHaveBeenCalledWith(PV_MAX + 1)
+  })
+
+  it('sem aoAlterarLimite, "Aplicar limite" não quebra (no-op)', async () => {
+    const usuario = userEvent.setup()
+    render(<ModalVariavel elemento={elementoCtu()} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
 

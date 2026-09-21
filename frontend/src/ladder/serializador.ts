@@ -34,10 +34,13 @@
 
 import {
   COLUNA_TERMINAL,
-  ehBobina,
   ehContato,
+  ehCtu,
+  ehTerminal,
+  variavelDoElemento,
   type Diagrama,
   type Elemento,
+  type ElementoCtu,
   type Rung,
   type TipoBobina,
 } from './modelo'
@@ -114,11 +117,56 @@ function validarNomesDeVariaveis(diagrama: Diagrama): string | null {
 }
 
 /**
- * `tipo` é um dos cinco tipos de elemento do subconjunto desta spec? O
- * `switch` é exaustivo por `never`: qualquer tipo futuro (ex.: um contador
- * ainda fora do modelo de dados) ou um valor forjado em tempo de execução
- * cai no `default` e é recusado explicitamente (D-5a, CA-6), em vez de
- * atravessar em silêncio.
+ * Recusa por instância de CTU inválida para o texto gerado (revisão aditiva
+ * do RF-5/D-5, contador crescente): nome reservado da IEC 61131-3, nome fixo
+ * do programa gerado, colisão (case-insensitive) com o nome de uma variável
+ * ou de outra instância, ou `pv` que não seja inteiro em 1..32767. Devolve o
+ * motivo em português, ou `null` se todas as instâncias são aceitáveis. Não
+ * valida `linhaReset` em si — a estrutura do diagrama (posição do CTU, forma
+ * da linha de reset) é responsabilidade de `validarDiagrama` (D-6, Q-2), não
+ * deste arquivo.
+ */
+function validarInstanciasCtu(diagrama: Diagrama): string | null {
+  const nomesDeVariaveis = new Set(diagrama.variaveis.map((v) => v.nome.toLowerCase()))
+  const instanciasVistas = new Map<string, string>()
+
+  for (let indiceDegrau = 0; indiceDegrau < diagrama.rungs.length; indiceDegrau++) {
+    const rung = diagrama.rungs[indiceDegrau]
+    for (const elemento of rung.elementos) {
+      if (!ehCtu(elemento)) continue
+      const instancia = elemento.instancia
+      const chave = instancia.toLowerCase()
+      const localizacao = `degrau ${indiceDegrau + 1}, elemento '${elemento.id}'`
+
+      if (PALAVRAS_RESERVADAS_IEC.has(instancia.toUpperCase())) {
+        return `instância de CTU inválida para o texto gerado: '${instancia}' é palavra reservada da IEC 61131-3 (${localizacao})`
+      }
+      if (NOMES_FIXOS.has(chave)) {
+        return `instância de CTU inválida para o texto gerado: '${instancia}' coincide com um nome fixo do programa gerado (prog0, Config0, Res0, task0 ou instance0) (${localizacao})`
+      }
+      if (nomesDeVariaveis.has(chave)) {
+        return `instância de CTU '${instancia}' colide com o nome de uma variável — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
+      }
+      const existente = instanciasVistas.get(chave)
+      if (existente !== undefined) {
+        return `instâncias de CTU '${existente}' e '${instancia}' colidem — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
+      }
+      instanciasVistas.set(chave, instancia)
+
+      if (!Number.isInteger(elemento.pv) || elemento.pv < 1 || elemento.pv > 32767) {
+        return `valor programado (PV) do CTU '${instancia}' inválido: ${elemento.pv} — precisa ser um número inteiro entre 1 e 32767 (${localizacao})`
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * `tipo` é um dos tipos de elemento do subconjunto desta spec? O `switch` é
+ * exaustivo por `never`: qualquer tipo futuro ou um valor forjado em tempo de
+ * execução cai no `default` e é recusado explicitamente (D-5a, CA-6), em vez
+ * de atravessar em silêncio.
  */
 function motivoTipoDesconhecido(tipo: Elemento['tipo']): string | null {
   switch (tipo) {
@@ -127,6 +175,7 @@ function motivoTipoDesconhecido(tipo: Elemento['tipo']): string | null {
     case 'bobina':
     case 'bobina_set':
     case 'bobina_reset':
+    case 'ctu':
       return null
     default: {
       const tipoForjado: never = tipo
@@ -238,7 +287,7 @@ function termoDaCelula(rung: Rung, linha: number, coluna: number): Termo {
     (e) => e.celula.linha === linha && e.celula.coluna === coluna && ehContato(e.tipo),
   )
   if (elemento === undefined) return TERMO_TRUE
-  return criarVar(elemento.variavel as string, elemento.tipo === 'contato_nf')
+  return criarVar(variavelDoElemento(elemento) as string, elemento.tipo === 'contato_nf')
 }
 
 /** Arestas do grafo do degrau (D-1): trilho em ordem de coluna, depois ramos
@@ -399,6 +448,48 @@ function emitirBobina(tipo: TipoBobina, nome: string, expressao: string): string
   }
 }
 
+// -- CTU (revisão aditiva do D-2/D-7, contador crescente) ------------------
+
+/**
+ * Expressão de `R` (reinício) do CTU: série (AND, em ordem de coluna) dos
+ * contatos de `linhaReset`, colunas `0..COLUNA_TERMINAL-1`, a partir do
+ * trilho esquerdo — NA → nome, NF → `NOT` nome, célula vazia conduz (é
+ * neutra no AND, como em qualquer série). Não usa `construirArestas`: essa
+ * linha não é um ramo (não está em `rung.ramos`), então nunca entra no
+ * circuito de `CU` — é lida à parte, só para montar `R`.
+ *
+ * Caso especial: linha de reset sem nenhum contato (todas as células vazias)
+ * não vira "sempre conduz" como a série normal faria — a ausência completa
+ * de fiação significa reset nunca acionado, `R := FALSE`. Diferente do
+ * trilho principal (onde "sem contato" energiza a bobina, D-2): lá o autor
+ * desenhou o degrau inteiro só com a bobina; aqui a linha de reset pode
+ * simplesmente não ter sido usada.
+ */
+function calcularExpressaoDeReset(rung: Rung, linhaReset: number): string {
+  const termos: Termo[] = []
+  for (let coluna = 0; coluna < COLUNA_TERMINAL; coluna++) {
+    const elemento = rung.elementos.find(
+      (e) => e.celula.linha === linhaReset && e.celula.coluna === coluna && ehContato(e.tipo),
+    )
+    if (elemento === undefined) continue
+    termos.push(criarVar(variavelDoElemento(elemento) as string, elemento.tipo === 'contato_nf'))
+  }
+  if (termos.length === 0) return 'FALSE'
+  return renderizarTermo(criarE(termos))
+}
+
+/** Linhas ST de um CTU já com a expressão de `CU` calculada (revisão
+ * aditiva do D-2): a chamada da instância, seguida da leitura de `Q` para a
+ * variável de saída — mesmo par de linhas de `variante K` (spike
+ * `spikes/modelo/preset25/`), na mesma ordem. */
+function emitirCtu(rung: Rung, ctu: ElementoCtu, expressaoCU: string): string[] {
+  const expressaoReset = calcularExpressaoDeReset(rung, ctu.linhaReset)
+  return [
+    `  ${ctu.instancia}(CU := ${expressaoCU}, R := ${expressaoReset}, PV := ${ctu.pv});`,
+    `  ${ctu.saida} := ${ctu.instancia}.Q;`,
+  ]
+}
+
 // -- Montagem do degrau (D-7, D-8) ----------------------------------------
 
 /** Degrau sem nenhum elemento e sem nenhum ramo (D-7): não foi tocado pelo
@@ -425,28 +516,44 @@ function emitirDegrau(rung: Rung, indiceDegrau: number): { ok: true; valor: Degr
   const elementoTerminal = rung.elementos.find(
     (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL,
   )
-  if (elementoTerminal === undefined || !ehBobina(elementoTerminal.tipo)) {
+  if (elementoTerminal === undefined || !ehTerminal(elementoTerminal.tipo)) {
     return {
       ok: false,
-      motivo: `degrau ${indiceDegrau + 1} não termina numa bobina — diagrama estruturalmente inválido para serialização`,
+      motivo: `degrau ${indiceDegrau + 1} não termina num terminal (bobina ou CTU) — diagrama estruturalmente inválido para serialização`,
     }
   }
 
   const termo = calcularExpressaoDoDegrau(rung)
   const expressao = renderizarTermo(termo)
-  const linhas = [
-    `  (* degrau ${indiceDegrau + 1} *)`,
-    ...emitirBobina(elementoTerminal.tipo as TipoBobina, elementoTerminal.variavel as string, expressao),
-  ]
+  const linhasDoTerminal = ehCtu(elementoTerminal)
+    ? emitirCtu(rung, elementoTerminal, expressao)
+    : emitirBobina(elementoTerminal.tipo as TipoBobina, variavelDoElemento(elementoTerminal) as string, expressao)
+  const linhas = [`  (* degrau ${indiceDegrau + 1} *)`, ...linhasDoTerminal]
 
   return { ok: true, valor: { linhas, rungId: rung.id } }
 }
 
 // -- Declarações (D-3) -----------------------------------------------------
 
+/** Instâncias de CTU do diagrama, na ordem dos degraus (D-3, revisão
+ * aditiva) — mesma ordem em que os degraus aparecem em `diagrama.rungs`,
+ * não a ordem de inserção dos elementos dentro de cada um (só um terminal
+ * CTU por degrau é uma invariante estrutural, não algo que este arquivo
+ * precise impor). */
+function instanciasDeCtu(diagrama: Diagrama): string[] {
+  const instancias: string[] = []
+  for (const rung of diagrama.rungs) {
+    for (const elemento of rung.elementos) {
+      if (ehCtu(elemento)) instancias.push(elemento.instancia)
+    }
+  }
+  return instancias
+}
+
 function linhasDeDeclaracao(diagrama: Diagrama): string[] {
   const localizadas = diagrama.variaveis.filter((v) => v.endereco !== undefined)
   const internas = diagrama.variaveis.filter((v) => v.endereco === undefined)
+  const instancias = instanciasDeCtu(diagrama)
   const linhas: string[] = []
 
   if (localizadas.length > 0) {
@@ -454,9 +561,10 @@ function linhasDeDeclaracao(diagrama: Diagrama): string[] {
     for (const v of localizadas) linhas.push(`    ${v.nome} AT ${v.endereco} : BOOL;`)
     linhas.push('  END_VAR')
   }
-  if (internas.length > 0) {
+  if (internas.length > 0 || instancias.length > 0) {
     linhas.push('  VAR')
     for (const v of internas) linhas.push(`    ${v.nome} : BOOL;`)
+    for (const instancia of instancias) linhas.push(`    ${instancia} : CTU;`)
     linhas.push('  END_VAR')
   }
 
@@ -491,20 +599,23 @@ export function serializar(diagrama: Diagrama): ResultadoSerializacao {
   const motivoNomes = validarNomesDeVariaveis(diagrama)
   if (motivoNomes !== null) return { ok: false, motivo: motivoNomes }
 
+  const motivoCtus = validarInstanciasCtu(diagrama)
+  if (motivoCtus !== null) return { ok: false, motivo: motivoCtus }
+
   for (let indiceDegrau = 0; indiceDegrau < diagrama.rungs.length; indiceDegrau++) {
     const rung = diagrama.rungs[indiceDegrau]
     for (const elemento of rung.elementos) {
-      if (elemento.variavel === null) {
+      if (variavelDoElemento(elemento) === null) {
         return {
           ok: false,
           motivo: `elemento '${elemento.id}' em degrau ${indiceDegrau + 1} está sem variável atribuída`,
           rungId: rung.id,
         }
       }
-      if (!diagrama.variaveis.some((v) => v.nome === elemento.variavel)) {
+      if (!diagrama.variaveis.some((v) => v.nome === variavelDoElemento(elemento))) {
         return {
           ok: false,
-          motivo: `elemento '${elemento.id}' em degrau ${indiceDegrau + 1} referencia a variável '${elemento.variavel}', que não existe`,
+          motivo: `elemento '${elemento.id}' em degrau ${indiceDegrau + 1} referencia a variável '${variavelDoElemento(elemento)}', que não existe`,
           rungId: rung.id,
         }
       }

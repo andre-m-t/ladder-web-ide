@@ -1,6 +1,6 @@
 # Tarefas 002 — Editor Ladder visual
 
-> **Status:** aprovado (2026-09-16) — em execução (Fatias 1, 2 e 3 concluídas; falta a Fatia 4)
+> **Status:** aprovado (2026-09-16) — concluído (2026-09-19; Fatia 4 com o contador serializado, plano §19)
 > **Plano de origem:** [`plan.md`](./plan.md) (aprovado em 2026-09-16, com as ressalvas R-1 a R-3 da §10)
 
 Lista de execução. Cada tarefa é pequena, tem arquivos-alvo, dependências
@@ -277,7 +277,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
 
 ## Fatia 4 — S5b: ramo paralelo, SET/RESET e CTU
 
-- [ ] **#15 — [N] SET/RESET (ramo paralelo e limite de linhas já entregues na #24)**
+- [x] **#15 — [N] SET/RESET (ramo paralelo e limite de linhas já entregues na #24)**
   - Arquivos: `frontend/src/ladder/edicao.ts`, `validacao.ts`, testes
   - Depende de: #11
   - Pronto quando: `criarRamo(degrau, colunaInicio, colunaFim)`,
@@ -285,7 +285,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     extra (**CA-10**); `rung_incompleto` para ramo aberto/vazio (**CA-4**);
     SET/RESET inseríveis como terminais.
 
-- [ ] **#16 — [N] CTU destacável e `BLINK`**
+- [x] **#16 — [N] CTU destacável e `BLINK`**
   - Arquivos: `frontend/src/ladder/ctu.ts`, `ctu.test.ts`, `modelo.ts`,
     `validacao.ts`, `fixtures.ts`
   - Depende de: #15
@@ -299,7 +299,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     Verificação de destacabilidade: listar no relatório os pontos de extensão
     que o compilador aponta ao remover `'ctu'` (sem remover de fato).
 
-- [ ] **#17 — [B] `blink_ladder.st` e teste de equivalência (R-1)**
+- [x] **#17 — [B] `blink_ladder.st` e teste de equivalência (R-1)** — *substituída em 2026-09-19 (plano D-19); ver nota abaixo*
   - Arquivos: `backend/tests/fixtures/blink_ladder.st`,
     `backend/tests/test_blink_ladder.py`
   - Depende de: — (o ST é a variante K já medida; o mapeamento degrau a degrau
@@ -311,8 +311,18 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     `plc_host_runner`; compila no `iec2c`; **comentário no topo do teste e do
     `.st`**: "equivalência diagrama ↔ ST assumida, não testada; este teste prova
     só ST ↔ blink.st; substituir pelo ST serializado quando a F8 existir".
+  - **Substituição (2026-09-19, plano D-19; spec 003, RF-13/CA-10, tarefa
+    #12 do plano 003).** O texto original fica como registro. O
+    `blink_ladder.st` escrito à mão **não foi criado**: com a F8 pronta, o
+    ST comparado é o que o serializador gera para a fixture `BLINK`, ou seja,
+    `backend/tests/fixtures/serializados/blink.st`, gravado pelo vitest.
+    `test_serializador_diferencial.py` executa esse texto no
+    `plc_host_runner` contra `blink.toml` e contra a execução de `blink.st`.
+    Foram 200 ciclos × 3 padrões (sempre 0; pulso no 60; pressionado 45–55),
+    com **0 divergências**. A equivalência diagrama ↔ ST deixa de ser
+    assumida.
 
-- [ ] **#18 — [D] Ramo, SET/RESET e CTU no editor**
+- [x] **#18 — [D] Ramo, SET/RESET e CTU no editor**
   - Arquivos: `frontend/src/components/ladder/GradeDegrau.tsx`, `Simbolos.tsx`,
     `SimboloCtu.tsx`, `Paleta.tsx`, `PainelVariaveis.tsx`, `EditorLadder.tsx`,
     testes
@@ -323,7 +333,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     **CA-3** (construir `BLINK` pela UI, igual à fixture, sem erros) e **CA-10**
     (mensagem do limite de linhas).
 
-- [ ] **#19 — [B] Manifesto do depósito**
+- [x] **#19 — [B] Manifesto do depósito**
   - Arquivos: `scripts/build-deposito.sh`
   - Depende de: #16, #18
   - Pronto quando: `modelo.ts`, `validacao.ts`, `edicao.ts`, `enderecos.ts`,
@@ -331,7 +341,7 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     `REQUIRED_FILES`; `--verificar` verde na imagem; nenhum `*.test.ts(x)` nem
     `frontend/e2e/` no pacote.
 
-- [ ] **#20 — Fechamento da feature**
+- [x] **#20 — Fechamento da feature**
   - Arquivos: `.claude/state.md`, `docs/specs/002-editor-ladder/tasks.md`
   - Depende de: #14, #17, #18, #19
   - Pronto quando: suíte completa verde (vitest, `tsc`, `npm run build`,
@@ -340,6 +350,20 @@ rodam em paralelo. Comandos em contêiner (Regra 5), com
     Q-6 e a pendência R-1 transferida para F8; Definition of Done por feature
     revisada — itens "ST gerado compila" e "caminho fim-a-fim até gravar"
     registrados como **não aplicáveis até a F8**, com justificativa.
+  - **Fechamento (2026-09-19).** A suíte completa ficou verde:
+    - `tsc` limpo;
+    - 717 testes vitest, com CA-3 montando o `BLINK` pela UI e CA-10;
+    - `vite build`;
+    - pytest `not slow` com 76 passed, incluindo a #4 e o diferencial que
+      substitui a #17;
+    - e2e 6 passed.
+
+    Desempenho: 50 degraus renderizam em ~141 ms (teto do teste: 5 s). A
+    limitação da Q-6 está declarada no painel, e a R-1 foi quitada pela F8.
+    Os itens da DoD "ST gerado compila" e "caminho fim-a-fim até gravar"
+    deixaram de ser "não aplicáveis": a F8 existe, e o `BLINK` montado no
+    editor compilou de verdade no Chromium, com back-end real, em 3 imagens.
+    A gravação física segue bloqueada por falta de hardware (F5).
 
 ---
 

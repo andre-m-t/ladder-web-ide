@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { COLUNA_TERMINAL, type Diagrama, type Ramo, type Rung, type Variavel } from './modelo'
+import { COLUNA_TERMINAL, variavelDoElemento, type Diagrama, type ElementoCtu, type Ramo, type Rung, type Variavel } from './modelo'
 import { validarDiagrama } from './validacao'
 import { degrauDaLinha, serializar } from './serializador'
 import type { Elemento } from './modelo'
@@ -39,7 +39,7 @@ function celulaConduz(rung: Rung, linha: number, coluna: number, valores: Record
     (e) => e.celula.linha === linha && e.celula.coluna === coluna && (e.tipo === 'contato_na' || e.tipo === 'contato_nf'),
   )
   if (elemento === undefined) return true
-  const valor = valores[elemento.variavel as string]
+  const valor = valores[variavelDoElemento(elemento) as string]
   return elemento.tipo === 'contato_na' ? valor : !valor
 }
 
@@ -815,6 +815,359 @@ describe('pior caso', () => {
     // Tamanho medido numa rodada de referência: ~700 caracteres. Limite
     // generoso (5x) para não quebrar por uma mudança inofensiva de formatação.
     expect(resultado.st.length).toBeLessThan(3500)
+  })
+})
+
+// -- CTU (revisão aditiva da spec 003, contador crescente) -----------------
+
+/** Elemento CTU de teste, com os campos que cada caso não quer repetir. */
+function elementoCtu(sobrescritas: Partial<ElementoCtu> = {}): ElementoCtu {
+  return {
+    id: 'ctu1',
+    tipo: 'ctu',
+    celula: { linha: 0, coluna: COLUNA_TERMINAL },
+    linhaReset: 1,
+    instancia: 'ctu0',
+    pv: 12,
+    saida: 'atingiu',
+    ...sobrescritas,
+  }
+}
+
+/** Diagrama de um único degrau terminado em CTU. */
+function diagramaComCtu(elementosSemCtu: Elemento[], ramos: Ramo[], ctu: ElementoCtu, variaveis: Variavel[]): Diagrama {
+  return diagramaDeUmDegrau([...elementosSemCtu, ctu], ramos, variaveis)
+}
+
+/** Extrai `CU := ...`, `R := ...` e `PV := ...` da linha de chamada do CTU
+ * (`  <instancia>(CU := x, R := y, PV := n);`) — independente da posição da
+ * linha no texto, ao contrário de `expressaoDoUnicoDegrau` (pensado para
+ * `:=`/`IF` de bobina, não para uma chamada de function block com 3
+ * parâmetros na mesma linha). */
+function chamadaDoUnicoCtu(diagrama: Diagrama): { cu: string; r: string; pv: string; instancia: string } {
+  const resultado = serializar(diagrama)
+  if (!resultado.ok) throw new Error(`esperava sucesso, recusou: ${resultado.motivo}`)
+  const linha = resultado.st.split('\n').find((l) => /\(CU :=/.test(l))
+  if (linha === undefined) throw new Error('nenhuma chamada de CTU encontrada no texto gerado')
+  const casado = linha.match(/^\s*(\S+)\(CU := (.*), R := (.*), PV := (.*)\);\s*$/)
+  if (casado === null) throw new Error(`linha de CTU fora do formato esperado: ${linha}`)
+  const [, instancia, cu, r, pv] = casado
+  return { instancia, cu, r, pv }
+}
+
+describe('CTU: CU (entrada de contagem)', () => {
+  it('CU simples: um contato NA no trilho', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    const chamada = chamadaDoUnicoCtu(diagrama)
+    expect(chamada.cu).toBe('a')
+    expect(chamada.instancia).toBe('ctu0')
+    expect(chamada.pv).toBe('12')
+  })
+
+  it('CU com ramo (OU): mesma expressão que alimentaria uma bobina hoje', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [{ id: 'b1', linha: 2, colunaInicio: 0, colunaFim: 0 }],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'b', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    // O ramo (linha 2) precisa do próprio contato — completa o diagrama à parte,
+    // já que `diagramaComCtu` só recebe os elementos do trilho.
+    diagrama.rungs[0].elementos.push({ id: 'e2', tipo: 'contato_na', celula: { linha: 2, coluna: 0 }, variavel: 'b' })
+    const chamada = chamadaDoUnicoCtu(diagrama)
+    expect(chamada.cu).toBe('a OR b')
+  })
+
+  it('contatos da linha de reset nunca entram no CU, mesmo com o mesmo nome de coluna', () => {
+    // trilho: contato 'a' na coluna 0; linhaReset (1): contato 'c' na coluna 0.
+    // Se `c` vazasse para o grafo de CU, a expressão teria 'a AND c' ou similar.
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'c', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    diagrama.rungs[0].elementos.push({ id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'c' })
+    const chamada = chamadaDoUnicoCtu(diagrama)
+    expect(chamada.cu).toBe('a')
+    expect(chamada.cu).not.toMatch(/\bc\b/)
+    expect(chamada.r).toBe('c')
+  })
+})
+
+describe('CTU: R (reinício)', () => {
+  it('0 contatos na linha de reset: R := FALSE', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    expect(chamadaDoUnicoCtu(diagrama).r).toBe('FALSE')
+  })
+
+  it('1 contato NA na linha de reset: R := nome', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'r', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    diagrama.rungs[0].elementos.push({ id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'r' })
+    expect(chamadaDoUnicoCtu(diagrama).r).toBe('r')
+  })
+
+  it('1 contato NF na linha de reset: R := NOT nome', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'r', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    diagrama.rungs[0].elementos.push({ id: 'e2', tipo: 'contato_nf', celula: { linha: 1, coluna: 0 }, variavel: 'r' })
+    expect(chamadaDoUnicoCtu(diagrama).r).toBe('NOT r')
+  })
+
+  it('2 contatos (NA + NF) na linha de reset: AND em ordem de coluna', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [
+        { nome: 'a', tipo: 'BOOL' },
+        { nome: 'r1', tipo: 'BOOL' },
+        { nome: 'r2', tipo: 'BOOL' },
+        { nome: 'atingiu', tipo: 'BOOL' },
+      ],
+    )
+    diagrama.rungs[0].elementos.push(
+      { id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'r1' },
+      { id: 'e3', tipo: 'contato_nf', celula: { linha: 1, coluna: 1 }, variavel: 'r2' },
+    )
+    expect(chamadaDoUnicoCtu(diagrama).r).toBe('r1 AND NOT r2')
+  })
+
+  it('célula vazia entre contatos da linha de reset conduz (é eliminada do AND)', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'r1', tipo: 'BOOL' }, { nome: 'r2', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    diagrama.rungs[0].elementos.push(
+      { id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'r1' },
+      // coluna 1 vazia
+      { id: 'e3', tipo: 'contato_na', celula: { linha: 1, coluna: 2 }, variavel: 'r2' },
+    )
+    expect(chamadaDoUnicoCtu(diagrama).r).toBe('r1 AND r2')
+  })
+})
+
+describe('CTU: saída (Q) e declaração', () => {
+  it('emite "<saida> := <instancia>.Q;" logo após a chamada', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu({ saida: 'atingiu' }),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) return
+    expect(resultado.st).toContain('  ctu0(CU := a, R := FALSE, PV := 12);\n  atingiu := ctu0.Q;')
+  })
+
+  it('declara a instância como "<instancia> : CTU;" no VAR de variáveis sem endereço', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) return
+    expect(resultado.st).toContain('    ctu0 : CTU;')
+    // Nenhuma variável tem endereço aqui -- "a" e "atingiu" (BOOL) e "ctu0"
+    // (CTU) compartilham o único bloco VAR (o de variáveis sem endereço).
+    expect(resultado.st.match(/END_VAR/g)).toHaveLength(1)
+  })
+
+  it('sem variável interna, mas com CTU: o bloco VAR aparece mesmo assim', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' }, { nome: 'atingiu', tipo: 'BOOL', endereco: '%QX0.0' }],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [
+            { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' },
+            elementoCtu({ saida: 'atingiu' }),
+          ],
+          ramos: [],
+        },
+      ],
+    }
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) return
+    expect(resultado.st).toContain('  VAR\n    ctu0 : CTU;\n  END_VAR')
+  })
+
+  it('dois CTUs: cada instância declarada, na ordem dos degraus', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [
+        { nome: 'a', tipo: 'BOOL' },
+        { nome: 'b', tipo: 'BOOL' },
+        { nome: 'q1', tipo: 'BOOL' },
+        { nome: 'q2', tipo: 'BOOL' },
+      ],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [
+            { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' },
+            elementoCtu({ id: 'c1', instancia: 'ctu0', saida: 'q1' }),
+          ],
+          ramos: [],
+        },
+        {
+          id: 'r2',
+          elementos: [
+            { id: 'e2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'b' },
+            elementoCtu({ id: 'c2', instancia: 'ctu1', saida: 'q2' }),
+          ],
+          ramos: [],
+        },
+      ],
+    }
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) return
+    const indiceCtu0 = resultado.st.indexOf('ctu0 : CTU;')
+    const indiceCtu1 = resultado.st.indexOf('ctu1 : CTU;')
+    expect(indiceCtu0).toBeGreaterThan(-1)
+    expect(indiceCtu1).toBeGreaterThan(indiceCtu0)
+    expect(resultado.st).toContain('  ctu0(CU := a,')
+    expect(resultado.st).toContain('  ctu1(CU := b,')
+  })
+})
+
+describe('CTU: recusas (revisão aditiva do RF-5/D-5)', () => {
+  function diagramaCtuValido(sobrescritas: Partial<ElementoCtu> = {}, variaveisExtra: Variavel[] = []): Diagrama {
+    return diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(sobrescritas),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }, ...variaveisExtra],
+    )
+  }
+
+  it('saída nula: recusado como elemento sem variável atribuída', () => {
+    const resultado = serializar(diagramaCtuValido({ saida: null }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('sem variável atribuída')
+  })
+
+  it('saída inexistente no diagrama: recusado', () => {
+    const resultado = serializar(diagramaCtuValido({ saida: 'fantasma' }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('fantasma')
+    expect(resultado.motivo).toContain('não existe')
+  })
+
+  it.each(['AND', 'ctu'])('instância "%s" é palavra reservada da IEC 61131-3: recusado', (instanciaInvalida) => {
+    const resultado = serializar(diagramaCtuValido({ instancia: instanciaInvalida }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain(instanciaInvalida)
+    expect(resultado.motivo).toContain('palavra reservada')
+  })
+
+  it('instância "prog0" coincide com nome fixo do programa gerado: recusado', () => {
+    const resultado = serializar(diagramaCtuValido({ instancia: 'prog0' }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('nome fixo')
+  })
+
+  it('instância colide (case-insensitive) com nome de variável: recusado', () => {
+    const resultado = serializar(diagramaCtuValido({ instancia: 'A' }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('colide com o nome de uma variável')
+  })
+
+  it('duas instâncias de CTU que diferem só em maiúsculas/minúsculas: recusado', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'a', tipo: 'BOOL' }, { nome: 'q1', tipo: 'BOOL' }, { nome: 'q2', tipo: 'BOOL' }],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [
+            { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' },
+            elementoCtu({ id: 'c1', instancia: 'Ctu0', saida: 'q1' }),
+          ],
+          ramos: [],
+        },
+        {
+          id: 'r2',
+          elementos: [
+            { id: 'e2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' },
+            elementoCtu({ id: 'c2', instancia: 'ctu0', saida: 'q2' }),
+          ],
+          ramos: [],
+        },
+      ],
+    }
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('Ctu0')
+    expect(resultado.motivo).toContain('ctu0')
+  })
+
+  it.each([1.5, -3.2])('pv não inteiro (%s): recusado', (pv) => {
+    const resultado = serializar(diagramaCtuValido({ pv }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('PV')
+  })
+
+  it.each([0, -1, 32768, 100000])('pv fora de 1..32767 (%s): recusado', (pv) => {
+    const resultado = serializar(diagramaCtuValido({ pv }))
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) return
+    expect(resultado.motivo).toContain('PV')
+  })
+
+  it('pv = 1 (limite inferior) e pv = 32767 (limite superior): aceitos', () => {
+    expect(serializar(diagramaCtuValido({ pv: 1 })).ok).toBe(true)
+    expect(serializar(diagramaCtuValido({ pv: 32767 })).ok).toBe(true)
+  })
+})
+
+describe('CTU: determinismo', () => {
+  it('duas chamadas com o mesmo diagrama com CTU produzem o mesmo texto', () => {
+    const diagrama = diagramaComCtu(
+      [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
+      [],
+      elementoCtu(),
+      [{ nome: 'a', tipo: 'BOOL' }, { nome: 'atingiu', tipo: 'BOOL' }],
+    )
+    diagrama.rungs[0].elementos.push({ id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'a' })
+    const r1 = serializar(diagrama)
+    const r2 = serializar(diagrama)
+    expect(r1).toEqual(r2)
   })
 })
 

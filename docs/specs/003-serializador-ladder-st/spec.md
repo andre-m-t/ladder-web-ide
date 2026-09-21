@@ -160,6 +160,29 @@ registrado como consequência desta spec, não coberto por ela.
 > texto que a Q-1 torna visível. Origem: decisão D-5 do `plan.md`, registrada
 > ali como tensão e trazida para a spec por decisão do autor.
 
+> **Revisão aditiva do escopo (2026-09-19): contador crescente.** O §7
+> deixava o contador crescente de fora e registrava a extensão como "trabalho
+> novo, não dívida". A extensão entra agora, por decisão do autor, na mesma
+> rodada em que o contador entra no modelo de dados (Fatia 4 da spec 002).
+> Motivo: sem ela, um diagrama com contador podia ser montado mas não
+> compilado, e a equivalência exata do pisca-pisca (Q-4 da spec 002) seguiria
+> verificável só contra um texto escrito à mão.
+>
+> - **RF-13.** A tradução deve cobrir o contador crescente do modelo da
+>   spec 002. A entrada de contagem vem do caminho de contatos que alimenta o
+>   elemento. O reinício vem do caminho de contatos da linha de reset, e a
+>   ausência de contato nesse caminho equivale a "nunca reinicia". O
+>   valor-limite é o configurado no elemento, e "atingiu o limite" é escrito
+>   na variável de saída do elemento. A instância do contador segue as mesmas
+>   recusas de nome da revisão do RF-5.
+> - **CA-10 (RF-13).** Dado o diagrama de referência de pisca-pisca com
+>   contagem e forçamento (`BLINK`), quando ele é serializado, então o texto
+>   é aceito pelo compilador externo. Executado no runtime real contra o
+>   programa de referência `blink.st` da spec 001, com as mesmas entradas,
+>   ele produz **zero divergências** ciclo a ciclo, em 200 ciclos e em três
+>   padrões de entrada: botão sempre solto, pulso isolado e botão mantido
+>   pressionado.
+
 ## 5. Critérios de aceitação
 
 - **CA-1 (RF-1/RF-2/RF-3/RF-4).** Dado o diagrama de referência "espelho
@@ -268,6 +291,8 @@ registrado como consequência desta spec, não coberto por ela.
   spec 002. Fica registrado que, quando isso acontecer, o serializador
   precisará ser estendido; essa extensão é trabalho novo, não uma dívida
   desta spec.
+  *(Revisto em 2026-09-19: o contador crescente passou a fazer parte do
+  escopo pelo RF-13. Ver a revisão aditiva no §4.)*
 - Temporizadores (TON/TOF) e contador decrescente (CTD) — permanecem fora do
   subconjunto do projeto inteiro, não só desta spec (cf. §7 da spec 002).
 - Seleção de placa, pinagem ou endereço por interface além do que a

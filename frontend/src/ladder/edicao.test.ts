@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
-import type { Diagrama, Elemento } from './modelo'
+import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX, variavelDoElemento } from './modelo'
+import type { Diagrama, Elemento, ElementoCtu, Rung } from './modelo'
 import { IO_ESPELHO } from './fixtures'
 import { validarDiagrama } from './validacao'
+import { PV_PADRAO } from './ctu'
 import {
   atualizarVariavel,
   celulaDeSoltura,
@@ -447,7 +448,7 @@ describe('vincularVariavel', () => {
     const resultado = vincularVariavel(original, 'e1', 'x')
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
-    expect(resultado.diagrama.rungs[0].elementos[0].variavel).toBe('x')
+    expect(variavelDoElemento(resultado.diagrama.rungs[0].elementos[0])).toBe('x')
   })
 
   it('recusa: elemento inexistente', () => {
@@ -945,7 +946,7 @@ describe('atualizarVariavel', () => {
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
     expect(resultado.diagrama.variaveis).toEqual([{ nome: 'y', tipo: 'BOOL' }])
-    expect(resultado.diagrama.rungs[0].elementos[0].variavel).toBe('y')
+    expect(variavelDoElemento(resultado.diagrama.rungs[0].elementos[0])).toBe('y')
     expect(original).toEqual(antes)
   })
 
@@ -1108,5 +1109,286 @@ describe('IO_ESPELHO construído só com edicao.ts', () => {
     diagrama = (vincularVariavel(diagrama, (segundoElemento as Elemento).id, 'saida') as { ok: true; diagrama: Diagrama }).diagrama
 
     expect(normalizarIds(diagrama)).toEqual(normalizarIds(IO_ESPELHO))
+  })
+})
+
+describe('celulaDeSoltura — CTU (tarefa #16, D-7)', () => {
+  it('ctu solto em qualquer célula vai para (0, COLUNA_TERMINAL), como bobina (ehTerminal)', () => {
+    expect(celulaDeSoltura('ctu', { linha: 1, coluna: 3 })).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+  })
+})
+
+describe('inserirElemento — CTU (tarefa #16, D-7): delega a criarCtu', () => {
+  it('caminho feliz: mesma posição/ocupação genéricas de qualquer elemento, resto é de ctu.ts', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].elementos).toEqual([
+      {
+        id: 'e1',
+        tipo: 'ctu',
+        celula: { linha: 0, coluna: COLUNA_TERMINAL },
+        linhaReset: 1,
+        instancia: 'ctu0',
+        pv: PV_PADRAO,
+        saida: null,
+      },
+    ])
+  })
+
+  it('recusa: fora da coluna terminal — mesmo motivo genérico de posição inválida', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: 2 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+  })
+
+  it('recusa: coluna terminal já ocupada por outro elemento', () => {
+    const comBobina = inserirElemento(diagramaVazio(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comBobina.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comBobina.diagrama)
+
+    const resultado = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('ocupada')
+  })
+})
+
+describe('inserirElemento — SET/RESET como terminal (tarefa #15)', () => {
+  it('bobina_set na coluna terminal: ok', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'bobina_set', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(true)
+  })
+
+  it('bobina_reset na coluna terminal: ok', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'bobina_reset', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(true)
+  })
+
+  it('bobina_set fora da coluna terminal: recusa citando o trilho principal', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'bobina_set', { linha: 0, coluna: 0 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('trilho principal')
+  })
+
+  it('bobina_reset fora da coluna terminal: recusa', () => {
+    const resultado = inserirElemento(diagramaVazio(), 'r1', 'bobina_reset', { linha: 0, coluna: 3 })
+    expect(resultado.ok).toBe(false)
+  })
+})
+
+describe('removerElemento — CTU leva os contatos da linha de reset junto (CA-7, D-7)', () => {
+  it('remove o CTU e todo elemento na sua linha de reset, preservando o resto do degrau', () => {
+    const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    const comContatoReset = inserirElemento(comCtu.diagrama, 'r1', 'contato_na', { linha: 1, coluna: 0 })
+    if (!comContatoReset.ok) throw new Error('esperava sucesso')
+    const comContatoNormal = inserirElemento(comContatoReset.diagrama, 'r1', 'contato_nf', { linha: 0, coluna: 0 })
+    if (!comContatoNormal.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContatoNormal.diagrama)
+    const ctuId = diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu')?.id as string
+
+    const resultado = removerElemento(diagrama, ctuId)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    // o CTU (e1) e o contato da linha de reset (e2) somem juntos; só sobra o
+    // contato fora da linha de reset (e3)
+    expect(resultado.diagrama.rungs[0].elementos).toEqual([
+      { id: 'e3', tipo: 'contato_nf', celula: { linha: 0, coluna: 0 }, variavel: null },
+    ])
+  })
+})
+
+describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair abaixo dela (D-7, correção pós-Chromium)', () => {
+  it('CTU com linhaReset 1 e nada mais no degrau: o ramo pega a linha 1 (a do reset), e o reset desce para a 2 — sem mutar a entrada', () => {
+    const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comCtu.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = criarRamo(original, 'r1', 0)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    // o ramo fica na linha 1 (não cruza mais a linha de reset, que agora é a 2)
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
+    const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
+    expect(ctu.linhaReset).toBe(2)
+    expect(original).toEqual(antes) // entrada intacta
+  })
+
+  it('troca leva junto os contatos que já estavam na linha de reset', () => {
+    const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    const comContatoReset = inserirElemento(comCtu.diagrama, 'r1', 'contato_na', { linha: 1, coluna: 3 })
+    if (!comContatoReset.ok) throw new Error('esperava sucesso')
+    const original = congelarProfundo(comContatoReset.diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+
+    const resultado = criarRamo(original, 'r1', 0)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
+    const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
+    expect(ctu.linhaReset).toBe(2)
+    // o contato que estava em (1,3) — na linha de reset antiga — segue com o
+    // reset para a linha 2, na mesma coluna
+    const contato = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'contato_na')
+    expect(contato?.celula).toEqual({ linha: 2, coluna: 3 })
+    expect(original).toEqual(antes)
+  })
+
+  it('sem troca possível (a linha candidata já tem outro ramo, só que em outra coluna): mantém o comportamento de hoje', () => {
+    // duas colunas diferentes forçam um ramo em cada linha; remover o da
+    // linha 1 e só então criar o CTU faz o reset nascer na linha 1 mesmo com
+    // um ramo (b2) já na linha 2 — o caso "impossível de resolver" (a linha 2
+    // já não está totalmente livre para virar a nova linha de reset)
+    let diagrama = diagramaVazio()
+    const r1 = criarRamo(diagrama, 'r1', 5)
+    if (!r1.ok) throw new Error('esperava sucesso')
+    diagrama = r1.diagrama // b1, linha 1, coluna 5
+    const r2 = criarRamo(diagrama, 'r1', 5)
+    if (!r2.ok) throw new Error('esperava sucesso')
+    diagrama = r2.diagrama // b2, linha 2, coluna 5 (linha 1 já ocupada nessa coluna)
+    const semB1 = removerRamo(diagrama, 'b1')
+    if (!semB1.ok) throw new Error('esperava sucesso')
+    diagrama = semB1.diagrama // só b2 (linha 2) sobra; linha 1 livre de novo
+
+    const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    diagrama = comCtu.diagrama
+
+    const original = congelarProfundo(diagrama)
+    const antes = JSON.parse(JSON.stringify(original))
+    const ctuAntes = original.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
+    expect(ctuAntes.linhaReset).toBe(1) // não dava para reservar a linha 2 (já tinha ramo)
+
+    const resultado = criarRamo(original, 'r1', 0) // coluna 0 não colide com b2 (coluna 5)
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    // o novo ramo cai na linha 2, junto com b2 (colunas diferentes) — o
+    // reset continua na 1, porque não havia como resolver sem mexer no ramo
+    // já existente
+    const ramos = resultado.diagrama.rungs[0].ramos
+    expect(ramos.find((r) => r.id === 'b2')).toEqual({ id: 'b2', linha: 2, colunaInicio: 5, colunaFim: 5 })
+    expect(ramos.some((r) => r.linha === 2 && r.colunaInicio === 0)).toBe(true)
+    const ctuDepois = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
+    expect(ctuDepois.linhaReset).toBe(1) // sem troca
+    expect(original).toEqual(antes)
+  })
+
+  it('CTU consome uma linha extra: depois de preencher as demais com ramos, o próximo ramo recusa (Q-3)', () => {
+    let diagrama = diagramaVazio()
+    const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    diagrama = comCtu.diagrama // linhaReset = 1
+
+    for (let i = 0; i < LINHAS_EXTRAS_MAX - 1; i++) {
+      const r = criarRamo(diagrama, 'r1', 0)
+      if (!r.ok) throw new Error('esperava sucesso ao criar ramo')
+      diagrama = r.diagrama
+    }
+    const congelado = congelarProfundo(diagrama)
+
+    const resultado = criarRamo(congelado, 'r1', 0)
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('linha livre')
+  })
+})
+
+describe('moverElemento — CTU (D-7)', () => {
+  it('dentro do mesmo degrau, para outra célula: recusa (só há uma posição válida, como bobina)', () => {
+    const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comCtu.diagrama)
+    const ctuId = diagrama.rungs[0].elementos[0].id
+
+    const resultado = moverElemento(diagrama, ctuId, 'r1', { linha: 0, coluna: 2 })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('posição inválida')
+  })
+
+  it('para outro degrau: recalcula linhaReset pela linha livre do destino e leva os contatos de reset junto', () => {
+    let diagrama = diagramaVazio()
+    const comDegrau2 = inserirDegrau(diagrama, 1)
+    if (!comDegrau2.ok) throw new Error('esperava sucesso')
+    diagrama = comDegrau2.diagrama // r1, r2
+
+    const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    diagrama = comCtu.diagrama // ctu em r1, linhaReset 1
+
+    const comContatoReset = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 3 })
+    if (!comContatoReset.ok) throw new Error('esperava sucesso')
+    diagrama = comContatoReset.diagrama
+
+    // ocupa a linha 1 do degrau destino com um ramo, para forçar o recálculo
+    // da linha de reset do CTU para a linha 2
+    const comRamoDestino = criarRamo(diagrama, 'r2', 5)
+    if (!comRamoDestino.ok) throw new Error('esperava sucesso')
+    diagrama = comRamoDestino.diagrama
+
+    const congelado = congelarProfundo(diagrama)
+    const ctuId = congelado.rungs[0].elementos.find((e) => e.tipo === 'ctu')?.id as string
+
+    const resultado = moverElemento(congelado, ctuId, 'r2', { linha: 0, coluna: COLUNA_TERMINAL })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    const rungDestino = resultado.diagrama.rungs.find((r) => r.id === 'r2') as Rung
+    const ctuMovido = rungDestino.elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
+    expect(ctuMovido.linhaReset).toBe(2) // linha 1 do destino já tinha o ramo b1
+    const contatoMovido = rungDestino.elementos.find((e) => e.tipo === 'contato_na')
+    expect(contatoMovido?.celula).toEqual({ linha: 2, coluna: 3 })
+
+    const rungOrigem = resultado.diagrama.rungs.find((r) => r.id === 'r1') as Rung
+    expect(rungOrigem.elementos).toEqual([]) // nada ficou órfão na origem
+  })
+
+  it('para outro degrau sem linha livre no destino: recusa', () => {
+    let diagrama = diagramaVazio()
+    const comDegrau2 = inserirDegrau(diagrama, 1)
+    if (!comDegrau2.ok) throw new Error('esperava sucesso')
+    diagrama = comDegrau2.diagrama
+
+    const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    diagrama = comCtu.diagrama
+
+    for (let i = 0; i < LINHAS_EXTRAS_MAX; i++) {
+      const r = criarRamo(diagrama, 'r2', 0)
+      if (!r.ok) throw new Error('esperava sucesso ao criar ramo')
+      diagrama = r.diagrama
+    }
+    const congelado = congelarProfundo(diagrama)
+    const ctuId = congelado.rungs[0].elementos.find((e) => e.tipo === 'ctu')?.id as string
+
+    const resultado = moverElemento(congelado, ctuId, 'r2', { linha: 0, coluna: COLUNA_TERMINAL })
+    expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toContain('linha livre')
+  })
+
+  it('mover um contato para a linha de reset de um CTU do mesmo degrau: permitido', () => {
+    const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
+    if (!comCtu.ok) throw new Error('esperava sucesso')
+    const comContato = inserirElemento(comCtu.diagrama, 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comContato.ok) throw new Error('esperava sucesso')
+    const diagrama = congelarProfundo(comContato.diagrama)
+    const contatoId = diagrama.rungs[0].elementos.find((e) => e.tipo === 'contato_na')?.id as string
+
+    const resultado = moverElemento(diagrama, contatoId, 'r1', { linha: 1, coluna: 0 })
+
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    const contatoMovido = resultado.diagrama.rungs[0].elementos.find((e) => e.id === contatoId)
+    expect(contatoMovido?.celula).toEqual({ linha: 1, coluna: 0 })
   })
 })

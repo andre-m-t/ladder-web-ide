@@ -18,11 +18,22 @@
  *
  * **Tokens só (tarefa #23, D-13):** o painel usa `bg-ide-elevado`/`text-ide-*`;
  * o overlay é um escurecimento neutro (`bg-black/60`), independente de tema.
+ *
+ * **CTU: saída e limite (tarefa #18, D-19):** o CTU é tratado como bobina na
+ * escolha de variável (`ehElementoBobina`, entradas desabilitadas) — o
+ * vínculo grava `saida` (`variavelDoElemento`/`vincularVariavel` já cobrem
+ * essa diferença de forma, nenhuma mudança de lógica de escolha aqui). Só
+ * para um CTU, um campo numérico "Limite (PV)" some abaixo da lista: os
+ * atributos `min`/`max`/`step` do `<input type="number">` são só uma dica
+ * nativa — quem decide de fato se o valor é válido é o núcleo
+ * (`ctu.ts#atualizarCtu`), via `aoAlterarLimite`; confirmar não fecha o modal
+ * (o autor pode querer também escolher a variável de saída na mesma visita).
  */
-import { useEffect, useId, useRef, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 
 import { classeDaVariavel, type ClasseVariavel } from '../../ladder/enderecos'
-import { ehBobina, type Elemento, type Variavel } from '../../ladder/modelo'
+import { PV_MAX, PV_MIN } from '../../ladder/ctu'
+import { ehBobina, ehCtu, variavelDoElemento, type Elemento, type Variavel } from '../../ladder/modelo'
 
 export interface ModalVariavelProps {
   /** Elemento cujo vínculo está sendo editado — o modal só é montado quando aberto. */
@@ -30,6 +41,11 @@ export interface ModalVariavelProps {
   variaveis: Variavel[]
   aoEscolher: (nome: string | null) => void
   aoFechar: () => void
+  /** CTU (tarefa #18): chamado ao confirmar um novo limite (PV) — o
+   * `EditorLadder` aplica via `atualizarCtu` e recusa com motivo se
+   * inválido. Sem esta prop, o botão "Aplicar limite" não tem efeito. O
+   * campo só aparece quando o elemento é um CTU. */
+  aoAlterarLimite?: (pv: number) => void
 }
 
 const ROTULO_CLASSE: Record<ClasseVariavel, string> = {
@@ -50,6 +66,8 @@ function rotuloTipoElemento(tipo: Elemento['tipo']): string {
       return 'bobina SET'
     case 'bobina_reset':
       return 'bobina RESET'
+    case 'ctu':
+      return 'contador CTU'
   }
 }
 
@@ -57,16 +75,23 @@ function rotuloTipoElemento(tipo: Elemento['tipo']): string {
  * são identificadores IEC — nunca colidem com este marcador). */
 const OPCAO_SEM_VARIAVEL = '__sem-variavel__'
 
-export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFechar }: ModalVariavelProps) {
+export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFechar, aoAlterarLimite }: ModalVariavelProps) {
   const idTitulo = useId()
+  const idLimite = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
-  const ehElementoBobina = ehBobina(elemento.tipo)
+  const ehElementoBobina = ehBobina(elemento.tipo) || elemento.tipo === 'ctu'
+  // Mesmo motivo da bobina (RF-9: entrada só é lida, nunca escrita), mas o
+  // texto muda para o CTU — "escrita por bobina" não fazia sentido para um
+  // contador (ajuste pedido depois da verificação em Chromium).
+  const motivoDesabilitada = ehCtu(elemento) ? 'entradas não podem ser escritas pelo contador' : 'entradas não podem ser escritas por bobina'
+  const vinculoAtual = variavelDoElemento(elemento)
+  const [pv, setPv] = useState(() => (ehCtu(elemento) ? String(elemento.pv) : ''))
 
   useEffect(() => {
     const container = dialogRef.current
     if (!container) return
 
-    const vinculo = elemento.variavel
+    const vinculo = vinculoAtual
     const alvoVinculado =
       vinculo !== null
         ? container.querySelector<HTMLButtonElement>(`[data-opcao="${vinculo}"]:not(:disabled)`)
@@ -114,6 +139,22 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
     evento.stopPropagation()
   }
 
+  /** Confirma o limite (PV) digitado — o núcleo (`atualizarCtu`) é quem
+   * decide se o número é válido; aqui só descartamos texto que não vira
+   * número nenhum (não há o que enviar). */
+  function confirmarLimite() {
+    const numero = Number(pv)
+    if (Number.isNaN(numero)) return
+    aoAlterarLimite?.(numero)
+  }
+
+  function aoTeclarNoLimite(evento: KeyboardEvent<HTMLInputElement>) {
+    if (evento.key === 'Enter') {
+      evento.preventDefault()
+      confirmarLimite()
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={aoClicarOverlay}>
       <div
@@ -134,7 +175,7 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
             <button
               type="button"
               data-opcao={OPCAO_SEM_VARIAVEL}
-              aria-current={elemento.variavel === null ? 'true' : undefined}
+              aria-current={vinculoAtual === null ? 'true' : undefined}
               onClick={() => aoEscolher(null)}
               className="w-full rounded border border-ide-borda px-2 py-1 text-left text-sm text-ide-texto hover:bg-ide-painel"
             >
@@ -151,7 +192,7 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
                   type="button"
                   data-opcao={variavel.nome}
                   disabled={desabilitada}
-                  aria-current={elemento.variavel === variavel.nome ? 'true' : undefined}
+                  aria-current={vinculoAtual === variavel.nome ? 'true' : undefined}
                   onClick={() => aoEscolher(variavel.nome)}
                   className="w-full rounded border border-ide-borda px-2 py-1 text-left text-sm text-ide-texto hover:bg-ide-painel disabled:cursor-not-allowed disabled:bg-ide-fundo disabled:text-ide-suave"
                 >
@@ -162,7 +203,7 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
                       {variavel.endereco ? ` ${variavel.endereco}` : ''})
                     </span>
                   </span>
-                  {desabilitada && <span className="block text-xs text-ide-perigo">entradas não podem ser escritas por bobina</span>}
+                  {desabilitada && <span className="block text-xs text-ide-perigo">{motivoDesabilitada}</span>}
                 </button>
               </li>
             )
@@ -170,6 +211,34 @@ export default function ModalVariavel({ elemento, variaveis, aoEscolher, aoFecha
         </ul>
 
         {variaveis.length === 0 && <p className="mt-2 text-sm text-ide-suave">Crie variáveis na tabela ao lado.</p>}
+
+        {ehCtu(elemento) && (
+          <div className="mt-3 flex flex-col gap-1 border-t border-ide-borda pt-3">
+            <label htmlFor={idLimite} className="text-xs font-medium text-ide-texto">
+              Limite (PV)
+            </label>
+            <div className="flex gap-2">
+              <input
+                id={idLimite}
+                type="number"
+                min={PV_MIN}
+                max={PV_MAX}
+                step={1}
+                value={pv}
+                onChange={(evento) => setPv(evento.target.value)}
+                onKeyDown={aoTeclarNoLimite}
+                className="w-24 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto"
+              />
+              <button
+                type="button"
+                onClick={confirmarLimite}
+                className="rounded border border-ide-borda px-2 py-1 text-xs text-ide-texto hover:bg-ide-painel"
+              >
+                Aplicar limite
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 flex justify-end">
           <button type="button" onClick={aoFechar} className="rounded border border-ide-borda px-3 py-1 text-sm text-ide-texto hover:bg-ide-painel">

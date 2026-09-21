@@ -11,6 +11,13 @@
  * divergência de comportamento aponta para um defeito real do serializador,
  * não para uma cópia manual desatualizada.
  *
+ * `blink` (revisão aditiva com o contador `CTU`, `fixtures.ts`/`BLINK`)
+ * quita a mesma R-1 para a variante K do spike `spikes/modelo/preset25/`: o
+ * `.st` gravado aqui é o que `serializar` produz de verdade, e
+ * `test_serializador_diferencial.py` mede a equivalência com `blink.st`
+ * (spec 001) em vez de assumi-la — não existe `blink_ladder.st` escrito à
+ * mão.
+ *
  * Os arquivos são versionados: uma mudança no serializador que altere o
  * texto produzido faz este teste falhar (sem `-u`), obrigando quem mudou a
  * olhar o diff e decidir se a mudança é intencional. Para regenerá-los de
@@ -22,7 +29,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { IO_ESPELHO, MINIMAL, RAMO_OU, SELO, SET_RESET } from './fixtures'
+import { BLINK, IO_ESPELHO, MINIMAL, RAMO_OU, SELO, SET_RESET } from './fixtures'
 import { serializar } from './serializador'
 
 // Caminho relativo ao próprio arquivo de teste — `toMatchFileSnapshot`
@@ -41,6 +48,7 @@ describe('arquivos dourados (D-11) — ponte TS -> pytest', () => {
     ['ramo_ou', RAMO_OU],
     ['set_reset', SET_RESET],
     ['selo', SELO],
+    ['blink', BLINK],
   ] as const)('%s: o texto serializado bate com o arquivo dourado', async (nome, diagrama) => {
     const resultado = serializar(diagrama)
     expect(resultado.ok).toBe(true)

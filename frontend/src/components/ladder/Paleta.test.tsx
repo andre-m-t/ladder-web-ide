@@ -21,7 +21,7 @@ describe('Paleta — itens arrastáveis', () => {
   it('cada item é um "item arrastável" (aria-roledescription), não um botão de ação', () => {
     render(<Paleta {...propsBase()} />)
 
-    for (const nome of [/contato na/i, /contato nf/i, /^bobina$/i, /^ramo$/i]) {
+    for (const nome of [/contato na/i, /contato nf/i, /^bobina$/i, /bobina set/i, /bobina reset/i, /^ramo$/i, /contador/i]) {
       const item = screen.getByRole('button', { name: nome })
       expect(item).toHaveAttribute('aria-roledescription', 'item arrastável')
     }
@@ -72,6 +72,40 @@ describe('Paleta — itens arrastáveis', () => {
 
     expect(screen.getByRole('button', { name: 'Contato NA' })).toHaveAttribute('data-tipo-paleta', 'contato_na')
     expect(screen.getByRole('button', { name: 'Ramo' })).toHaveAttribute('data-tipo-paleta', 'ramo')
+  })
+})
+
+describe('Paleta — SET, RESET e Contador (tarefa #18)', () => {
+  it('itens "Bobina SET" e "Bobina RESET" mostram os glifos -(S)- e -(R)-', () => {
+    render(<Paleta {...propsBase()} />)
+
+    expect(screen.getByRole('button', { name: 'Bobina SET' })).toHaveTextContent('-(S)-')
+    expect(screen.getByRole('button', { name: 'Bobina RESET' })).toHaveTextContent('-(R)-')
+  })
+
+  it('pointerdown em "Bobina SET"/"Bobina RESET"/"Contador" chama aoIniciarArrastoPonteiro com o tipo certo', () => {
+    const aoIniciarArrastoPonteiro = vi.fn()
+    render(<Paleta {...propsBase()} aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiro} />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Bobina SET' }), { pointerId: 1, clientX: 5, clientY: 5 })
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('bobina_set', expect.anything())
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Bobina RESET' }), { pointerId: 2, clientX: 5, clientY: 5 })
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('bobina_reset', expect.anything())
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Contador' }), { pointerId: 3, clientX: 5, clientY: 5 })
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('ctu', expect.anything())
+  })
+
+  it('Espaço no item Contador chama aoIniciarArrastoTeclado com "ctu"', async () => {
+    const usuario = userEvent.setup()
+    const aoIniciarArrastoTeclado = vi.fn()
+    render(<Paleta {...propsBase()} aoIniciarArrastoTeclado={aoIniciarArrastoTeclado} />)
+
+    screen.getByRole('button', { name: 'Contador' }).focus()
+    await usuario.keyboard(' ')
+
+    expect(aoIniciarArrastoTeclado).toHaveBeenCalledWith('ctu')
   })
 })
 

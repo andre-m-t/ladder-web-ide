@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
-import type { Diagrama, Rung } from './modelo'
+import type { Diagrama, Elemento, Rung } from './modelo'
 import { diagramaVazio } from './edicao'
 import { IO_ESPELHO, MINIMAL } from './fixtures'
 import { descreverCelula, motivoPosicaoInvalida, posicaoValida, validarDiagrama } from './validacao'
@@ -475,6 +475,128 @@ describe('validarDiagrama — Q-6 (D-10): set_reset_autodependente', () => {
     }
     const problemas = validarDiagrama(diagramaBase([rungSet]))
     expect(problemas.filter((p) => p.codigo === 'set_reset_autodependente')).toEqual([])
+  })
+})
+
+describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e limite', () => {
+  function rungComCtu(pv = 10): Rung {
+    return {
+      id: 'r1',
+      elementos: [
+        { id: 'c1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        {
+          id: 'ctu1',
+          tipo: 'ctu',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaReset: 1,
+          instancia: 'ctu0',
+          pv,
+          saida: 'saida',
+        },
+      ],
+      ramos: [],
+    }
+  }
+
+  it('CTU conta como terminal: sem rung_incompleto mesmo sem nenhuma bobina', () => {
+    const problemas = validarDiagrama(diagramaBase([rungComCtu()]))
+    expect(problemas.filter((p) => p.codigo === 'rung_incompleto')).toEqual([])
+  })
+
+  it('CTU com saida nula: variavel_nao_atribuida (mesma regra de bobina/contato)', () => {
+    const rung = rungComCtu()
+    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: null }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    expect(problemas).toContainEqual(
+      expect.objectContaining({ codigo: 'variavel_nao_atribuida', elementoId: 'ctu1', severidade: 'erro' }),
+    )
+  })
+
+  it('CTU com saida inexistente: variavel_inexistente', () => {
+    const rung = rungComCtu()
+    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: 'fantasma' }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    expect(problemas).toContainEqual(
+      expect.objectContaining({ codigo: 'variavel_inexistente', elementoId: 'ctu1', severidade: 'erro' }),
+    )
+  })
+
+  it('CTU com saida numa entrada (%IX): bobina_escreve_entrada, mensagem fala em "contador"', () => {
+    const rung = rungComCtu()
+    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: 'entrada' }
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    const problema = problemas.find((p) => p.codigo === 'bobina_escreve_entrada')
+    expect(problema).toEqual(
+      expect.objectContaining({ codigo: 'bobina_escreve_entrada', elementoId: 'ctu1', severidade: 'erro' }),
+    )
+    expect(problema?.mensagem).toContain('contador')
+  })
+
+  it('bobina_duplicada: CTU e bobina simples na mesma variável', () => {
+    const rungCtu = rungComCtu() // saida: 'saida'
+    const rungBobina: Rung = {
+      id: 'r2',
+      elementos: [
+        { id: 'c2', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'b2', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' },
+      ],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rungCtu, rungBobina]))
+    const duplicadas = problemas.filter((p) => p.codigo === 'bobina_duplicada')
+    expect(duplicadas.map((p) => p.elementoId).sort()).toEqual(['b2', 'ctu1'])
+  })
+
+  it('bobina_duplicada: dois CTUs com a mesma saida', () => {
+    const rung1 = rungComCtu()
+    const rung2: Rung = {
+      id: 'r2',
+      elementos: [
+        {
+          id: 'ctu2',
+          tipo: 'ctu',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaReset: 1,
+          instancia: 'ctu1',
+          pv: 10,
+          saida: 'saida',
+        },
+      ],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rung1, rung2]))
+    const duplicadas = problemas.filter((p) => p.codigo === 'bobina_duplicada')
+    expect(duplicadas.map((p) => p.elementoId).sort()).toEqual(['ctu1', 'ctu2'])
+  })
+
+  it('SET/RESET não duplicam com a saida de um CTU', () => {
+    const rungCtu = rungComCtu()
+    const rungSet: Rung = {
+      id: 'r2',
+      elementos: [{ id: 's1', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida' }],
+      ramos: [],
+    }
+    const problemas = validarDiagrama(diagramaBase([rungCtu, rungSet]))
+    expect(problemas.filter((p) => p.codigo === 'bobina_duplicada')).toEqual([])
+  })
+
+  it('contato na linha de reset do CTU: sem posicao_invalida', () => {
+    const rung = rungComCtu()
+    rung.elementos.push({ id: 'r1c', tipo: 'contato_nf', celula: { linha: 1, coluna: 0 }, variavel: 'entrada' })
+    const problemas = validarDiagrama(diagramaBase([rung]))
+    expect(problemas.filter((p) => p.codigo === 'posicao_invalida')).toEqual([])
+  })
+
+  it('linha de reset sem nenhum contato: não é problema (R := FALSE)', () => {
+    const problemas = validarDiagrama(diagramaBase([rungComCtu()]))
+    expect(problemas.filter((p) => p.mensagem.includes('ramo vazio'))).toEqual([])
+  })
+
+  it('ctu_limite_invalido: pv fora de [PV_MIN, PV_MAX] num diagrama já montado', () => {
+    const problemas = validarDiagrama(diagramaBase([rungComCtu(0)]))
+    expect(problemas).toContainEqual(
+      expect.objectContaining({ codigo: 'ctu_limite_invalido', elementoId: 'ctu1', severidade: 'erro' }),
+    )
   })
 })
 

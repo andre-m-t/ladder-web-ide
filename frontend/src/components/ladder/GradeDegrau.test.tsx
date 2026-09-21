@@ -399,6 +399,85 @@ describe('GradeDegrau — ramo paralelo, desenho (D-14)', () => {
   })
 })
 
+describe('GradeDegrau — CTU (tarefa #18, D-19)', () => {
+  const rungComCtu = {
+    id: 'r1',
+    elementos: [
+      { id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+      { id: 'e2', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
+      {
+        id: 'e3',
+        tipo: 'ctu' as const,
+        celula: { linha: 0, coluna: 7 },
+        linhaReset: 1,
+        instancia: 'ctu0',
+        pv: 12,
+        saida: 'atingiu',
+      },
+    ],
+    ramos: [],
+  }
+
+  it('a célula terminal (linha 0, coluna 8) mostra a caixa do CTU: rótulo, instância, PV e saída', () => {
+    render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu' })
+    expect(celula.textContent).toContain('CTU')
+    expect(celula.textContent).toContain('ctu0')
+    expect(celula.textContent).toContain('PV=12')
+    expect(celula.textContent).toContain('Q → atingiu')
+  })
+
+  it('a linha de reset tem células focáveis com o rótulo "reset do contador", exceto na coluna terminal', () => {
+    render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} />)
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, reset do contador, coluna 1, contato NA reset_ctu' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, reset do contador, coluna 2, vazia' })).toBeInTheDocument()
+    // coluna 8 (terminal) da linha de reset não existe como célula própria — é a caixa do CTU.
+    expect(screen.queryByRole('button', { name: /reset do contador, coluna 8/i })).not.toBeInTheDocument()
+  })
+
+  it('desenha um traço reto do trilho esquerdo até a caixa, na altura da linha de reset (sem conectores de ramo)', () => {
+    const { container } = render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} />)
+
+    // A linha de reset tem exatamente uma <line> própria (a trave reta) — bem diferente do
+    // padrão de 3 linhas (2 conectores verticais + 1 horizontal) que um Ramo desenharia.
+    const todasAsLinhas = Array.from(container.querySelectorAll('line'))
+    const yReset = todasAsLinhas.find((l) => l.getAttribute('aria-hidden') === 'true' && l.getAttribute('y1') === l.getAttribute('y2'))
+    expect(yReset).toBeDefined()
+  })
+
+  it('a altura do SVG cresce para caber a caixa até a linha de reset', () => {
+    const semCtu = { id: 'r1', elementos: [], ramos: [] }
+    const { container: c1 } = render(<GradeDegrau rung={semCtu} indice={0} {...propsBase()} />)
+    const alturaSemCtu = Number(c1.querySelector('svg')?.getAttribute('height'))
+
+    const { container: c2 } = render(<GradeDegrau rung={rungComCtu} indice={1} {...propsBase()} />)
+    const alturaComCtu = Number(c2.querySelector('svg')?.getAttribute('height'))
+
+    expect(alturaComCtu).toBeGreaterThan(alturaSemCtu)
+  })
+
+  it('prévia de inserir um CTU novo desenha a caixa fantasma na coluna terminal, usando a linhaReset informada', () => {
+    const rungVazio = { id: 'r1', elementos: [], ramos: [] }
+    const previa: Previa = { celula: { linha: 0, coluna: 7 }, tipo: 'inserir', elemento: 'ctu', linhaReset: 1 }
+    render(<GradeDegrau rung={rungVazio} indice={0} {...propsBase()} previa={previa} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
+    expect(celula).toHaveAttribute('data-previa', 'inserir')
+    expect(celula.textContent).toContain('CTU')
+  })
+
+  it('prévia inválida de CTU marca a célula terminal (sem caixa fantasma), como bobina', () => {
+    const rungVazio = { id: 'r1', elementos: [], ramos: [] }
+    const previa: Previa = { celula: { linha: 0, coluna: 7 }, tipo: 'invalida', motivo: 'sem linha livre para o reinício do contador' }
+    render(<GradeDegrau rung={rungVazio} indice={0} {...propsBase()} previa={previa} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
+    expect(celula).toHaveAttribute('data-previa', 'invalida')
+  })
+})
+
 describe('GradeDegrau — alça do ramo, geometria do arrasto por ponteiro (D-14)', () => {
   const rungComRamo = { id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }
 

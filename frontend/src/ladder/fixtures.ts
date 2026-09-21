@@ -133,3 +133,131 @@ export const SELO: Diagrama = {
     },
   ],
 }
+
+/**
+ * `blink.st` com contador crescente (revisão aditiva da spec 003, tarefa #17
+ * revista): reproduz a "variante K" do spike
+ * `spikes/modelo/preset25/variante_k_pv12_ctu_antes_iniFALSE_led_atrasado.st`
+ * (ver `RESULTADO.md` no mesmo diretório) — a única variante do modelo com
+ * `CTU` que fecha em **0 divergências** contra o `blink.st` real (spec 001)
+ * nos três padrões de entrada, 200 ciclos, medido com
+ * `diferencial.comparador.comparar_execucoes`. `blink_ladder.st` escrito à
+ * mão NÃO foi criado: `serializador.dourados.test.ts` grava o `.st` real que
+ * `serializar` produz a partir deste diagrama, e
+ * `test_serializador_diferencial.py` MEDE a equivalência com o `blink.st` de
+ * referência em vez de assumi-la — isso quita a ressalva R-1 do plano 002
+ * também para este cenário com contador.
+ *
+ * Oito degraus (diagrama ASCII do `RESULTADO.md`):
+ *
+ *   R1 |--[ pulso ]---------+--[CTU ctu0 PV=12]--( atingiu )
+ *      |--[ reset_ctu ]-----+   (CU no 1º caminho, R no 2º, linhaReset=1)
+ *   R2 |--[ atingiu ]------------------------(R pulso )
+ *   R3 |--[/ pulso ]-------------------------( pulso )
+ *   R4 |--[ led ]----------------------------( led_estava_aceso )
+ *   R5 |--[ reset_ctu ]--[/ led_estava_aceso ]--(S led )
+ *   R6 |--[ reset_ctu ]--[ led_estava_aceso ]---(R led )
+ *   R7 |--[ atingiu ]------------------------( reset_ctu )
+ *   R8 |--[ botao ]--------------------------(S led )
+ *
+ * `botao` (%IX0.0) e `led` (%QX0.0) espelham `blink.st`; `pulso`,
+ * `reset_ctu`, `atingiu` e `led_estava_aceso` são internas, como na variante
+ * K (nenhuma delas tem valor inicial — o modelo não expõe esse campo, e a
+ * variante K não depende de um).
+ */
+export const BLINK: Diagrama = {
+  versao: 1,
+  variaveis: [
+    { nome: 'botao', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'led', tipo: 'BOOL', endereco: '%QX0.0' },
+    { nome: 'pulso', tipo: 'BOOL' },
+    { nome: 'reset_ctu', tipo: 'BOOL' },
+    { nome: 'atingiu', tipo: 'BOOL' },
+    { nome: 'led_estava_aceso', tipo: 'BOOL' },
+  ],
+  rungs: [
+    {
+      // R1: CTU -- CU = pulso (trilho, linha 0), R = reset_ctu (linhaReset 1, sem ramo).
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+        { id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
+        {
+          id: 'e3',
+          tipo: 'ctu',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaReset: 1,
+          instancia: 'ctu0',
+          pv: 12,
+          saida: 'atingiu',
+        },
+      ],
+      ramos: [],
+    },
+    {
+      // R2: atingiu -> RESET pulso.
+      id: 'r2',
+      elementos: [
+        { id: 'e4', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'atingiu' },
+        { id: 'e5', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'pulso' },
+      ],
+      ramos: [],
+    },
+    {
+      // R3: NOT pulso -> pulso (toggle).
+      id: 'r3',
+      elementos: [
+        { id: 'e6', tipo: 'contato_nf', celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+        { id: 'e7', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'pulso' },
+      ],
+      ramos: [],
+    },
+    {
+      // R4: led -> led_estava_aceso (instantaneo antes do SET/RESET de led).
+      id: 'r4',
+      elementos: [
+        { id: 'e8', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'led' },
+        { id: 'e9', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'led_estava_aceso' },
+      ],
+      ramos: [],
+    },
+    {
+      // R5: reset_ctu AND NOT led_estava_aceso -> SET led.
+      id: 'r5',
+      elementos: [
+        { id: 'e10', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'reset_ctu' },
+        { id: 'e11', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'led_estava_aceso' },
+        { id: 'e12', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'led' },
+      ],
+      ramos: [],
+    },
+    {
+      // R6: reset_ctu AND led_estava_aceso -> RESET led.
+      id: 'r6',
+      elementos: [
+        { id: 'e13', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'reset_ctu' },
+        { id: 'e14', tipo: 'contato_na', celula: { linha: 0, coluna: 1 }, variavel: 'led_estava_aceso' },
+        { id: 'e15', tipo: 'bobina_reset', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'led' },
+      ],
+      ramos: [],
+    },
+    {
+      // R7: atingiu -> reset_ctu (o "limite atrasado 1 ciclo" que fecha a variante K).
+      id: 'r7',
+      elementos: [
+        { id: 'e16', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'atingiu' },
+        { id: 'e17', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'reset_ctu' },
+      ],
+      ramos: [],
+    },
+    {
+      // R8: botao -> SET led.
+      id: 'r8',
+      elementos: [
+        { id: 'e18', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'botao' },
+        { id: 'e19', tipo: 'bobina_set', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'led' },
+      ],
+      ramos: [],
+    },
+  ],
+}

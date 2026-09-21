@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-18 (revisão de UX pós-F8: download LD/ST no lugar da aba "ST gerado"; recusas em toasts no lugar da aba Mensagens) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-19 (Fatia 4 da spec 002 com o contador serializado: F7 ✅; `BLINK` montado no editor e medido contra `blink.st` com 0 divergências) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -39,7 +39,7 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F4 | Endpoint de compilação | servidor | ✅ |
 | F5 | Gravação via navegador | servidor + navegador | 🟡 |
 | F6 | Tela mínima (fatia vertical) | navegador | ✅ |
-| F7 | Editor Ladder visual | navegador | 🟡 |
+| F7 | Editor Ladder visual | navegador | ✅ |
 | F8 | Serializador Ladder → ST | navegador | ✅ |
 | F9 | Simulador de ciclo de varredura | navegador | ⬜ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
@@ -209,14 +209,11 @@ Interface deliberadamente crua: caixa de texto para colar ST, botão compilar, b
 
 ---
 
-## F7 — Editor Ladder visual 🟡
+## F7 — Editor Ladder visual ✅
 
 **Camada:** navegador · **Autoral:** sim · **Maior feature do projeto**
 
-**Spec em rascunho:** [`docs/specs/002-editor-ladder/spec.md`](../docs/specs/002-editor-ladder/spec.md)
-(Fase 1 do SDD concluída em 2026-09-16, aguardando aprovação do autor;
-`plan.md`/`tasks.md` são placeholders). Status desta feature continua ⬜ — nada
-foi implementado ainda.
+**Spec:** [`docs/specs/002-editor-ladder/spec.md`](../docs/specs/002-editor-ladder/spec.md). Aprovada em 2026-09-16; plano e tarefas também aprovados. As quatro fatias e os ajustes #21–#27 foram concluídos em 2026-09-19. O histórico está abaixo, em ordem.
 
 Construção de diagramas de contatos e bobinas em grade. A spec 002 cobre
 contato NA, contato NF, bobina simples, bobina SET/RESET, ramo paralelo (OU) e
@@ -338,7 +335,59 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - É a opção "toast" que o autor tinha avaliado e preterido na #25, retomada depois da experiência com a barra de status (#25) e com a aba (#26).
 - **Verificação:** `tsc` limpo, 587 testes vitest, build, e2e 5 passed (com um cenário novo de recusa → toast com mouse real), depósito ok. No Chromium, conferido nos dois temas, e o toast some sozinho.
 
-**Falta:** Fatia 4 (#15 SET/RESET, #16 CTU e `BLINK`, #17 `blink_ladder.st`, #18 SET/RESET/CTU no editor, #19 manifesto, #20 fechamento).
+**Concluído — Fatia 4 (#15–#20, plano §19/D-19, 2026-09-19)**
+
+Rodada feita em levas de subagentes sonnet: o orquestrador trocou o contrato,
+depois N ∥ S, depois D ∥ T.
+
+**Contrato**
+- `Elemento = ElementoSimples | ElementoCtu`, com `ehTerminal`, `ehCtu` e
+  `variavelDoElemento` em `modelo.ts`.
+- Dois ajustes ao §5 do plano, registrados em D-19:
+  - `instancia` é gerada (`ctu0`…) e não é editável;
+  - `vincularVariavel` num CTU grava `saida`.
+
+**Núcleo (`ladder/ctu.ts`, novo, destacável — Q-7)**
+- Criação, com a linha de reset na primeira linha extra livre.
+- Contatos da linha de reset e remoção em cascata (CA-7).
+- Mover entre degraus levando o reset.
+- `criarRamo` pula a linha de reset. Quando o ramo cairia abaixo dela, **troca**: o ramo sobe e o reset desce com seus contatos.
+  - Achado na verificação visual: o conector vertical do ramo cruzava a linha de reset, e isso se lia como junção.
+- Validação:
+  - saída nula, inexistente ou de entrada;
+  - saída do CTU conta como escrita simples em `bobina_duplicada`;
+  - código novo `ctu_limite_invalido` (PV 1–32767).
+- Os pontos de extensão foram listados pela frente N. É a verificação de destacabilidade da #16.
+
+**Editor**
+- Paleta com Bobina SET, Bobina RESET e Contador.
+- Bobinas com "S"/"R".
+- `SimboloCtu.tsx` (novo): caixa com fundo opaco da linha 0 até a linha de reset, CU/R, PV e Q → saída.
+- Linha de reset desenhada como traço reto do trilho até R, sem conector que sugira junção. As células têm `aria-label` "reset do contador".
+- Modal do CTU com o campo "Limite (PV)".
+- **CA-3:** `BLINK` montado inteiro pela UI, igual à fixture e sem problemas.
+- **CA-10:** recusa do limite de linhas.
+- Desempenho: **50 degraus em ~141 ms** (plano §6).
+
+**#17 substituída (D-19)**
+- `blink_ladder.st` não foi criado. O `BLINK` **serializado** é executado contra `blink.st`, com **0 divergências** em 200 ciclos × 3 padrões (ver F8).
+
+**Depósito (#19)**
+- `modelo.ts`, `enderecos.ts`, `validacao.ts`, `edicao.ts`, `ctu.ts`, `EditorLadder.tsx` e `SimboloCtu.tsx` em `REQUIRED_FILES`.
+
+**Verificação**
+- `tsc` limpo, **717 testes vitest**, `vite build` (JS 456 kB / 139 kB gzip).
+- pytest `not slow` com 76 passed.
+- e2e 6 passed; o novo é `blink.spec.ts`: `BLINK` carregado, linha de reset visível, `.st` baixado e `source` iguais byte a byte ao dourado.
+- `--verificar` ok.
+- Chromium com back-end real (rede `--internal`, sem porta publicada):
+  - CTU, contato no reset, ramo com troca de linha, recusa da 3ª linha em toast e SET, tudo com mouse real;
+  - `BLINK` nos dois temas e modal do contador;
+  - **`BLINK` compilado de verdade**, com 3 imagens (`0x1000`/`0x8000`/`0x10000`), 70 s em build frio e 13 s incremental, e Gravar habilitado.
+
+**Limitações registradas**
+- Se a troca de linhas é impossível (linha abaixo ocupada em outra coluna), o ramo pode ficar abaixo do reset e o cruzamento visual volta. É raro: por exemplo, um ramo que ficou sozinho na linha 2 depois de o da linha 1 ser removido, e um CTU que chega ao degrau depois disso. Faz parte da pendência de desenho dos ramos cruzados, e a semântica não muda.
+- O nome da instância não é editável.
 
 > **Adiada por decisão do autor (2026-09-17).** A Fatia 4 sai da frente da fila e
 > a **F8 entra antes**. Razão: o editor já constrói e valida diagramas, mas
@@ -375,7 +424,7 @@ Percorre a grade e produz texto ST conforme a IEC 61131-3. Pequeno em linhas, ce
 **Destravada.** Deixou de estar 🔒: o modelo de dados que ela consome (`frontend/src/ladder/modelo.ts`) já tem os cinco tipos de elemento — contato NA/NF, bobina simples, bobina SET, bobina RESET — e o ramo paralelo, desde as fatias 1–3 da spec 002. A dependência é sobre o **modelo**, não sobre a interface que o constrói; por isso a F8 não espera a Fatia 4.
 
 **Escopo da spec 003**
-- Traduz o subconjunto acima; **CTU fica fora** — não existe no modelo ainda (entra na #16 da spec 002), e a extensão do serializador para contadores é trabalho novo, não dívida desta spec
+- Traduz o subconjunto acima; **CTU fica fora** — não existe no modelo ainda (entra na #16 da spec 002), e a extensão do serializador para contadores é trabalho novo, não dívida desta spec. *(Revisto em 2026-09-19: o CTU entrou por revisão aditiva, com RF-13, CA-10 e D-13 — ver "Concluído — CTU serializado" abaixo.)*
 - Habilita Compilar e Gravar em projeto Ladder, fechando a pendência da revisão aditiva da Q-2 da spec 002
 - Reusa o serviço de compilação da spec 001 sem mudar contrato; a serialização roda inteiramente no navegador
 - 12 RF e 9 CA; CA-1 a CA-4 **medidos** pelo arcabouço diferencial (`backend/tests/diferencial/`) contra o compilador e o runtime reais
@@ -446,6 +495,20 @@ CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
 - Em LD, a opção .st fica desabilitada com o mesmo motivo do Compilar (erro, vazio ou recusa). O nome do arquivo vem do título (`lib/download.ts`), e o download é feito no cliente, sem servidor. Cada download registra uma linha no Console.
 - **Verificação:** o e2e baixa o .st de IO_ESPELHO montado pela UI e confere **byte a byte** contra o arquivo dourado. No Chromium, o menu foi conferido nos dois temas, com o .st desabilitado e o motivo "Nada a compilar".
 
+**Concluído — CTU serializado (revisão aditiva: RF-13, CA-10, plano D-13, tarefa #12; 2026-09-19)**
+- **Decisão do autor nesta rodada:** estender o serializador ao contador na mesma rodada da Fatia 4 da spec 002. É revisão aditiva datada da spec, com o §7 anotado.
+- **Emissão:**
+  - `ctuN(CU := <expr>, R := <reset>, PV := n);` e depois `saida := ctuN.Q;`;
+  - CU é a mesma redução D-1 da linha 0 com ramos;
+  - R é o AND dos contatos da linha de reset, ou `FALSE`;
+  - os contatos do reset nunca vazam para CU (provado em teste).
+- **Declaração e recusas:** `ctuN : CTU;` vai no `VAR` interno. A instância passa pelas recusas D-5, e há recusa de PV fora de 1–32767.
+- **Fixture `BLINK`** (variante K do spike, 8 degraus). O dourado `blink.st` foi **gerado pelo vitest** e tem a mesma sequência de instruções da variante K.
+- **Diferencial (`test_serializador_diferencial.py`):**
+  - o `BLINK` serializado bate com `blink.toml`;
+  - contra a **execução de `blink.st`** da spec 001, foram 200 ciclos × 3 padrões (sempre 0; pulso no 60; pressionado 45–55), com **0 divergências**, executando de verdade no `plc_host_runner`.
+  - **O CA-3 da spec 002 (Q-4 revisada, equivalência exata) passa a ser medido, não assumido.** Nenhum ST de referência do pisca-pisca foi escrito por uma pessoa.
+
 ---
 
 ## F9 — Simulador de ciclo de varredura ⬜
@@ -459,6 +522,8 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 **Ponto de atenção:** é implementação independente do runtime em C do F3. A divergência entre os dois é **métrica do TCC**, não bug a esconder — deve ser medida e reportada.
 
 **Escopo inicial:** contatos NA/NF e bobinas. Temporizadores e contadores (TON/TOF/CTU/CTD) em iteração posterior.
+
+> **Nota (2026-09-19):** o CTU já existe no modelo, no editor e no serializador. Para que o simulador rode o `BLINK`, a spec 004 precisa decidir se o CTU entra no escopo inicial do simulador. Sem ele, o único cenário de referência com contador fica fora da métrica simulação ↔ runtime.
 
 **Alvo decidido pelo autor (2026-09-17), para a spec futura:** a F9 entrega o simulador **e** o segundo executor que o pluga ao teste diferencial. O ponto de extensão já está pronto e documentado (`backend/tests/diferencial/README.md`): basta uma classe que implemente o `Executor` — `runner.py`, `comparador.py` e as fixtures TOML não mudam. O `docs/validacao/contrato-runtime-host.md` já fixa que o protocolo fala em endereço IEC (`%QX0.0`), não em GPIO, justamente porque o simulador não deve conhecer pinagem. É o que fecha a métrica "divergência simulação ↔ hardware" do F10.
 
@@ -512,15 +577,23 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 | ID | Questão | Impacto | Quando decidir |
 |---|---|---|---|
-| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora; escopo de F8/F9 continua em aberto |
+| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora. **F8 decidida em 2026-09-19:** o CTU é serializado (RF-13 da spec 003). Falta decidir o escopo da **F9** (ver a nota no F9) |
 
 ---
 
 ## Próximos passos, em ordem
 
-1. Fatia 4 da spec 002 (#15, #16 CTU, #18, #19, #20; **#17 revista** — ver a nota no F7) → fecha **F7**. Em seguida, uma spec curta para estender o serializador ao CTU e medir o `BLINK` serializado contra o `blink.st`
-2. Spec 004 — **F9**: simulador de varredura no navegador e o executor que o pluga ao teste diferencial; com ele, início da coleta sistemática de métricas (**F10**)
-3. Demonstração da fatia vertical ao orientador. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo)
+1. Spec 004 — **F9**:
+   - o simulador de varredura no navegador;
+   - o executor que o pluga ao teste diferencial;
+   - decidir se o CTU entra no escopo inicial, para cobrir o `BLINK`.
+
+   Com isso começa a coleta sistemática de métricas (**F10**).
+2. Demonstração ao orientador. Os três programas de referência agora saem de diagramas montados no editor e compilam de verdade. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
+3. Pendências menores:
+   - suíte `slow` com `--user` não-root (#23);
+   - `ruff format` em 3 arquivos antigos (#23);
+   - desenho de ramos cruzados.
 
 ## Bloqueado aguardando hardware
 
@@ -569,3 +642,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-18 | Integração à `main` | `feat/002-editor-ladder` integrada à `main` por fast-forward, levando a spec 002 (fatias 1–3, ajustes #21–#26) e a spec 003 inteira (F8 ✅); a branch foi apagada local e remotamente. A `main` passa a ser a única branch |
 | 2026-09-18 | Revisão de UX pós-F8 — download e toasts (spec 002 #27, spec 003 #11) | Duas revisões aditivas pedidas pelo autor depois de usar a F8: (1) Q-1 da spec 003 revista, com a aba "ST gerado" trocada pelo botão **Baixar** no cabeçalho (Ladder .json / Structured Text .st, com o .st sob o mesmo portão do Compilar; D-12); (2) aba Mensagens trocada por **toasts** próprios só para as recusas, com o Console inalterado (D-18). Frentes sonnet D ∥ M → T. Nenhuma dependência nova. 587 testes vitest, e2e 5 passed (download conferido byte a byte com o arquivo dourado; recusa → toast com mouse real), depósito ok, capturas nos dois temas |
 | 2026-09-18 | Toasts no canto superior esquerdo (ajuste de D-18) | A pedido do autor, os toasts saem do canto inferior direito e vão para o superior esquerdo, logo abaixo do cabeçalho (`top-14`, sem cobrir "Novo projeto"). Só a posição mudou; D-18 ganhou uma nota datada |
+| 2026-09-19 | Fatia 4 da spec 002 + CTU serializado — **F7 ✅** | O autor incluiu a serialização do CTU na rodada (revisão aditiva da spec 003: RF-13, CA-10, D-13; plano 002 §19/D-19). O orquestrador trocou o contrato (`ElementoCtu`); depois as frentes sonnet N (`ctu.ts` destacável) ∥ S (serializador, `BLINK` e diferencial) e D (SET/RESET/CTU no editor) ∥ T (e2e). O `BLINK` serializado bate com `blink.st`, com 0 divergências em 200 ciclos × 3 padrões. A #17 foi substituída sem ST escrito à mão, e o CA-3 é montado pela UI. A revisão visual no Chromium achou o ramo cruzando a linha de reset (corrigido com a troca de linhas) e o traço atravessando a caixa do CTU (corrigido com fundo opaco). 717 vitest, 76 pytest, e2e 6, depósito ok; `BLINK` compilado de verdade no Chromium com back-end real |

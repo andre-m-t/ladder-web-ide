@@ -198,6 +198,33 @@ mudar, o pytest acusa.
   que pediria uma spec própria; imagem do diagrama, que não pode ser reaberta.
 - **Requisito atendido:** RF-9 (Q-1 revista).
 
+### D-13: serialização do contador crescente (revisão aditiva, 2026-09-19)
+- **Escolha:**
+  - O degrau com CTU emite `ctuN(CU := <expr>, R := <reset>, PV := n);`,
+    seguido de `<saida> := ctuN.Q;`.
+    - `<expr>` é a mesma redução de D-1 que alimenta uma bobina: linha 0 e
+      seus ramos.
+    - `<reset>` é a conjunção, em ordem de coluna, dos contatos da
+      `linhaReset`, ou `FALSE` se ela está vazia.
+    - Os contatos da linha de reset **não** entram no grafo de D-1.
+  - A instância é declarada `ctuN : CTU;` no bloco `VAR` interno, na ordem
+    dos degraus. O nome é gerado pelo editor e passa pelas recusas de D-5.
+  - O `BLINK` (variante K do spike, `spikes/modelo/preset25/`) vira fixture
+    e arquivo dourado. O pytest diferencial executa esse dourado contra o
+    `blink.toml` e contra a execução de `blink.st`, em 200 ciclos × 3
+    padrões de entrada.
+- **Por quê:** RF-13/CA-10 (revisão aditiva do escopo na spec). A forma
+  chamada + leitura de `.Q` é a mesma da variante K, já medida com 0
+  divergências. Assim o texto gerado é o próprio programa que o spike provou
+  equivalente.
+- **Consequência para a spec 002:** a #17 (`blink_ladder.st` escrito à mão)
+  é substituída por este teste. Nenhum ST de referência do pisca-pisca é
+  escrito por uma pessoa.
+- **Alternativas descartadas:** simular a contagem com bobinas e aritmética,
+  o que exigiria blocos fora do subconjunto (§7 da spec 002). Também se
+  descartou expor `CV`, que a Q-5 da spec 002 decidiu não expor.
+- **Requisito atendido:** RF-13, CA-10.
+
 ## 5. Contratos
 
 ```ts

@@ -144,6 +144,16 @@ REQUIRED_FILES=(
   "frontend/src/lib/api.ts"
   "frontend/src/lib/gravador.ts"
   "frontend/src/App.tsx"
+  # Nucleo do editor Ladder (spec 002, tarefa #19): modelo, enderecos,
+  # validacao, edicao e o contador destacavel (Q-7), mais o editor e o simbolo
+  # do contador.
+  "frontend/src/ladder/modelo.ts"
+  "frontend/src/ladder/enderecos.ts"
+  "frontend/src/ladder/validacao.ts"
+  "frontend/src/ladder/edicao.ts"
+  "frontend/src/ladder/ctu.ts"
+  "frontend/src/components/ladder/EditorLadder.tsx"
+  "frontend/src/components/ladder/SimboloCtu.tsx"
   "frontend/src/ladder/persistencia.ts"
   "frontend/src/ladder/serializador.ts"
   "frontend/src/projeto/projeto.ts"

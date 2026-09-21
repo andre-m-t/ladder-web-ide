@@ -32,12 +32,34 @@ export interface Celula {
 export type TipoContato = 'contato_na' | 'contato_nf'
 export type TipoBobina = 'bobina' | 'bobina_set' | 'bobina_reset'
 
-export type Elemento = {
+/** Contato ou bobina: lê ou escreve uma única variável booleana. */
+export type ElementoSimples = {
   id: string
   tipo: TipoContato | TipoBobina
   celula: Celula
   variavel: string | null
 }
+
+/**
+ * Contador crescente (Q-5/Q-7 da spec 002, plano D-2/D-7). Terminal, como a
+ * bobina: ocupa a última coluna da linha 0, cujo caminho de contatos é a
+ * entrada de contagem (CU). `linhaReset` é a linha extra cujos contatos, a
+ * partir do trilho esquerdo, formam o caminho de reinício (R) — essa linha
+ * não tem ramo nem outro terminal. `saida` recebe "atingiu o limite" (Q) e
+ * é lida por outros degraus como contato; a contagem corrente não é exposta.
+ * `instancia` é gerada na criação e não é editável. Regras em `ctu.ts`.
+ */
+export interface ElementoCtu {
+  id: string
+  tipo: 'ctu'
+  celula: Celula
+  linhaReset: number
+  instancia: string
+  pv: number
+  saida: string | null
+}
+
+export type Elemento = ElementoSimples | ElementoCtu
 
 /** Ramo paralelo à linha 0, que sai dela em `colunaInicio` e volta em `colunaFim`. */
 export interface Ramo {
@@ -65,6 +87,22 @@ export function ehContato(tipo: Elemento['tipo']): tipo is TipoContato {
 
 export function ehBobina(tipo: Elemento['tipo']): tipo is TipoBobina {
   return tipo === 'bobina' || tipo === 'bobina_set' || tipo === 'bobina_reset'
+}
+
+/** Terminal = elemento da última coluna do trilho principal (bobinas e CTU). */
+export function ehTerminal(tipo: Elemento['tipo']): tipo is TipoBobina | 'ctu' {
+  return ehBobina(tipo) || tipo === 'ctu'
+}
+
+export function ehCtu(elemento: Elemento): elemento is ElementoCtu {
+  return elemento.tipo === 'ctu'
+}
+
+/** Variável que o elemento lê ou escreve: `variavel` do contato/bobina ou
+ * `saida` do CTU. Único ponto em que o resto do código precisa ignorar a
+ * diferença de forma entre os dois. */
+export function variavelDoElemento(elemento: Elemento): string | null {
+  return ehCtu(elemento) ? elemento.saida : elemento.variavel
 }
 
 /** Coluna reservada aos terminais. */

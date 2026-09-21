@@ -5,8 +5,10 @@
  * Cada símbolo é uma função pura de posição (`cx`, `cy` — centro da célula) e
  * estado (`variavel`, `endereco`, `selecionado`, `semRotulo`, `fantasma`,
  * `perigo`): nada aqui lê o diagrama nem decide onde a célula fica na grade,
- * isso é de `GradeDegrau.tsx`. SET/RESET (variantes de bobina) e o contador
- * CTU entram na tarefa #18.
+ * isso é de `GradeDegrau.tsx`. `BobinaSet`/`BobinaReset` (tarefa #18) marcam
+ * "S"/"R" dentro do mesmo traço de bobina; o contador CTU, por ocupar duas
+ * linhas e ter rótulos próprios (CU/R/PV/Q), tem desenho isolado em
+ * `SimboloCtu.tsx` (D-7), não neste arquivo.
  *
  * `semRotulo` esconde nome e endereço da variável (usado pelo ícone da
  * paleta, que não tem variável nenhuma para mostrar). `fantasma` é a prévia
@@ -64,6 +66,16 @@ function corEndereco({ selecionado, perigo }: SimboloProps): string {
   return 'fill-ide-suave'
 }
 
+/** Cor da marca "S"/"R" dentro da bobina — mesma precedência de `corTraco`,
+ * mas como preenchimento de texto (a marca é desenhada com `<text>`, não
+ * `<line>`/`<path>`). */
+function corMarca({ selecionado, fantasma, perigo }: SimboloProps): string {
+  if (perigo) return 'fill-ide-perigo'
+  if (fantasma) return 'fill-ide-previa opacity-50'
+  if (selecionado) return 'fill-ide-destaque'
+  return 'fill-ide-fio'
+}
+
 /** Endereço (opcional) e nome da variável acima do símbolo, ou "?" quando
  * ainda não vinculada. O endereço, quando existe, fica na linha de cima, em
  * fonte monoespaçada menor. */
@@ -112,20 +124,67 @@ export function ContatoNF(props: SimboloProps) {
   )
 }
 
-/**
- * Bobina simples: `--( )--`. `bobina_set`/`bobina_reset` (marca SET/RESET
- * dentro do círculo) chegam na tarefa #18; por ora, todo tipo de bobina usa
- * este mesmo traço.
- */
+/** Os dois arcos `--( )--`, comuns às três variantes de bobina abaixo. */
+function ArcosBobina({ cx, cy, classe }: { cx: number; cy: number; classe: string }) {
+  const raio = MEIA_ALTURA
+  return (
+    <>
+      <path d={`M ${cx - 4} ${cy - raio} A ${raio} ${raio} 0 0 0 ${cx - 4} ${cy + raio}`} strokeWidth={2} className={classe} />
+      <path d={`M ${cx + 4} ${cy - raio} A ${raio} ${raio} 0 0 1 ${cx + 4} ${cy + raio}`} strokeWidth={2} className={classe} />
+    </>
+  )
+}
+
+/** Marca "S" ou "R" centralizada dentro do círculo da bobina (tarefa #18). */
+function MarcaBobina({ letra, ...props }: SimboloProps & { letra: 'S' | 'R' }) {
+  const { cx, cy } = props
+  return (
+    <text
+      x={cx}
+      y={cy}
+      textAnchor="middle"
+      dominantBaseline="central"
+      className={`select-none text-[10px] font-bold ${corMarca(props)}`}
+    >
+      {letra}
+    </text>
+  )
+}
+
+/** Bobina simples: `--( )--`. */
 export function Bobina(props: SimboloProps) {
   const { cx, cy, semRotulo, fantasma } = props
   const classe = `fill-none ${corTraco(props)}`
-  const raio = MEIA_ALTURA
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <path d={`M ${cx - 4} ${cy - raio} A ${raio} ${raio} 0 0 0 ${cx - 4} ${cy + raio}`} strokeWidth={2} className={classe} />
-      <path d={`M ${cx + 4} ${cy - raio} A ${raio} ${raio} 0 0 1 ${cx + 4} ${cy + raio}`} strokeWidth={2} className={classe} />
+      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+    </g>
+  )
+}
+
+/** Bobina SET: `--(S)--` — liga a variável e a mantém ligada até um RESET. */
+export function BobinaSet(props: SimboloProps) {
+  const { cx, cy, semRotulo, fantasma } = props
+  const classe = `fill-none ${corTraco(props)}`
+  return (
+    <g>
+      {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
+      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+      <MarcaBobina {...props} letra="S" />
+    </g>
+  )
+}
+
+/** Bobina RESET: `--(R)--` — desliga a variável e a mantém desligada até um SET. */
+export function BobinaReset(props: SimboloProps) {
+  const { cx, cy, semRotulo, fantasma } = props
+  const classe = `fill-none ${corTraco(props)}`
+  return (
+    <g>
+      {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
+      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+      <MarcaBobina {...props} letra="R" />
     </g>
   )
 }

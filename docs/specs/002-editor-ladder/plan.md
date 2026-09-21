@@ -704,3 +704,36 @@ continua valendo como registro do que foi decidido em 2026-09-17.
 > passam do canto inferior direito para o **canto superior esquerdo**, logo
 > abaixo do cabeçalho (`top-14`, para não cobrir "Novo projeto"). O
 > comportamento não muda.
+
+## 19. Revisão aditiva — Fatia 4 com o contador serializado (2026-09-19)
+
+Retomada da Fatia 4 depois da F8. O autor decidiu estender o serializador ao
+CTU na mesma rodada. Isso está registrado na spec 003 (RF-13, CA-10) e no
+D-13 do plano 003.
+
+### D-19: contrato do CTU, dois ajustes e a #17 substituída
+- **Escolha:**
+  - O contrato do §5 entra como está: `ElementoCtu` com `linhaReset`,
+    `instancia`, `pv` e `saida`. `Elemento` vira a união
+    `ElementoSimples | ElementoCtu`. `modelo.ts` ganha `ehTerminal`, `ehCtu` e
+    `variavelDoElemento`, e este último é o único ponto em que o resto do
+    código ignora a diferença de forma.
+  - **Ajuste 1:** `instancia` é `string`, não `string | null`. É gerada na
+    criação (`ctu0`, `ctu1`…, sem colidir com variáveis nem com outras
+    instâncias) e não é editável.
+  - **Ajuste 2:** `vincularVariavel` num CTU grava `saida`. O modal de
+    vínculo que já existe serve ao contador, que ganha só o campo do limite.
+  - A linha de reset é a primeira linha extra sem ramo nem elemento. Ramos e
+    linha de reset dividem o limite da Q-3, e sem linha livre a inserção é
+    recusada com motivo.
+    - Remover o CTU leva junto os contatos da linha de reset (CA-7).
+    - Mover o CTU para outro degrau leva esses contatos para a linha livre
+      do destino.
+  - A **#17** é substituída: em vez de `blink_ladder.st` escrito à mão, o
+    `BLINK` **serializado** é executado contra o `blink.st`. A tarefa fica
+    registrada em `tasks.md` com a nota da substituição.
+- **Por quê:**
+  - A F8 tornou o elo manual desnecessário (R-1 quitada).
+  - Com a serialização, o CA-3 é medido, e a equivalência exata da Q-4
+    revisada deixa de ser assumida.
+- **Requisito atendido:** RF-3, RF-4, RF-5, CA-3, CA-10; Q-4, Q-5, Q-7.

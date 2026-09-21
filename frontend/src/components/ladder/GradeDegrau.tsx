@@ -35,6 +35,18 @@
  * `aoArrastarAlca`/`aoSoltarAlca`/`aoCancelarAlca`); o arrasto por teclado é
  * encaminhado cru por `aoTeclarNaAlca`, como já acontece com as células.
  *
+ * **SET/RESET e CTU (tarefa #18, D-19):** bobina SET/RESET usam
+ * `Simbolos.tsx#BobinaSet/BobinaReset`, na mesma célula terminal de uma
+ * bobina comum — nenhuma mudança de geometria aqui. O CTU ocupa a célula
+ * terminal da linha 0 (como uma bobina) mas desenha, via `SimboloCtu.tsx`
+ * (D-7), uma caixa que desce até a sua `linhaReset` — a única linha extra do
+ * degrau sem `Ramo` (o núcleo garante isso, `ctu.ts#linhaResetLivre`). Essa
+ * linha ganha um traço próprio do trilho esquerdo até a caixa (sem os
+ * conectores de `tracoRamo`: não é um ramo, é o caminho de reinício) e
+ * células de contato focáveis/soltáveis iguais às de um ramo, exceto pelo
+ * rótulo ("reset do contador" em vez de "ramo L") e pela ausência de célula
+ * na coluna terminal (ocupada pela própria caixa, nunca solta nada).
+ *
  * `select-none touch-none` e `onDragStart` bloqueado na célula (SVG não tem o
  * atributo `draggable` do HTML): correção de bug real do Chromium (relatado
  * após a entrega inicial da #22) em que, sem isso, uma seleção de texto
@@ -96,7 +108,8 @@ import { CircleAlert, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import {
   COLUNAS_POR_DEGRAU,
   COLUNA_TERMINAL,
-  ehBobina,
+  ehCtu,
+  variavelDoElemento,
   type Celula,
   type Elemento,
   type Ramo,
@@ -105,8 +118,10 @@ import {
   type TipoContato,
   type Variavel,
 } from '../../ladder/modelo'
+import { PV_PADRAO } from '../../ladder/ctu'
 import type { Problema } from '../../ladder/validacao'
-import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
+import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
+import SimboloCtu from './SimboloCtu'
 
 /** Resumo de um ou mais `Problema` para uma célula ou para o degrau inteiro
  * (tarefa #13): severidade mais grave presente (erro tem precedência sobre
@@ -143,9 +158,13 @@ function problemaDoRung(problemas: Problema[] | undefined): ResumoProblema | nul
  * para destacar o próprio elemento de origem quando o alvo do arrasto é a
  * lixeira. `ramo-criar` (D-14) é a prévia de soltar "Ramo" da paleta: não
  * tem `celula` própria — o núcleo (`criarRamo`) decide a linha, então o
- * ramo inteiro é a prévia, desenhada como um ramo fantasma. */
+ * ramo inteiro é a prévia, desenhada como um ramo fantasma. `linhaReset`
+ * (tarefa #18) só é preenchido quando `elemento === 'ctu'`: o núcleo
+ * (`ctu.ts#linhaResetLivre`) já escolheu essa linha ao calcular a prévia sem
+ * aplicar (`EditorLadder`), e é o que permite desenhar a caixa do CTU
+ * fantasma com a altura certa antes de soltar. */
 export type Previa =
-  | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo'] }
+  | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo']; linhaReset?: number }
   | { celula: Celula; tipo: 'remover' }
   | { celula: Celula; tipo: 'invalida'; motivo: string }
   | { tipo: 'ramo-criar'; ramo: { linha: number; colunaInicio: number; colunaFim: number } }
@@ -262,7 +281,7 @@ function celulaIgual(a: Celula, b: Celula): boolean {
   return a.linha === b.linha && a.coluna === b.coluna
 }
 
-function rotuloTipo(tipo: TipoContato | TipoBobina): string {
+function rotuloTipo(tipo: TipoContato | TipoBobina | 'ctu'): string {
   switch (tipo) {
     case 'contato_na':
       return 'contato NA'
@@ -274,23 +293,33 @@ function rotuloTipo(tipo: TipoContato | TipoBobina): string {
       return 'bobina SET'
     case 'bobina_reset':
       return 'bobina RESET'
+    case 'ctu':
+      return 'contador CTU'
   }
 }
 
 /** Rótulo acessível de uma célula — "Degrau N, coluna M" no trilho principal
- * (linha 0), "Degrau N, ramo L, coluna M" num ramo (linha L > 0, D-14),
- * mesma convenção de `validacao.ts#descreverCelula`. Com um problema de
- * validação nessa célula (tarefa #13), o rótulo ganha o sufixo "erro:
- * <mensagem>" ou "aviso: <mensagem>". */
+ * (linha 0), "Degrau N, ramo L, coluna M" num ramo (linha L > 0, D-14) ou
+ * "Degrau N, reset do contador, coluna M" na linha de reset de um CTU
+ * (`ehLinhaReset`, tarefa #18 — só existe uma por degrau, então dispensa
+ * numerá-la como o ramo), mesma convenção de `validacao.ts#descreverCelula`.
+ * Com um problema de validação nessa célula (tarefa #13), o rótulo ganha o
+ * sufixo "erro: <mensagem>" ou "aviso: <mensagem>". */
 function rotuloCelula(
   indiceDegrau: number,
   linha: number,
   coluna: number,
   elemento: Elemento | undefined,
   problema?: ResumoProblema | null,
+  ehLinhaReset?: boolean,
 ): string {
-  const base = linha === 0 ? `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}` : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
-  const conteudo = !elemento ? `${base}, vazia` : `${base}, ${rotuloTipo(elemento.tipo)} ${elemento.variavel ?? 'sem variável'}`
+  const base =
+    linha === 0
+      ? `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}`
+      : ehLinhaReset
+        ? `Degrau ${indiceDegrau + 1}, reset do contador, coluna ${coluna + 1}`
+        : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
+  const conteudo = !elemento ? `${base}, vazia` : `${base}, ${rotuloTipo(elemento.tipo)} ${variavelDoElemento(elemento) ?? 'sem variável'}`
   if (!problema) return conteudo
   return `${conteudo}, ${problema.severidade}: ${problema.mensagem}`
 }
@@ -428,8 +457,20 @@ export default function GradeDegrau({
   }
 
   const previaRamoCriar = previa?.tipo === 'ramo-criar' ? previa.ramo : undefined
+  // CTU (tarefa #18): a linha de reset (real, do próprio rung, ou prevista
+  // por uma prévia de inserir/mover um CTU ainda não aplicada) também conta
+  // para a maior linha em uso — a altura do degrau precisa caber a caixa
+  // inteira, não só o trilho principal.
+  const ctuDoRung = rung.elementos.find(ehCtu)
+  const linhaResetPrevia = previa?.tipo === 'inserir' && previa.elemento === 'ctu' ? previa.linhaReset : undefined
   const linhasEmUso = rung.ramos.map((r) => r.linha)
-  const maiorLinha = Math.max(0, ...linhasEmUso, ...(previaRamoCriar ? [previaRamoCriar.linha] : []))
+  const maiorLinha = Math.max(
+    0,
+    ...linhasEmUso,
+    ...(previaRamoCriar ? [previaRamoCriar.linha] : []),
+    ctuDoRung?.linhaReset ?? 0,
+    linhaResetPrevia ?? 0,
+  )
 
   const largura = MARGEM_ESQUERDA + MARGEM_DIREITA + COLUNAS_POR_DEGRAU * larguraCelula
   const altura = MARGEM_TOPO * 2 + ALTURA_LINHA * (maiorLinha + 1)
@@ -451,8 +492,11 @@ export default function GradeDegrau({
     aoIniciarArrastoAlca?.(evento, rung.id, ramoId)
   }
 
-  /** Uma célula (linha 0 ou linha de ramo) — compartilhada pelos dois desenhos. */
-  function celulaGrade(linha: number, coluna: number, ehTerminal: boolean, ramoId?: string) {
+  /** Uma célula (linha 0, linha de ramo ou linha de reset de um CTU) —
+   * compartilhada pelos três desenhos. `ehLinhaReset` (tarefa #18) só afeta o
+   * rótulo acessível ("reset do contador" em vez de "ramo L") — a célula em
+   * si funciona igual às de ramo (focável, soltável, marca elemento). */
+  function celulaGrade(linha: number, coluna: number, ehTerminal: boolean, ramoId?: string, ehLinhaReset?: boolean) {
     const celula: Celula = { linha, coluna }
     const elemento = encontrarElemento(rung, celula)
     const cx = xDaColuna(coluna)
@@ -467,7 +511,7 @@ export default function GradeDegrau({
     const recusada = recusa != null && recusa.celula != null && celulaIgual(recusa.celula, celula)
     const ehRemocaoAqui = previaAqui?.tipo === 'remover'
     const cursorInvalido = previaAqui?.tipo === 'invalida'
-    const endereco = enderecoDaVariavel(variaveis, elemento?.variavel ?? null)
+    const endereco = enderecoDaVariavel(variaveis, elemento ? variavelDoElemento(elemento) : null)
     const problemaAqui = problemaDaCelula(problemas, elemento?.id)
 
     return (
@@ -475,7 +519,7 @@ export default function GradeDegrau({
         key={`${linha}:${coluna}`}
         tabIndex={0}
         role="button"
-        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui)}
+        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui, ehLinhaReset)}
         aria-selected={ativo}
         aria-invalid={recusada ? 'true' : undefined}
         data-terminal={ehTerminal ? 'true' : undefined}
@@ -508,8 +552,30 @@ export default function GradeDegrau({
         {elemento?.tipo === 'contato_nf' && (
           <ContatoNF cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
         )}
-        {elemento && ehBobina(elemento.tipo) && (
+        {elemento?.tipo === 'bobina' && (
           <Bobina cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {elemento?.tipo === 'bobina_set' && (
+          <BobinaSet cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {elemento?.tipo === 'bobina_reset' && (
+          <BobinaReset cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+        )}
+        {elemento?.tipo === 'ctu' && (
+          <SimboloCtu
+            cx={centroX}
+            yTopo={yDaLinha(0) - ALTURA_LINHA / 2}
+            yBase={yDaLinha(elemento.linhaReset) + ALTURA_LINHA / 2}
+            largura={larguraCelula}
+            yEntradaCu={yDaLinha(0)}
+            yEntradaR={yDaLinha(elemento.linhaReset)}
+            instancia={elemento.instancia}
+            pv={elemento.pv}
+            saida={elemento.saida}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+          />
         )}
         {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
           <ContatoNA cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
@@ -517,8 +583,29 @@ export default function GradeDegrau({
         {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_nf' && (
           <ContatoNF cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
         )}
-        {!elemento && previaAqui?.tipo === 'inserir' && ehBobina(previaAqui.elemento) && (
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'bobina' && (
           <Bobina cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'bobina_set' && (
+          <BobinaSet cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'bobina_reset' && (
+          <BobinaReset cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
+        )}
+        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'ctu' && (
+          <SimboloCtu
+            cx={centroX}
+            yTopo={yDaLinha(0) - ALTURA_LINHA / 2}
+            yBase={yDaLinha(previaAqui.linhaReset ?? 1) + ALTURA_LINHA / 2}
+            largura={larguraCelula}
+            yEntradaCu={yDaLinha(0)}
+            yEntradaR={yDaLinha(previaAqui.linhaReset ?? 1)}
+            instancia="?"
+            pv={PV_PADRAO}
+            saida={null}
+            selecionado={false}
+            fantasma
+          />
         )}
         {problemaAqui && <SeloProblema x={cx + larguraCelula} y={y - ALTURA_LINHA / 2} severidade={problemaAqui.severidade} />}
       </g>
@@ -646,6 +733,24 @@ export default function GradeDegrau({
           {/* fio horizontal atravessando as células vazias */}
           <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-ide-fio" />
 
+          {/* Linha de reset do CTU (tarefa #18, D-19): um traço reto do
+           * trilho esquerdo até a borda da caixa do contador — sem os
+           * conectores verticais de `tracoRamo`, de propósito: essa linha não
+           * é um ramo em paralelo com a linha 0 (não faz sentido elétrico
+           * "juntar-se" a ela), é um caminho independente que só alimenta a
+           * entrada R do bloco de função. */}
+          {ctuDoRung && (
+            <line
+              x1={xEsquerda}
+              y1={yDaLinha(ctuDoRung.linhaReset)}
+              x2={xDaColuna(COLUNA_TERMINAL)}
+              y2={yDaLinha(ctuDoRung.linhaReset)}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="stroke-ide-fio"
+            />
+          )}
+
           {rung.ramos.map((ramo) => {
             const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined
             const ramoDesenhado = previaAqui ? { ...ramo, colunaFim: previaAqui.colunaFim } : ramo
@@ -662,6 +767,14 @@ export default function GradeDegrau({
           {rung.ramos.map((ramo) =>
             Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) => celulaGrade(ramo.linha, ramo.colunaInicio + i, false, ramo.id)),
           )}
+
+          {/* Células da linha de reset (tarefa #18): colunas de contato,
+           * focáveis/soltáveis como as de um ramo — a coluna terminal fica de
+           * fora (ocupada pelo corpo do CTU, desenhado na célula (0,
+           * COLUNA_TERMINAL) acima, não aqui: sem célula própria, não é
+           * soltável). */}
+          {ctuDoRung &&
+            Array.from({ length: COLUNA_TERMINAL }, (_, coluna) => celulaGrade(ctuDoRung.linhaReset, coluna, false, undefined, true))}
 
           {rung.ramos.map((ramo) => alcaDoRamo(ramo))}
         </svg>

@@ -47,6 +47,19 @@
  * recusada continuam — são para leitor de tela e destaque visual, não texto
  * solto no editor.
  *
+ * **SET/RESET e CTU (tarefa #18, D-19):** bobina SET/RESET seguem o mesmo
+ * caminho de arrasto/prévia/recusa de uma bobina comum (mesmo tipo terminal,
+ * `ehTerminal` em `modelo.ts`) — nenhum código novo aqui além dos registros
+ * de nome (`NOME_TIPO_PALETA`) e do símbolo certo no fantasma
+ * (`GhostArrasto`). O CTU também é terminal (mira sempre a coluna 8, como
+ * bobina) mas precisa de uma informação extra na prévia — a `linhaReset` que
+ * o núcleo escolheria (`ctu.ts#linhaResetLivre`), sem a qual `GradeDegrau`
+ * não sabe até onde desenhar a caixa fantasma — calculada comparando o
+ * diagrama antes/depois da operação (`linhaResetPrevista`), nunca reimplementada
+ * aqui. O modal ganha o campo do limite (PV): `aoAlterarLimiteNoModal` chama
+ * `ctu.ts#atualizarCtu` e usa o mesmo caminho de recusa (`aoRecusar`) das
+ * demais jogadas.
+ *
  * **Bobina sempre na coluna 8 (tarefa #25):** soltar (ou mover) uma bobina —
  * de qualquer origem, sobre qualquer célula do degrau, mesmo numa linha de
  * ramo — passa pelo núcleo (`ladder/edicao.ts#celulaDeSoltura`) antes de
@@ -72,12 +85,13 @@ import {
   vincularVariavel,
 } from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
-import { COLUNAS_POR_DEGRAU, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
+import { atualizarCtu } from '../../ladder/ctu'
+import { COLUNAS_POR_DEGRAU, ehCtu, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
 import { descreverCelula, type Problema } from '../../ladder/validacao'
 import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalVariavel from './ModalVariavel'
 import Paleta, { type TipoPaleta } from './Paleta'
-import { Bobina, ContatoNA, ContatoNF } from './Simbolos'
+import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
 
 export interface EditorLadderProps {
   /** Diagrama atual — o editor não guarda estado próprio (D-13, controlado). */
@@ -146,13 +160,17 @@ const NOME_TIPO: Record<Elemento['tipo'], string> = {
   bobina: 'bobina',
   bobina_set: 'bobina SET',
   bobina_reset: 'bobina RESET',
+  ctu: 'contador CTU',
 }
 
 const NOME_TIPO_PALETA: Record<TipoPaleta, string> = {
   contato_na: 'contato NA',
   contato_nf: 'contato NF',
   bobina: 'bobina',
+  bobina_set: 'bobina SET',
+  bobina_reset: 'bobina RESET',
   ramo: 'ramo',
+  ctu: 'contador CTU',
 }
 
 function elementoNaCelula(diagrama: Diagrama, rungId: string, celula: Celula): Elemento | undefined {
@@ -200,6 +218,24 @@ function ramoAdicionado(antes: Diagrama, depois: Diagrama, rungId: string): Ramo
   return rungDepois.ramos.find((r) => !rungAntes.ramos.some((a) => a.id === r.id))
 }
 
+/** `linhaReset` que o núcleo escolheu (ou manteve) para o CTU em `rungId` de
+ * `depois` (tarefa #18, mesmo espírito de `ramoAdicionado`): com
+ * `elementoId` conhecido (mover um CTU já existente), busca direto por id;
+ * sem ele (inserir um CTU novo da paleta, cujo id só existe depois de
+ * `criarCtu`), acha o elemento CTU de `rungId` que não existia em `antes`.
+ * `undefined` quando não há CTU nenhum a mostrar (ex.: jogada inválida). */
+function linhaResetPrevista(antes: Diagrama, depois: Diagrama, rungId: string, elementoId?: string): number | undefined {
+  const rungDepois = depois.rungs.find((r) => r.id === rungId)
+  if (rungDepois === undefined) return undefined
+  if (elementoId !== undefined) {
+    const elemento = rungDepois.elementos.find((e) => e.id === elementoId)
+    return elemento !== undefined && ehCtu(elemento) ? elemento.linhaReset : undefined
+  }
+  const idsAntes = new Set(antes.rungs.find((r) => r.id === rungId)?.elementos.map((e) => e.id) ?? [])
+  const novo = rungDepois.elementos.find((e) => !idsAntes.has(e.id) && ehCtu(e))
+  return novo !== undefined && ehCtu(novo) ? novo.linhaReset : undefined
+}
+
 /** Nome de exibição da origem do arrasto, para o anúncio de `aria-live`. */
 function nomeOrigem(diagrama: Diagrama, origem: OrigemArrasto): string {
   if (origem.de === 'paleta') return NOME_TIPO_PALETA[origem.tipo]
@@ -228,7 +264,10 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
     }
     const alvo = celulaDeSoltura(origem.tipo, celula)
     const resultado = inserirElemento(diagrama, rungId, origem.tipo, alvo)
-    if (resultado.ok) return { celula: alvo, tipo: 'inserir', elemento: origem.tipo }
+    if (resultado.ok) {
+      const linhaReset = origem.tipo === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId) : undefined
+      return { celula: alvo, tipo: 'inserir', elemento: origem.tipo, linhaReset }
+    }
     return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
   }
   const achadoOrigem = encontrarElementoPorId(diagrama, origem.elementoId)
@@ -236,7 +275,8 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
   const alvo = celulaDeSoltura(tipoOrigem, celula)
   const resultado = moverElemento(diagrama, origem.elementoId, rungId, alvo)
   if (resultado.ok) {
-    return { celula: alvo, tipo: 'inserir', elemento: tipoOrigem }
+    const linhaReset = tipoOrigem === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId, origem.elementoId) : undefined
+    return { celula: alvo, tipo: 'inserir', elemento: tipoOrigem, linhaReset }
   }
   return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
 }
@@ -972,6 +1012,31 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     fecharModal()
   }
 
+  /** Novo limite (PV) do CTU aberto no modal (tarefa #18, D-19): aplica via
+   * `atualizarCtu` (núcleo) e recusa pelo caminho existente (`aoRecusar` →
+   * toast) se `pv` estiver fora de `[PV_MIN, PV_MAX]` — o modal só valida
+   * pelos atributos nativos do `<input type="number">`, quem decide de fato é
+   * o núcleo. Ao contrário de `aoEscolherNoModal`, não fecha o modal: o
+   * autor pode querer ajustar o limite e ainda escolher a variável de saída
+   * na mesma visita. */
+  function aoAlterarLimiteNoModal(pv: number) {
+    if (!modal) return
+    const achado = encontrarElementoPorId(diagrama, modal.elementoId)
+    const resultado = atualizarCtu(diagrama, modal.elementoId, { pv })
+    if (resultado.ok) {
+      aoMudar(resultado.diagrama)
+      setRecusa(null)
+      setAnuncio(`limite do contador atualizado para ${pv}`)
+      return
+    }
+    reportarRecusa({
+      rungId: achado?.rungId ?? diagrama.rungs[0].id,
+      celula: achado?.elemento.celula,
+      motivo: resultado.motivo,
+    })
+    setAnuncio(`recusado: ${resultado.motivo}`)
+  }
+
   /** Clique fora de qualquer célula da grade desmarca (plano D-12) — não
    * interfere com o modal (que tem sua própria camada por cima). */
   useEffect(() => {
@@ -1082,7 +1147,13 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
       )}
 
       {modal && elementoDoModal && (
-        <ModalVariavel elemento={elementoDoModal} variaveis={diagrama.variaveis} aoEscolher={aoEscolherNoModal} aoFechar={fecharModal} />
+        <ModalVariavel
+          elemento={elementoDoModal}
+          variaveis={diagrama.variaveis}
+          aoEscolher={aoEscolherNoModal}
+          aoFechar={fecharModal}
+          aoAlterarLimite={aoAlterarLimiteNoModal}
+        />
       )}
     </div>
   )
@@ -1101,13 +1172,17 @@ function GhostArrasto({ tipo, x, y }: { tipo: TipoPaleta | Elemento['tipo']; x: 
     >
       {tipo === 'ramo' ? (
         <GitBranch className="text-ide-previa" />
+      ) : tipo === 'ctu' ? (
+        <span className="rounded border border-dashed border-ide-previa bg-ide-elevado px-2 py-1 font-mono text-xs text-ide-previa opacity-60">
+          CTU
+        </span>
       ) : (
         <svg width={40} height={32} viewBox="0 0 40 32">
           {tipo === 'contato_na' && <ContatoNA cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
           {tipo === 'contato_nf' && <ContatoNF cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
-          {(tipo === 'bobina' || tipo === 'bobina_set' || tipo === 'bobina_reset') && (
-            <Bobina cx={20} cy={16} variavel={null} selecionado={false} fantasma />
-          )}
+          {tipo === 'bobina' && <Bobina cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
+          {tipo === 'bobina_set' && <BobinaSet cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
+          {tipo === 'bobina_reset' && <BobinaReset cx={20} cy={16} variavel={null} selecionado={false} fantasma />}
         </svg>
       )}
     </div>

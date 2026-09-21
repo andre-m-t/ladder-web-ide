@@ -31,6 +31,31 @@ const DIAGRAMA_COM_X: Diagrama = {
   rungs: [{ id: 'r1', elementos: [], ramos: [] }],
 }
 
+/** Diagrama com uma variável vinculada só à `saida` de um CTU — para provar
+ * que a contagem de uso de `removerVariavel` (núcleo) considera o CTU via
+ * `variavelDoElemento`, não só `elemento.variavel` (tarefa #18). */
+const DIAGRAMA_COM_CTU: Diagrama = {
+  versao: 1,
+  variaveis: [{ nome: 'atingiu', tipo: 'BOOL' }],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        {
+          id: 'e1',
+          tipo: 'ctu',
+          celula: { linha: 0, coluna: 7 },
+          linhaReset: 1,
+          instancia: 'ctu0',
+          pv: 10,
+          saida: 'atingiu',
+        },
+      ],
+      ramos: [],
+    },
+  ],
+}
+
 /** Sobe o estado do diagrama, como a IDE faz de verdade: `PainelVariaveis` é
  * controlado, então o teste precisa aplicar `aoMudar` para observar o efeito
  * de uma operação bem-sucedida (variável nova na lista...). `aoRecusar` é
@@ -162,6 +187,17 @@ describe('PainelVariaveis — recusa do núcleo chama aoRecusar, sem texto (tare
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/vinculada a 1 elemento/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Nome da variável entrada')).toBeInTheDocument()
+  })
+
+  it('remover variável usada só como saída de um CTU também é recusado (tarefa #18: contagem via variavelDoElemento)', async () => {
+    const usuario = userEvent.setup()
+    const aoRecusar = vi.fn()
+    render(<Wrapper inicial={DIAGRAMA_COM_CTU} aoRecusar={aoRecusar} />)
+
+    await usuario.click(screen.getByRole('button', { name: 'Remover variável atingiu' }))
+
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/vinculada a 1 elemento/i))
+    expect(screen.getByLabelText('Nome da variável atingiu')).toBeInTheDocument()
   })
 
   it('sem aoRecusar, a recusa é só ignorada — sem alerta, sem erro, diagrama intacto', async () => {

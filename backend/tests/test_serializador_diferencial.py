@@ -6,8 +6,8 @@ nao um ST escrito a mao que apenas se pretende equivalente. Os arquivos
 dourados em `backend/tests/fixtures/serializados/*.st` sao gravados pelo
 vitest (`frontend/src/ladder/serializador.dourados.test.ts`, via
 `toMatchFileSnapshot`) a partir dos diagramas de referencia (`IO_ESPELHO`,
-`MINIMAL`, `RAMO_OU`, `SET_RESET`, `SELO`); este arquivo so os LE e executa.
-Ver `docs/specs/003-serializador-ladder-st/plan.md`, D-11.
+`MINIMAL`, `RAMO_OU`, `SET_RESET`, `SELO`, `BLINK`); este arquivo so os LE e
+executa. Ver `docs/specs/003-serializador-ladder-st/plan.md`, D-11.
 
 Isto quita a ressalva R-1 do plano 002: ali, a equivalencia entre o diagrama
 editado na IDE e o ST que seria gerado era ASSUMIDA (nenhum serializador
@@ -26,6 +26,15 @@ TOML correspondente:
   SET/RESET com ordem de degrau, selo com realimentacao). Nao tem ST de
   referencia da spec 001 -- so o gabarito denso em
   `diferencial/fixtures/serializador/*.toml` (tarefa #3).
+- `blink`: revisao aditiva com o contador `CTU` (`fixtures.ts`/`BLINK`,
+  variante K de `spikes/modelo/preset25/RESULTADO.md`). Usa o MESMO gabarito
+  de `diferencial/fixtures/blink.toml` (ja existente para o `blink.st` da
+  spec 001 -- ver `test_diferencial.py`), porque a variante K foi desenhada
+  para reproduzir exatamente o mesmo padrao de piscar. Alem do gabarito
+  esparso (50 ciclos), `test_blink_ctu_sem_divergencia_200_ciclos` roda o
+  dourado e o `blink.st` de referencia com 200 ciclos e 3 padroes de entrada
+  (o mesmo trio medido no spike) e exige 0 divergencias nos tres -- a prova
+  de execucao completa, nao so nos 5 pontos esparsos do TOML.
 
 Pula de forma limpa, com motivo, em duas situacoes independentes:
 1. `plc_host_runner` indisponivel neste ambiente (mesmo marcador de
@@ -63,16 +72,21 @@ host_runner_disponivel = pytest.mark.skipif(
     ),
 )
 
-# (nome do cenario, diretorio do TOML de gabarito) -- os 5 cenarios de D-11.
+# (nome do cenario, diretorio do TOML de gabarito) -- os 6 cenarios de D-11
+# (5 originais + `blink`, revisao aditiva do contador CTU).
 _CENARIOS = [
     ("io_espelho", FIXTURES_DIFERENCIAL_DIR),
     ("minimal", FIXTURES_DIFERENCIAL_DIR),
     ("ramo_ou", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("set_reset", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("selo", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
+    ("blink", FIXTURES_DIFERENCIAL_DIR),
 ]
 
 # Cenarios com ST de referencia da spec 001 (comparar_execucoes, alem do gabarito).
+# `blink` nao entra aqui: o teste generico usaria so as entradas do TOML (50
+# ciclos, padrao "sempre 0") -- `test_blink_ctu_sem_divergencia_200_ciclos`,
+# abaixo, cobre o mesmo par de STs com 200 ciclos e os 3 padroes do spike.
 _CENARIOS_COM_REFERENCIA = ("io_espelho", "minimal")
 
 
@@ -123,6 +137,60 @@ def test_dourado_sem_divergencia_contra_st_de_referencia(nome: str) -> None:
     divergencias = comparar_execucoes(saida_referencia, saida_dourada)
 
     assert not divergencias, formatar_relatorio(divergencias)
+
+
+# Trio de padroes de %IX0.0 do spike (spikes/modelo/preset25/medir.py e
+# RESULTADO.md): o mesmo usado para medir que a variante K fecha em 0
+# divergencias contra o blink.st real, 200 ciclos.
+_CICLOS_BLINK_CTU = 200
+
+
+def _padrao_blink_sempre_zero() -> list[dict[str, bool]]:
+    return [{"%IX0.0": False} for _ in range(_CICLOS_BLINK_CTU)]
+
+
+def _padrao_blink_pulso_ciclo_60() -> list[dict[str, bool]]:
+    entradas = _padrao_blink_sempre_zero()
+    entradas[60 - 1] = {"%IX0.0": True}
+    return entradas
+
+
+def _padrao_blink_pressionado_45_55() -> list[dict[str, bool]]:
+    entradas = _padrao_blink_sempre_zero()
+    for indice in range(45 - 1, 55):
+        entradas[indice] = {"%IX0.0": True}
+    return entradas
+
+
+_PADROES_BLINK_CTU = {
+    "sempre 0": _padrao_blink_sempre_zero(),
+    "pulso no ciclo 60": _padrao_blink_pulso_ciclo_60(),
+    "pressionado 45-55": _padrao_blink_pressionado_45_55(),
+}
+
+
+@host_runner_disponivel
+@pytest.mark.parametrize("nome_padrao,entradas", _PADROES_BLINK_CTU.items())
+def test_blink_ctu_sem_divergencia_200_ciclos(
+    nome_padrao: str, entradas: list[dict[str, bool]]
+) -> None:
+    """O `blink` dourado (contador CTU, variante K) roda 200 ciclos contra o
+    `blink.st` real da spec 001 nos 3 padroes de `%IX0.0` medidos no spike
+    (`spikes/modelo/preset25/RESULTADO.md`) e fecha em 0 divergencias nos
+    tres -- a mesma medicao do spike, agora como teste do projeto, contra o
+    .st que o serializador realmente produz (nao a variante escrita a mao).
+    """
+    _pular_se_dourado_ausente("blink")
+
+    referencia = FIXTURES_ST_REFERENCIA_DIR / "blink.st"
+    dourado = FIXTURES_ST_SERIALIZADOS_DIR / "blink.st"
+
+    saida_referencia = executor_host.executar(referencia, entradas).ciclos
+    saida_dourada = executor_host.executar(dourado, entradas).ciclos
+
+    divergencias = comparar_execucoes(saida_referencia, saida_dourada)
+
+    assert not divergencias, f"{nome_padrao}: {formatar_relatorio(divergencias)}"
 
 
 def test_toml_do_serializador_existem_e_tem_gabarito_denso() -> None:

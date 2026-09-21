@@ -123,6 +123,21 @@ Comandos:
     é idêntico, byte a byte, ao arquivo dourado (e2e); a aba "ST gerado" não
     existe mais; verificação no Chromium.
 
+## Revisão aditiva — contador crescente (2026-09-19)
+
+- [x] **#12 — [S] CTU no serializador e `BLINK` medido (plano D-13; RF-13, CA-10)**
+  - Arquivos: `frontend/src/ladder/serializador.ts`, `fixtures.ts` (`BLINK`),
+    `serializador.test.ts`, `serializador.dourados.test.ts`;
+    `backend/tests/fixtures/serializados/blink.st` (gerado);
+    `backend/tests/test_serializador_diferencial.py`
+  - Depende de: contrato `ElementoCtu` em `modelo.ts` (spec 002, #16)
+  - Pronto quando:
+    - CTU serializado conforme D-13, com as recusas de instância e de PV;
+    - dourado `blink.st` gerado pelo vitest e compilado no `iec2c`;
+    - diferencial executando com **0 divergências** contra `blink.toml` e
+      contra `blink.st`, em 200 ciclos × 3 padrões;
+    - e2e: o .st baixado do `BLINK` é idêntico, byte a byte, ao dourado.
+
 ---
 
 ## Rastreabilidade
@@ -140,6 +155,7 @@ Comandos:
 | #9 | RF-6 | CA-5 |
 | #10 | todos | todos |
 | #11 | RF-9 (Q-1 revista) | — |
+| #12 | RF-13 | CA-10 |
 
 ## Paralelismo previsto
 

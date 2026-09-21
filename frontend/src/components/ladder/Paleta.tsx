@@ -10,11 +10,18 @@
  *
  * **Sem rótulo "Paleta" e sem SVG duplicado (D-14):** o título discreto da
  * #23 e o mini-SVG de `Simbolos.tsx` saem — cada item mostra só o **glifo
- * monoespaçado** do símbolo (`-| |-`, `-|/|-`, `-( )-`) ou, para o item
- * **Ramo** (novo, essencial para o contato de selo — D-14 do plano), o
- * ícone `GitFork` do `lucide-react`, mais o nome. A lixeira ganha o ícone
- * `Trash2`. Todo ícone é `aria-hidden`: o nome acessível de cada item
- * continua sendo só o texto do rótulo.
+ * monoespaçado** do símbolo (`-| |-`, `-|/|-`, `-( )-`, `-(S)-`, `-(R)-`,
+ * `CTU`) ou, para o item **Ramo** (novo, essencial para o contato de selo —
+ * D-14 do plano), o ícone `GitFork` do `lucide-react`, mais o nome. A
+ * lixeira ganha o ícone `Trash2`. Todo ícone é `aria-hidden`: o nome
+ * acessível de cada item continua sendo só o texto do rótulo.
+ *
+ * **SET/RESET e Contador (tarefa #18, D-19):** `Bobina SET`/`Bobina RESET`
+ * são bobinas de escrita condicional (mesma posição/regra de uma bobina
+ * comum, D-2); `Contador` insere o CTU (`ladder/ctu.ts` decide a linha de
+ * reinício e recusa sem linha livre) — os três chegam à grade pela mesma
+ * ferramenta genérica de arrasto que já serve contato/bobina/ramo, sem
+ * nenhum código novo aqui além da entrada em `ITENS`.
  *
  * **Tokens só:** nenhuma cor Tailwind fixa — só `bg-/text-/border-ide-*`.
  *
@@ -37,9 +44,8 @@
 import { GitFork, Trash2 } from 'lucide-react'
 import type { KeyboardEvent, PointerEvent } from 'react'
 
-/** Elementos que a paleta oferece para arrastar. SET/RESET e o contador
- * entram na tarefa #18, quando este tipo cresce. */
-export type TipoPaleta = 'contato_na' | 'contato_nf' | 'bobina' | 'ramo'
+/** Elementos que a paleta oferece para arrastar. */
+export type TipoPaleta = 'contato_na' | 'contato_nf' | 'bobina' | 'bobina_set' | 'bobina_reset' | 'ramo' | 'ctu'
 
 export interface PaletaProps {
   /** Há um elemento ou ramo marcado na grade (habilita a lixeira como botão de ação). */
@@ -71,7 +77,10 @@ const ITENS: Array<{ tipo: TipoPaleta; rotulo: string; glifo?: string }> = [
   { tipo: 'contato_na', rotulo: 'Contato NA', glifo: '-| |-' },
   { tipo: 'contato_nf', rotulo: 'Contato NF', glifo: '-|/|-' },
   { tipo: 'bobina', rotulo: 'Bobina', glifo: '-( )-' },
+  { tipo: 'bobina_set', rotulo: 'Bobina SET', glifo: '-(S)-' },
+  { tipo: 'bobina_reset', rotulo: 'Bobina RESET', glifo: '-(R)-' },
   { tipo: 'ramo', rotulo: 'Ramo' },
+  { tipo: 'ctu', rotulo: 'Contador', glifo: 'CTU' },
 ]
 
 const ID_AJUDA_LIXEIRA = 'paleta-lixeira-ajuda'
