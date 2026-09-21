@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-19 (Fatia 4 da spec 002 com o contador serializado: F7 ✅; `BLINK` montado no editor e medido contra `blink.st` com 0 divergências) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
+**Última atualização:** 2026-09-21 (spec 004 inteira: **F9 ✅** — simulador de varredura no navegador e segundo executor do arcabouço diferencial; `BLINK` simulado × runtime em C com 0 divergências em 200 ciclos × 3 padrões) · **Branch ativa:** `main` (branches de feature são removidas após o merge)
 
 ## Legenda
 
@@ -41,11 +41,11 @@ Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatuali
 | F6 | Tela mínima (fatia vertical) | navegador | ✅ |
 | F7 | Editor Ladder visual | navegador | ✅ |
 | F8 | Serializador Ladder → ST | navegador | ✅ |
-| F9 | Simulador de ciclo de varredura | navegador | ⬜ |
+| F9 | Simulador de ciclo de varredura | navegador | ✅ |
 | F10 | Coleta de métricas e validação | — | 🟡 |
 | FT | Conformidade para depósito (transversal) | — | 🟡 |
 
-**Leitura rápida:** a fatia vertical está fechada até onde é possível sem ESP32. Desde 2026-09-18 (F8), ela vale também para **diagramas Ladder**: o diagrama é serializado para ST no navegador e segue o mesmo caminho, com a equivalência medida no runtime. No navegador, cola-se ST (ou monta-se o diagrama), compila-se no servidor e o pacote (imagens + offsets) chega à tela. O botão Gravar vai até a tentativa de conexão Web Serial e falha de forma clara sem dispositivo. No servidor, o mesmo pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. Nenhum dispositivo físico foi gravado: o transporte Web Serial é a única camada sem cobertura.
+**Leitura rápida:** com a F9 (2026-09-21) **não há mais feature de código pendente**: o software está completo, e o que resta sem cobertura é o transporte Web Serial contra ESP32 físico — que não é código a escrever. A fatia vertical está fechada até onde é possível sem ESP32. Desde 2026-09-18 (F8), ela vale também para **diagramas Ladder**: o diagrama é serializado para ST no navegador e segue o mesmo caminho, com a equivalência medida no runtime. No navegador, cola-se ST (ou monta-se o diagrama), compila-se no servidor e o pacote (imagens + offsets) chega à tela. O botão Gravar vai até a tentativa de conexão Web Serial e falha de forma clara sem dispositivo. No servidor, o mesmo pacote foi gravado via `esptool` num ESP32 emulado (QEMU), que deu boot. Nenhum dispositivo físico foi gravado: o transporte Web Serial é a única camada sem cobertura.
 
 ---
 
@@ -140,8 +140,10 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 - `scripts/build-deposito.sh --verificar`: `backend/app/api/compile.py` e `backend/app/services/pipeline.py` no manifesto, exit 0
 - `docs/specs/001-fatia-vertical-minima/plan.md` e `tasks.md` preenchidos (Fatia 1 = S1 concluída; Fatias 2 e 3 = S2/S3, ainda não iniciadas)
 
+**Concluído (S2 da spec 001, 2026-09-16)**
+- `POST /compile/pacote` (JSON com as 3 imagens de flash + offsets). *Correção de 2026-09-20: até esta data este item continuava listado em "Falta" aqui, embora a **F5** o registre concluído desde 2026-09-16 — ver "Concluído — camada servidor (S2)" na F5. O item foi movido, não reescrito.*
+
 **Falta**
-- `POST /compile/pacote` (JSON com as 3 imagens de flash + offsets) — S2
 - 🟡 **Pré-requisito para VPS, ainda fora de escopo (ver §7 da spec 001):** autenticação, *rate limiting*, fila de compilação se houver concorrência real (hoje só há exclusão mútua via `threading.Lock`, suficiente para um usuário por vez), e HTTPS na borda — nenhum implementado, todos necessários antes de expor o serviço fora de `localhost`.
 
 ---
@@ -511,23 +513,74 @@ CA-4, CA-7 e CA-8 ganharam uma revisão aditiva que os liga às decisões.
 
 ---
 
-## F9 — Simulador de ciclo de varredura ⬜
+## F9 — Simulador de ciclo de varredura ✅
 
 **Camada:** navegador · **Autoral:** sim
 
 Executa a lógica no navegador antes da gravação, seguindo a semântica da norma: lê entradas → resolve todos os rungs → escreve saídas → repete.
 
-**Ferramentas:** nenhuma. TypeScript puro.
+**Ferramentas:** nenhuma no produto. TypeScript puro. (No **ambiente de teste** do back-end entraram `node` e o binário nativo do `esbuild` — ver Q-8 abaixo e `THIRD_PARTY.md`.)
 
-**Ponto de atenção:** é implementação independente do runtime em C do F3. A divergência entre os dois é **métrica do TCC**, não bug a esconder — deve ser medida e reportada.
+**Spec 004 concluída (2026-09-21):** [`spec.md`](../docs/specs/004-simulador-varredura/spec.md), [`plan.md`](../docs/specs/004-simulador-varredura/plan.md) e [`tasks.md`](../docs/specs/004-simulador-varredura/tasks.md). Spec aprovada em 2026-09-20 com Q-1 a Q-8 decididas; plano e tarefas liberados na mesma decisão; as duas fatias implementadas no dia seguinte. **É a última feature de código do projeto.**
 
-**Escopo inicial:** contatos NA/NF e bobinas. Temporizadores e contadores (TON/TOF/CTU/CTD) em iteração posterior.
+**Escopo entregue:** contato NA, contato NF, bobina simples, bobina SET, bobina RESET, ramo paralelo e **contador crescente (CTU)** — o mesmo subconjunto do editor e do serializador. O CTU não ficou de fora: sem ele o `BLINK` não simularia, e o `BLINK` é o programa cuja equivalência exata foi medida na Fatia 4.
 
-> **Nota (2026-09-19):** o CTU já existe no modelo, no editor e no serializador. Para que o simulador rode o `BLINK`, a spec 004 precisa decidir se o CTU entra no escopo inicial do simulador. Sem ele, o único cenário de referência com contador fica fora da métrica simulação ↔ runtime.
+### Decisões da spec 004 (2026-09-20, §9 da spec)
 
-**Alvo decidido pelo autor (2026-09-17), para a spec futura:** a F9 entrega o simulador **e** o segundo executor que o pluga ao teste diferencial. O ponto de extensão já está pronto e documentado (`backend/tests/diferencial/README.md`): basta uma classe que implemente o `Executor` — `runner.py`, `comparador.py` e as fixtures TOML não mudam. O `docs/validacao/contrato-runtime-host.md` já fixa que o protocolo fala em endereço IEC (`%QX0.0`), não em GPIO, justamente porque o simulador não deve conhecer pinagem. É o que fecha a métrica "divergência simulação ↔ hardware" do F10.
+- **Q-1:** tempo real a 20 ms/ciclo como padrão, com marcha lenta selecionável. Cadência de ciclo separada da cadência de quadro.
+- **Q-2:** Executar/Pausar, Passo e Reiniciar.
+- **Q-3:** só acionamento manual; sequência pré-definida na interface fica como extensão futura (já existe onde importa, nos TOMLs do arcabouço).
+- **Q-4:** energizado por **cor e espessura** (codificação redundante); selo de problema no canto, energização no traço.
+- **Q-5:** estado da simulação volátil.
+- **Q-6:** projeto ST fora do escopo, com o controle desabilitado e o motivo visível.
+- **Q-7:** modo exclusivo — a simulação congela a edição e desabilita Compilar/Gravar.
+- **Q-8:** o segundo executor roda como **processo de verdade** (`node` na imagem de teste + empacotamento sob demanda pelo `esbuild`), e não como traço gravado. Razão registrada pelo autor: traço gravado é artefato congelado que pode divergir do código sem ninguém notar — a mesma classe de falha do `ESP_PROJECT_TEMPLATE` que motivou a Regra 5, e reintroduzi-la justamente no instrumento que produz a métrica central seria contraditório. O plano B (traço, com guarda de sequência) ficou registrado e **não foi necessário**.
 
----
+### RF-7 — a proibição que sustenta a medição
+
+O simulador calcula a energização por **propagação de fluxo da esquerda para a direita**, leitura própria e independente da topologia do degrau. É **proibido** reaproveitar a redução série-paralelo do serializador. A razão está na spec como requisito de primeira ordem, não como observação de plano: o runtime em C executa o texto que o serializador produz, e a medição compara os dois. Se as duas leituras da topologia fossem a mesma, um erro apareceria idêntico nos dois lados, a comparação mediria zero divergências e o instrumento diria "de acordo" sem ter medido nada. **A duplicação é o instrumento.** Registrada como tensão deliberada contra o §11 da Constituição, para sobreviver a uma futura refatoração bem-intencionada.
+
+### Concluído — Fatia 1: o motor medido (#1–#9, 2026-09-21)
+
+- **`frontend/src/ladder/simulacao.ts`** (núcleo puro, sem React, SVG, relógio, `localStorage` ou pinagem): propagação de fluxo por nós; imagem de processo explícita (entrada lida uma vez por ciclo, acionamento só vale no ciclo seguinte); escrita de um degrau visível para os seguintes no mesmo ciclo; SET/RESET com a última escrita do ciclo vencendo; CTU com reset precedendo a borda de subida; energização devolvida por **nó, célula e elemento**, que é o que o desenho consome.
+- **`frontend/src/ladder/simulacao-cli.ts`**: o mesmo motor sem interface, falando **exatamente** o contrato de `docs/validacao/contrato-runtime-host.md` (stdin `%IX0.0=1`, stdout `ciclo=N %QX0.0=1`, endereço IEC e nunca GPIO).
+- **`backend/tests/diferencial/executores.py`**: `SimuladorExecutor`, alteração **aditiva**. Resolução em três vias como o `HostRunnerExecutor`; empacotamento sob demanda em diretório temporário **fora do repositório** (mesma restrição do `OUT_DIR` do runtime em C, que o `build-deposito.sh` cobra); diagrama irmão resolvido pelo nome do `.st`, com falha alta e motivo se faltar — nunca pulo silencioso.
+- **Diagramas de referência** (`backend/tests/fixtures/diagramas/*.json`) gerados pelo vitest por `toMatchFileSnapshot`, como os `.st` dourados: nunca escritos à mão.
+- **`backend/Dockerfile`**: camada com `node` (v18.19.1). Imagem 7,33 → **7,39 GB** (+60 MB). Node.js e esbuild identificados em `THIRD_PARTY.md` como ferramenta externa em processo separado, só em teste.
+
+**A medição (CA-1 a CA-3), `backend/tests/test_simulacao_diferencial.py`:**
+- os 5 cenários sem contador (`io_espelho`, `minimal`, `ramo_ou`, `set_reset`, `selo`) contra os gabaritos TOML **já existentes, sem alterar nenhuma fixture**;
+- **`BLINK` simulado × `blink.st` executado de verdade no `plc_host_runner`**, 200 ciclos × 3 padrões (sempre 0; pulso no 60; pressionado 45–55): **0 divergências**. O ST comparado é o **de referência da spec 001**, não o dourado do serializador — a comparação atravessa as duas implementações inteiras.
+- **Controle negativo feito pelo orquestrador:** com o PV do `blink.json` alterado de 12 para 13, o instrumento acusou **57 divergências**, a primeira em `ciclo=25 ponto=%QX0.0 esperado=True obtido=False`; restaurado, voltou a 9 passed. "9 passed" sozinho não prova que mediu — este controle prova.
+- **Cadência (CA-11):** 50 degraus × 2000 ciclos em **~243 ms (~0,12 ms/ciclo)**, ~165× de folga sobre o orçamento de 20 ms.
+
+### Concluído — Fatia 2: a simulação na ferramenta (#10–#14, 2026-09-21)
+
+- **Desenho:** token `--ide-energizado` nos dois temas (`#c2410c` claro, `#ff9248` escuro), sempre acompanhado de aumento de espessura — cor e espessura decididas como **par único**, nunca em lugares diferentes. O fio da linha 0 passou a ser um segmento por célula, para mostrar **onde** a energia para no meio do degrau. `SeloProblema` intocado. Prop ausente = desenho byte a byte igual ao anterior (conferido por teste).
+- **IDE:** botão Simular/Sair, Executar/Pausar, Passo, Reiniciar e seletor de marcha (tempo real 20 ms, marcha lenta 500 ms). Relógio em `requestAnimationFrame` com N ciclos por quadro, teto de 10 ciclos/quadro e **um único** `setState` por quadro. Modo exclusivo: edição congelada, Compilar/Gravar/`.st` desabilitados com o motivo. Portão de erro de validação reusando o do Compilar. Em projeto ST, "Simulação disponível apenas em projeto Ladder".
+- **Variáveis:** a coluna "Valor", reservada desde a #23 justamente para isto, passou a mostrar o estado ao vivo; variável de **entrada** vira `role="switch"` acionável, saída e memória continuam só leitura (checado no componente, não confiado a quem chama). "Ciclo N" no cabeçalho do painel.
+
+### Verificação
+
+- `tsc` limpo, **799 testes vitest** (eram 717), `vite build` (JS 469 kB / 143 kB gzip).
+- pytest `not slow` **85 passed** (eram 76); `test_simulacao_diferencial.py` 9 passed.
+- e2e **10 cenários** (6 antigos + 4 novos em `simular.spec.ts`: CA-4, CA-5, CA-8, CA-13), sem intermitência — o avanço de ciclos é feito por Passo até a contagem exibida, nunca por tempo de parede.
+- `build-deposito.sh --verificar` ok, com `simulacao.ts` e `simulacao-cli.ts` no manifesto.
+- **Chromium real, nos dois temas, pelo orquestrador:** `IO_ESPELHO` energizando ao acionar a entrada, `BLINK` rodando até o ciclo 50 com o CTU e as linhas CU/R energizadas, projeto ST com Simular desabilitado e o motivo.
+
+### Achado da verificação visual (corrigido)
+
+O fio da **célula terminal** era desenhado desenergizado atravessando a bobina energizada — a mesma célula mostrava dois estados contraditórios, e a leitura que saía era "a energia para antes da bobina". Causa: o desenho usava `celulas` (definida como "entra energizado **e** conduz"), e uma bobina é carga, não conduz para a direita. **O núcleo não foi tocado** — está medido contra o runtime e não se ajusta por questão de desenho; a correção foi do desenho, que na célula terminal passou a seguir a energização do próprio terminal. Regra fixada junto: trilho esquerdo energizado (é o vivo), trilho direito em `stroke-ide-trilho` (é o neutro). Teste novo que falha sem a correção. **Nenhum teste em jsdom pegava isso** — é a quarta rodada em que a verificação no navegador acha o que a suíte não acha.
+
+### Pendências e limitações registradas
+
+- **Congelamento sem retorno ao usuário.** Com a simulação ativa, a paleta e a grade continuam com aparência arrastável (cursor `grab`, bordas tracejadas) e uma tentativa de arrastar **não produz nada**: sem toast, sem cursor `not-allowed`, sem prévia. Funcionalmente correto, mas indistinguível de um defeito até a pessoa reparar que nada mudou — e contraria a norma do projeto (#25/#27) de que recusa se percebe. **Aguardando decisão do autor.**
+- **Coluna "Valor" fora de vista no painel estreito.** A tabela de variáveis tem largura mínima de 600 px com rolagem horizontal própria (herdado da revisão pós-#26); no painel na largura padrão não dá para ver o **nome** e o **valor ao vivo** ao mesmo tempo. O laço central da feature (acionar entrada → ver valor) fica prejudicado sem arrastar a rolagem ou alargar o painel. **Aguardando decisão do autor.**
+- **Marcha lenta em 500 ms/ciclo** foi escolhida sem validação com o autor; a spec só exigia "ao menos uma".
+- **`Passo` com o laço rodando:** `aoPassoSimulacao` lê o estado por ref e grava sem atualização funcional; com a simulação em execução há corrida teórica com o laço. Na prática o usuário pausa antes; o e2e pausa de propósito. Correção é pequena e não foi feita nesta rodada.
+- **`preventDefault` ausente no congelamento:** com a edição congelada o `pointerdown` da paleta não chama `preventDefault` (quem chamava era o caminho de arrasto, que não roda). Sem efeito observado hoje, porque a paleta usa `select-none`/`draggable={false}`; fica registrado como divergência de comportamento entre os dois modos.
+- Declarar, renomear e remover variável **continua liberado** durante a simulação — não coberto por nenhum CA e não pedido; renomear uma variável em uso no meio de uma simulação é situação sem teste.
+- **Achado técnico:** `declare module 'node:fs'` não funciona sem `@types/node` (o TypeScript o trata como *augmentation* de um módulo inexistente, TS2664). O shim usa `import()` com especificador não-literal. Nenhuma dependência nova entrou.
 
 ## F10 — Coleta de métricas e validação 🟡
 
@@ -537,14 +590,15 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 |---|---|
 | Tempo de compilação | ✅ frio 66 s · incremental 11–13 s (Q-4) |
 | Corretude do ciclo (tabela-verdade) | 🟡 verificada no runtime hospedeiro (host + QEMU); falta confirmar em hardware |
-| Divergência simulação ↔ hardware | 🟡 instrumento pronto (`backend/tests/diferencial/`), aguardando F9 |
+| Divergência simulação ↔ **runtime hospedeiro** | ✅ **0 divergências** (2026-09-21): 5 cenários contra gabarito + `BLINK` × `blink.st` executado no `plc_host_runner`, 200 ciclos × 3 padrões. Medida por dois processos independentes executando, não por traço gravado |
+| Divergência simulação ↔ **hardware** | 🔒 depende de ESP32 físico; o lado do simulador já existe |
 | Taxa de sucesso de gravação em N tentativas | 🔒 depende de F5 |
 | Tempo de ciclo de varredura no dispositivo | ⬜ |
 | Tempo total edição → dispositivo operante | 🔒 depende de F6 |
 | Cobertura de elementos IEC 61131-3 | ⬜ |
 | Acessibilidade: pré-requisitos vs. fluxo desktop | ⬜ comparação com OpenPLC |
 
-**Arcabouço de teste diferencial (2026-09-15).** `backend/tests/diferencial/` está pronto: fixture declarativa em TOML (código ST, entradas por ciclo, saídas esperadas por ciclo), `HostRunnerExecutor` falando o contrato de `docs/validacao/contrato-runtime-host.md`, e um comparador que reporta ciclo, ponto e esperado/obtido. A abstração `Executor` e a função `comparar_execucoes` já existem para receber o simulador de F9 sem reescrita — falta só o segundo executor.
+**Arcabouço de teste diferencial (2026-09-15).** `backend/tests/diferencial/` está pronto: fixture declarativa em TOML (código ST, entradas por ciclo, saídas esperadas por ciclo), `HostRunnerExecutor` falando o contrato de `docs/validacao/contrato-runtime-host.md`, e um comparador que reporta ciclo, ponto e esperado/obtido. A abstração `Executor` e a função `comparar_execucoes` já existem para receber o simulador de F9 sem reescrita — falta só o segundo executor. **Cumprido em 2026-09-21** (spec 004): `SimuladorExecutor` entrou como alteração aditiva e `runner.py`, `comparador.py` e as fixtures TOML não mudaram uma linha — a promessa de 2026-09-15 se verificou literalmente.
 
 **Alerta metodológico:** "o firmware compila" é evidência de que um componente funciona, não de que a integração é viável. A isso se acrescenta, desde 2026-09-15: **"o firmware roda no emulador" é evidência de que o código executa, não de que o dispositivo funciona.** A conclusão do trabalho precisa estar ancorada nestes números, não em demonstração pontual.
 
@@ -553,7 +607,7 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 ## FT — Conformidade para depósito (transversal) 🟡
 
 **Concluído**
-- `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (14 fontes de firmware + adaptadores + `api.ts`) e listas de artefatos proibidos
+- `scripts/build-deposito.sh` **audita e aborta** em vez de apenas imprimir: manifesto `REQUIRED_FILES` (**35 arquivos**, conferidos em 2026-09-21: 14 do firmware/runtime, 5 do back-end — adaptadores, pipeline, endpoint e `main` — e 16 do front-end: núcleo Ladder, serializador, **simulador (`simulacao.ts` e `simulacao-cli.ts`)**, persistência, projeto, `EditorLadder`, `SimboloCtu`, `ListaProblemas`, `App`, `api` e `gravador`. A descrição anterior — "14 fontes de firmware + adaptadores + `api.ts`" — estava desatualizada desde a spec 002) e listas de artefatos proibidos
 - Modo `--verificar` para CI
 - `verificar_origem` inspeciona a **árvore de origem**, não o staging — evita que os `EXCLUDES` do rsync limpem contaminação em silêncio e produzam pacote verde indevidamente
 - Quatro testes em `test_deposito.py`, incluindo dois negativos que provam que o guarda morde. **Desde 2026-09-16 eles rodam na imagem**: `rsync` e `zip` passaram a ser instalados no `Dockerfile` (camada de 3,04 MB); antes, pulavam em silêncio pelo `skipif`
@@ -577,23 +631,22 @@ Executa a lógica no navegador antes da gravação, seguindo a semântica da nor
 
 | ID | Questão | Impacto | Quando decidir |
 |---|---|---|---|
-| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora. **F8 decidida em 2026-09-19:** o CTU é serializado (RF-13 da spec 003). Falta decidir o escopo da **F9** (ver a nota no F9) |
+| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora. **F8 decidida em 2026-09-19:** o CTU é serializado (RF-13 da spec 003). **F9 decidida em 2026-09-20** (spec 004): o CTU entra no escopo do simulador, TON/TOF/CTD seguem fora. **Questão encerrada — nenhuma decisão em aberto no projeto.** |
 
 ---
 
 ## Próximos passos, em ordem
 
-1. Spec 004 — **F9**:
-   - o simulador de varredura no navegador;
-   - o executor que o pluga ao teste diferencial;
-   - decidir se o CTU entra no escopo inicial, para cobrir o `BLINK`.
+**Não há mais feature de código pendente.** A F9 era a última; o que resta é decisão, medição e escrita.
 
-   Com isso começa a coleta sistemática de métricas (**F10**).
-2. Demonstração ao orientador. Os três programas de referência agora saem de diagramas montados no editor e compilam de verdade. A afirmação de viabilidade só fecha com o hardware físico (ver abaixo).
-3. Pendências menores:
+1. **Decidir os dois pontos abertos da F9** (ver "Pendências e limitações" no F9): o congelamento sem retorno ao usuário e a coluna "Valor" fora de vista no painel estreito. São os únicos itens que podem virar código nesta feature.
+2. **Coleta sistemática de métricas (F10).** O instrumento está completo pela primeira vez: dois executores independentes rodando o mesmo programa. As métricas que não dependem de hardware podem ser fechadas agora — cobertura de elementos IEC 61131-3 e a comparação de pré-requisitos com o OpenPLC seguem ⬜.
+3. **Demonstração ao orientador.** Agora o caminho é editar → **simular** → compilar → gravar, com os três programas de referência saindo de diagramas montados no editor.
+4. Pendências menores:
    - suíte `slow` com `--user` não-root (#23);
-   - `ruff format` em 3 arquivos antigos (#23);
-   - desenho de ramos cruzados.
+   - `ruff format` em 3 arquivos antigos (#23) — conferido nesta rodada: continuam fora de formato, e a alteração aditiva da spec 004 não os tocou;
+   - desenho de ramos cruzados;
+   - `Passo` com o laço rodando e o `preventDefault` do congelamento (F9).
 
 ## Bloqueado aguardando hardware
 
@@ -643,3 +696,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-18 | Revisão de UX pós-F8 — download e toasts (spec 002 #27, spec 003 #11) | Duas revisões aditivas pedidas pelo autor depois de usar a F8: (1) Q-1 da spec 003 revista, com a aba "ST gerado" trocada pelo botão **Baixar** no cabeçalho (Ladder .json / Structured Text .st, com o .st sob o mesmo portão do Compilar; D-12); (2) aba Mensagens trocada por **toasts** próprios só para as recusas, com o Console inalterado (D-18). Frentes sonnet D ∥ M → T. Nenhuma dependência nova. 587 testes vitest, e2e 5 passed (download conferido byte a byte com o arquivo dourado; recusa → toast com mouse real), depósito ok, capturas nos dois temas |
 | 2026-09-18 | Toasts no canto superior esquerdo (ajuste de D-18) | A pedido do autor, os toasts saem do canto inferior direito e vão para o superior esquerdo, logo abaixo do cabeçalho (`top-14`, sem cobrir "Novo projeto"). Só a posição mudou; D-18 ganhou uma nota datada |
 | 2026-09-19 | Fatia 4 da spec 002 + CTU serializado — **F7 ✅** | O autor incluiu a serialização do CTU na rodada (revisão aditiva da spec 003: RF-13, CA-10, D-13; plano 002 §19/D-19). O orquestrador trocou o contrato (`ElementoCtu`); depois as frentes sonnet N (`ctu.ts` destacável) ∥ S (serializador, `BLINK` e diferencial) e D (SET/RESET/CTU no editor) ∥ T (e2e). O `BLINK` serializado bate com `blink.st`, com 0 divergências em 200 ciclos × 3 padrões. A #17 foi substituída sem ST escrito à mão, e o CA-3 é montado pela UI. A revisão visual no Chromium achou o ramo cruzando a linha de reset (corrigido com a troca de linhas) e o traço atravessando a caixa do CTU (corrigido com fundo opaco). 717 vitest, 76 pytest, e2e 6, depósito ok; `BLINK` compilado de verdade no Chromium com back-end real |
+| 2026-09-20 | Fase 1 e 2 da spec 004 — F9 | Spec escrita com 21 RF, 13 CA e Q-1 a Q-8; o autor decidiu as oito na mesma rodada e liberou plano, tarefas e implementação. O corolário do plano virou **RF-7**, requisito de primeira ordem: o simulador calcula energização por propagação de fluxo própria e **não** reaproveita a redução do serializador, porque leituras de topologia compartilhadas fariam a comparação medir zero sem medir nada — tensão contra o §11 registrada de propósito. Q-8 decidida pelo autor a favor do processo real contra o traço gravado, com o argumento do `ESP_PROJECT_TEMPLATE` (artefato congelado que envelhece sem ninguém notar). Correções de passagem no painel: `POST /compile/pacote` movido de "Falta" para "Concluído" na F4 e a descrição do manifesto atualizada. A terceira correção pedida (resíduo de Fase 1 na F7) **não se aplicava** — a frase só existe numa linha datada do Histórico, que é registro verdadeiro daquele dia |
+| 2026-09-21 | Spec 004 implementada — **F9 ✅**, software completo | Etapa 0 (contrato de `simulacao.ts` e do shim) publicada pelo orquestrador antes de despachar ninguém. Levas de subagentes sonnet: N (motor, testes, shim, diagramas exportados) ∥ X (`node` na imagem, `SimuladorExecutor`, teste diferencial, README) → D (energização) ∥ T (modo simulação, relógio, variáveis ao vivo) → E (e2e). **`BLINK` simulado × `blink.st` no `plc_host_runner`: 0 divergências em 200 ciclos × 3 padrões**, com controle negativo (PV 12→13 → 57 divergências) provando que o instrumento mede. A promessa de 2026-09-15 do arcabouço se cumpriu literalmente: `runner.py`, `comparador.py` e as fixtures TOML não mudaram uma linha. A verificação em Chromium real achou o fio da célula terminal desenhado desenergizado atravessando a bobina energizada — corrigido **no desenho**, nunca no núcleo medido. 799 vitest, 85 pytest, 10 e2e, depósito ok. A frente E caiu uma vez por limite de API antes de escrever e foi redespachada do zero |

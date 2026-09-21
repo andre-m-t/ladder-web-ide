@@ -1,0 +1,71 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "partida",
+      "tipo": "BOOL",
+      "endereco": "%IX0.0"
+    },
+    {
+      "nome": "parada",
+      "tipo": "BOOL",
+      "endereco": "%IX0.1"
+    },
+    {
+      "nome": "motor",
+      "tipo": "BOOL",
+      "endereco": "%QX0.0"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "partida"
+        },
+        {
+          "id": "e2",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 1,
+            "coluna": 0
+          },
+          "variavel": "motor"
+        },
+        {
+          "id": "e3",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "parada"
+        },
+        {
+          "id": "e4",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "motor"
+        }
+      ],
+      "ramos": [
+        {
+          "id": "b1",
+          "linha": 1,
+          "colunaInicio": 0,
+          "colunaFim": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "liga",
+      "tipo": "BOOL",
+      "endereco": "%IX0.0"
+    },
+    {
+      "nome": "desliga",
+      "tipo": "BOOL",
+      "endereco": "%IX0.1"
+    },
+    {
+      "nome": "q",
+      "tipo": "BOOL",
+      "endereco": "%QX0.0"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "liga"
+        },
+        {
+          "id": "e2",
+          "tipo": "bobina_set",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "q"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r2",
+      "elementos": [
+        {
+          "id": "e3",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "desliga"
+        },
+        {
+          "id": "e4",
+          "tipo": "bobina_reset",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "q"
+        }
+      ],
+      "ramos": []
+    }
+  ]
+}

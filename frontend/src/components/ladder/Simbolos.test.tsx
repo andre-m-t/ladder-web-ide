@@ -193,3 +193,92 @@ describe('Simbolos', () => {
     expect(container.innerHTML).not.toMatch(COR_FIXA)
   })
 })
+
+describe('Simbolos — energização (spec 004, tarefa #10)', () => {
+  it('sem a prop energizado, o traço é idêntico ao de hoje (ausente = sem mudança)', () => {
+    const { container: semProp } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} />
+      </svg>,
+    )
+    const { container: comFalso } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} energizado={false} />
+      </svg>,
+    )
+
+    for (const container of [semProp, comFalso]) {
+      const linha = container.querySelector('line')
+      expect(linha?.getAttribute('class')).toContain('stroke-ide-fio')
+      expect(linha?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+      expect(linha?.getAttribute('stroke-width')).toBe('2')
+    }
+  })
+
+  it('energizado usa o token de cor ide-energizado E aumenta a espessura do traço (RF-14, codificação redundante)', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} energizado />
+      </svg>,
+    )
+
+    const linha = container.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(Number(linha?.getAttribute('stroke-width'))).toBeGreaterThan(2)
+  })
+
+  it('energizado se aplica ao traço de ContatoNF, Bobina, BobinaSet e BobinaReset', () => {
+    const { container: nf } = render(
+      <svg>
+        <ContatoNF {...PROPS_BASE} energizado />
+      </svg>,
+    )
+    expect(nf.querySelector('line')?.getAttribute('class')).toContain('stroke-ide-energizado')
+
+    for (const Componente of [Bobina, BobinaSet, BobinaReset]) {
+      const { container } = render(
+        <svg>
+          <Componente {...PROPS_BASE} energizado />
+        </svg>,
+      )
+      const arco = container.querySelector('path')
+      expect(arco?.getAttribute('class')).toContain('stroke-ide-energizado')
+      expect(Number(arco?.getAttribute('stroke-width'))).toBeGreaterThan(2)
+    }
+  })
+
+  it('perigo tem precedência sobre energizado (nunca coexistem de verdade, mas a cor de perigo vence)', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} energizado perigo />
+      </svg>,
+    )
+
+    const linha = container.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-perigo')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+  })
+
+  it('energizado tem precedência sobre selecionado (o estado ao vivo é mais saliente que a seleção)', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} energizado selecionado />
+      </svg>,
+    )
+
+    const linha = container.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-destaque')
+  })
+
+  it('nenhuma classe de cor fixa também com energizado (só tokens ide-*)', () => {
+    const { container } = render(
+      <svg>
+        <ContatoNA {...PROPS_BASE} energizado />
+        <Bobina {...PROPS_BASE} energizado />
+      </svg>,
+    )
+
+    expect(container.innerHTML).not.toMatch(COR_FIXA)
+  })
+})

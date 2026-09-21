@@ -1,11 +1,35 @@
 # Teste diferencial — arcabouço
 
-**Status:** instrumento pronto, aguardando F9. Compara *um* executor (o
-`plc_host_runner` real, em C) contra o gabarito declarado em cada fixture.
-A comparação que o TCC realmente quer medir — simulador (F9, TypeScript)
-contra runtime host — ainda não é possível, porque F9 não existe. Este
-arcabouço é o instrumento que a espera; ele já está pronto para receber um
-segundo executor sem precisar ser reescrito (ver "Ponto de extensão", abaixo).
+**Status original (2026-09-15):** instrumento pronto, aguardando F9. Compara
+*um* executor (o `plc_host_runner` real, em C) contra o gabarito declarado em
+cada fixture. A comparação que o TCC realmente quer medir — simulador (F9,
+TypeScript) contra runtime host — ainda não é possível, porque F9 não existe.
+Este arcabouço é o instrumento que a espera; ele já está pronto para receber
+um segundo executor sem precisar ser reescrito (ver "Ponto de extensão",
+abaixo).
+
+**Atualização (spec 004, 2026-09-20): o segundo executor existe.** O motor de
+simulação (`frontend/src/ladder/simulacao.ts`), exposto sem interface por
+`frontend/src/ladder/simulacao-cli.ts`, ganhou uma segunda implementação de
+`Executor` — `SimuladorExecutor`, em `executores.py`. A comparação
+simulador ↔ runtime deixou de ser hipotética: `backend/tests/
+test_simulacao_diferencial.py` roda os dois lados de verdade, mede CA-1 a
+CA-3 da spec 004 e é o primeiro arquivo deste repositório que efetivamente
+exercita `comparador.comparar_execucoes` com dois executores reais (até
+aqui, só com dados sintéticos, em `test_diferencial.py`).
+
+**A promessa se cumpriu, letra por letra.** `runner.py`, `comparador.py` e
+nenhuma fixture `.toml` — nem as já existentes, nem as três novas da spec
+003 — mudaram uma linha para receber o segundo executor. A única alteração
+em `executores.py` foi aditiva: a classe `SimuladorExecutor` e as funções
+que a resolvem, reusando `_formatar_linha_entrada` e `_parsear_linha_saida`
+que já existiam. A única surpresa em relação ao previsto foi de
+infraestrutura, não de desenho: o `Executor` recebe `st_path` (contrato que
+não muda, RF-20), mas o simulador não lê `.st` — ele consome o diagrama em
+JSON (RF-7: a simulação não pode compartilhar a leitura de topologia do
+serializador). `SimuladorExecutor` resolve esse diagrama irmão pelo nome do
+arquivo, em `backend/tests/fixtures/diagramas/<nome>.json` (plano 004,
+D-11) — resolução nova, mas que não tocou em nada do que já existia.
 
 ## Por que este diretório existe
 
@@ -87,6 +111,13 @@ divergencias = comparar_execucoes(saida_simulador, saida_host)
 
 É essa chamada — não uma reescrita do runner — que fecha a métrica de F10.
 
+**Atualização (spec 004, 2026-09-20):** essa chamada agora existe de verdade,
+em `backend/tests/test_simulacao_diferencial.py`
+(`test_blink_simulador_sem_divergencia_200_ciclos`), com `SimuladorExecutor`
+no lugar do comentário `# a escrever, quando F9 existir`. O trecho acima fica
+como registro do desenho original — decisão já tomada não se apaga — e o
+teste real é a prova de que o desenho se sustentou sem mudança.
+
 ## Como rodar
 
 Dentro do container (regra 5 do `CLAUDE.md`, nunca `docker compose up`):
@@ -94,6 +125,10 @@ Dentro do container (regra 5 do `CLAUDE.md`, nunca `docker compose up`):
 ```bash
 docker run --rm -v "$(pwd):/repo" -w /repo/backend ladderflow-backend:dev \
   python -m pytest -m "not slow" -q tests/test_diferencial.py
+
+# a comparação de dois lados de verdade — simulador x runtime (spec 004):
+docker run --rm -v "$(pwd):/repo" -w /repo/backend ladderflow-backend:dev \
+  python -m pytest -q tests/test_simulacao_diferencial.py
 ```
 
 Os testes de fixture contra o runtime real (`test_fixture_sem_divergencia_no_
@@ -102,3 +137,11 @@ disponível — defina a variável de ambiente `PLC_HOST_RUNNER` com o caminho d
 binário, ou instale-o no `PATH` da imagem (mesmo padrão de `iec2c` e
 `idf.py`). Os testes do comparador (`test_comparar_*`) são lógica pura e
 sempre rodam, com ou sem o binário.
+
+`test_simulacao_diferencial.py` pula limpo pela mesma razão (ausência de
+`plc_host_runner`), mas **falha**, em vez de pular, se `node` ou o
+empacotamento sob demanda do simulador (`SimuladorExecutor`,
+`frontend/node_modules/@esbuild/linux-x64/bin/esbuild`) não funcionarem, ou
+se o diagrama JSON irmão de um cenário ainda não tiver sido gerado — ver o
+docstring daquele arquivo e o de `_empacotar_sob_demanda` em
+`executores.py`.

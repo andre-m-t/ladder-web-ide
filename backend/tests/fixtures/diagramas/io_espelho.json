@@ -1,0 +1,41 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "entrada",
+      "tipo": "BOOL",
+      "endereco": "%IX0.1"
+    },
+    {
+      "nome": "saida",
+      "tipo": "BOOL",
+      "endereco": "%QX0.1"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "entrada"
+        },
+        {
+          "id": "e2",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "saida"
+        }
+      ],
+      "ramos": []
+    }
+  ]
+}

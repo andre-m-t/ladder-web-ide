@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { diagramaVazio } from '../../ladder/edicao'
 import { BLINK, IO_ESPELHO, MINIMAL } from '../../ladder/fixtures'
 import type { Diagrama, Elemento, Variavel } from '../../ladder/modelo'
+import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import { validarDiagrama, type Problema } from '../../ladder/validacao'
 import EditorLadder from './EditorLadder'
 
@@ -1378,5 +1379,79 @@ describe('EditorLadder — desempenho com 50 degraus preenchidos (plano §6, RNF
     // (plano §6): o alvo é acusar regressão grave, não otimizar prematuramente
     // por variação normal de máquina/CI.
     expect(duracaoMs).toBeLessThan(5000)
+  })
+})
+
+describe('EditorLadder — congelado (spec 004, tarefa #11, RF-15/CA-8)', () => {
+  function renderCongelado(inicial: Diagrama) {
+    const aoMudar = vi.fn()
+    render(<EditorLadder diagrama={inicial} aoMudar={aoMudar} congelado />)
+    return { aoMudar }
+  }
+
+  it('arrastar da paleta para uma célula vazia não insere nada e não chama aoMudar', () => {
+    const { aoMudar } = renderCongelado(diagramaVazio())
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' })).toBeInTheDocument()
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('clicar num elemento existente não marca (aria-selected continua false) e duplo clique não abre o modal', () => {
+    renderCongelado(MINIMAL)
+    const celula = screen.getByRole('button', { name: /Degrau 1, coluna 1, contato NF/ })
+
+    fireEvent.click(celula)
+    expect(celula).toHaveAttribute('aria-selected', 'false')
+
+    fireEvent.doubleClick(celula)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('Delete/Backspace na célula não remove nada, mesmo tentando marcar antes', () => {
+    const { aoMudar } = renderCongelado(MINIMAL)
+    const celula = screen.getByRole('button', { name: /Degrau 1, coluna 1, contato NF/ })
+
+    fireEvent.click(celula)
+    fireEvent.keyDown(celula, { key: 'Delete' })
+
+    expect(aoMudar).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /Degrau 1, coluna 1, contato NF/ })).toBeInTheDocument()
+  })
+
+  it('pegar um item da paleta por teclado (Espaço) não arma arrasto nenhum', () => {
+    renderCongelado(diagramaVazio())
+    const item = screen.getByRole('button', { name: /^contato na$/i })
+
+    fireEvent.keyDown(item, { key: ' ' })
+
+    // Sem arrasto em curso, nenhuma célula ganha o destaque de alvo/prévia —
+    // a lixeira continua desabilitada (só habilita com arrasto ou marcação).
+    expect(screen.getByRole('button', { name: /lixeira/i })).toBeDisabled()
+  })
+
+  it('"Inserir degrau" fica desabilitado e o clique não insere', () => {
+    const { aoMudar } = renderCongelado(diagramaVazio())
+    const botao = screen.getByRole('button', { name: 'Inserir degrau' })
+
+    expect(botao).toBeDisabled()
+    fireEvent.click(botao)
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('sem congelado (padrão), a edição continua liberada — não regrediu', () => {
+    const { aoMudar } = renderEditor()
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    expect(aoMudar).toHaveBeenCalledTimes(1)
+  })
+
+  it('a prop `simulacao` não quebra a renderização (energização repassada crua ao GradeDegrau)', () => {
+    const energizacao: Record<string, EnergizacaoDegrau> = {
+      r1: { nos: { '0:0': true }, celulas: { '0:0': true }, elementos: { e1: true } },
+    }
+    expect(() =>
+      render(<EditorLadder diagrama={MINIMAL} aoMudar={vi.fn()} simulacao={{ energizacao }} />),
+    ).not.toThrow()
   })
 })

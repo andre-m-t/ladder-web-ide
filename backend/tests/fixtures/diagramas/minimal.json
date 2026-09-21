@@ -1,0 +1,39 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "entrada",
+      "tipo": "BOOL"
+    },
+    {
+      "nome": "saida",
+      "tipo": "BOOL"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "entrada"
+        },
+        {
+          "id": "e2",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "saida"
+        }
+      ],
+      "ramos": []
+    }
+  ]
+}

@@ -18,6 +18,19 @@
  * `ide-perigo`). Precedência de cor: `perigo` > `fantasma` > `selecionado` >
  * normal.
  *
+ * **Energização (spec 004, RF-6/RF-14/D-12):** `energizado` marca que a
+ * simulação encontrou energia neste elemento — contato conduzindo (NA com
+ * variável verdadeira, NF com falsa) ou bobina com energia chegando até ela
+ * (semântica de `simulacao.ts#EnergizacaoDegrau`, decidida pela frente N e
+ * confirmada pelo orquestrador). A distinção é **redundante** (RF-14): cor
+ * (`ide-energizado`) **e** espessura do traço (3 em vez de 2), para
+ * sobreviver aos dois temas e a quem não distingue a cor. Ausente/falso =
+ * exatamente o traço de hoje — nenhum teste existente muda de resultado.
+ * Precedência: `perigo` > `fantasma` > `energizado` > `selecionado` > normal
+ * — a prévia de edição sempre vence (nunca coexiste com simulação, que
+ * congela a edição, D-9), e o estado ao vivo da simulação é mais saliente do
+ * que uma mera seleção estrutural.
+ *
  * **Tokens só (plano §13, D-13):** nenhuma cor Tailwind fixa (`slate-*`,
  * `sky-*`, `red-*`...) — só classes `stroke-ide-*`/`fill-ide-*`, para que o
  * tema escuro/claro troque a aparência sem tocar este arquivo.
@@ -42,16 +55,31 @@ export interface SimboloProps {
   fantasma?: boolean
   /** Traço `ide-perigo` (prévia de remoção sobre o elemento). */
   perigo?: boolean
+  /** Energia da simulação chega/passa por este elemento (spec 004, RF-6).
+   * Ausente/falso = comportamento de hoje. Ver nota de precedência acima. */
+  energizado?: boolean
 }
 
 const MEIA_ALTURA = 14
 const AFASTAMENTO_TRACO = 8
+/** Espessura do traço energizado — incremento sobre o traço normal (2px),
+ * codificação redundante com a cor (RF-14, D-12). */
+const LARGURA_TRACO_ENERGIZADO = 3
+const LARGURA_TRACO_NORMAL = 2
 
-function corTraco({ selecionado, fantasma, perigo }: SimboloProps): string {
+function corTraco({ selecionado, fantasma, perigo, energizado }: SimboloProps): string {
   if (perigo) return 'stroke-ide-perigo'
   if (fantasma) return 'stroke-ide-previa opacity-50'
+  if (energizado) return 'stroke-ide-energizado'
   if (selecionado) return 'stroke-ide-destaque'
   return 'stroke-ide-fio'
+}
+
+/** Espessura do traço: só a energização altera (RF-14) — as demais cores
+ * (perigo/fantasma/selecionado) mantêm a espessura normal de hoje. */
+function larguraTraco({ perigo, fantasma, energizado }: SimboloProps): number {
+  if (!perigo && !fantasma && energizado) return LARGURA_TRACO_ENERGIZADO
+  return LARGURA_TRACO_NORMAL
 }
 
 function corTexto({ selecionado, perigo }: SimboloProps): string {
@@ -101,11 +129,12 @@ function RotuloVariavel(props: SimboloProps) {
 export function ContatoNA(props: SimboloProps) {
   const { cx, cy, semRotulo, fantasma } = props
   const classe = `fill-none ${corTraco(props)}`
+  const largura = larguraTraco(props)
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <line x1={cx - AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx - AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={2} className={classe} />
-      <line x1={cx + AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={2} className={classe} />
+      <line x1={cx - AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx - AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={largura} className={classe} />
+      <line x1={cx + AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={largura} className={classe} />
     </g>
   )
 }
@@ -114,23 +143,24 @@ export function ContatoNA(props: SimboloProps) {
 export function ContatoNF(props: SimboloProps) {
   const { cx, cy, semRotulo, fantasma } = props
   const classe = `fill-none ${corTraco(props)}`
+  const largura = larguraTraco(props)
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <line x1={cx - AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx - AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={2} className={classe} />
-      <line x1={cx + AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={2} className={classe} />
-      <line x1={cx - AFASTAMENTO_TRACO} y1={cy + MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy - MEIA_ALTURA} strokeWidth={2} className={classe} />
+      <line x1={cx - AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx - AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={largura} className={classe} />
+      <line x1={cx + AFASTAMENTO_TRACO} y1={cy - MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy + MEIA_ALTURA} strokeWidth={largura} className={classe} />
+      <line x1={cx - AFASTAMENTO_TRACO} y1={cy + MEIA_ALTURA} x2={cx + AFASTAMENTO_TRACO} y2={cy - MEIA_ALTURA} strokeWidth={largura} className={classe} />
     </g>
   )
 }
 
 /** Os dois arcos `--( )--`, comuns às três variantes de bobina abaixo. */
-function ArcosBobina({ cx, cy, classe }: { cx: number; cy: number; classe: string }) {
+function ArcosBobina({ cx, cy, classe, largura }: { cx: number; cy: number; classe: string; largura: number }) {
   const raio = MEIA_ALTURA
   return (
     <>
-      <path d={`M ${cx - 4} ${cy - raio} A ${raio} ${raio} 0 0 0 ${cx - 4} ${cy + raio}`} strokeWidth={2} className={classe} />
-      <path d={`M ${cx + 4} ${cy - raio} A ${raio} ${raio} 0 0 1 ${cx + 4} ${cy + raio}`} strokeWidth={2} className={classe} />
+      <path d={`M ${cx - 4} ${cy - raio} A ${raio} ${raio} 0 0 0 ${cx - 4} ${cy + raio}`} strokeWidth={largura} className={classe} />
+      <path d={`M ${cx + 4} ${cy - raio} A ${raio} ${raio} 0 0 1 ${cx + 4} ${cy + raio}`} strokeWidth={largura} className={classe} />
     </>
   )
 }
@@ -158,7 +188,7 @@ export function Bobina(props: SimboloProps) {
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+      <ArcosBobina cx={cx} cy={cy} classe={classe} largura={larguraTraco(props)} />
     </g>
   )
 }
@@ -170,7 +200,7 @@ export function BobinaSet(props: SimboloProps) {
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+      <ArcosBobina cx={cx} cy={cy} classe={classe} largura={larguraTraco(props)} />
       <MarcaBobina {...props} letra="S" />
     </g>
   )
@@ -183,7 +213,7 @@ export function BobinaReset(props: SimboloProps) {
   return (
     <g>
       {!semRotulo && !fantasma && <RotuloVariavel {...props} />}
-      <ArcosBobina cx={cx} cy={cy} classe={classe} />
+      <ArcosBobina cx={cx} cy={cy} classe={classe} largura={larguraTraco(props)} />
       <MarcaBobina {...props} letra="R" />
     </g>
   )

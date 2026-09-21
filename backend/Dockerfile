@@ -84,6 +84,22 @@ RUN source /opt/esp/idf/export.sh > /dev/null \
 RUN apt-get update && apt-get install -y --no-install-recommends rsync zip \
     && rm -rf /var/lib/apt/lists/*
 
+# node: mesmo espirito da camada acima -- ferramenta do AMBIENTE DE TESTE, nao
+# do produto entregue (spec 004, NFR "sem dependencia nova" no cliente). Sem
+# ela, backend/tests/diferencial/executores.py::SimuladorExecutor nao tem como
+# executar o segundo executor do arcabouco diferencial -- o simulador em
+# TypeScript (frontend/src/ladder/simulacao-cli.ts), empacotado sob demanda
+# para um .mjs unico pelo esbuild nativo (que, esse sim, roda sem node) e
+# interpretado por este `node`. Sem esta camada, a metrica central do
+# trabalho -- divergencia simulador x runtime em C (RF-19/RF-20 da spec 004)
+# -- fica sem o segundo lado para medir: o arcabouco existe desde 2026-09-15
+# esperando exatamente por isto. `nodejs` do repositorio apt da propria
+# imagem base (Ubuntu 24.04 "noble", ver Q-8a do plano 004) e suficiente: o
+# shim so precisa de modulos ES e leitura de stdin/stdout, nada que exija uma
+# versao mais nova.
+RUN apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # As dependencias do backend vao para o venv do proprio ESP-IDF — e o

@@ -68,6 +68,27 @@
  * arrasto (`AlvoArrasto`) tal como está — só o cálculo de prévia e a jogada
  * final usam a célula redirecionada. Contatos não mudam (a função devolve a
  * própria célula).
+ *
+ * **Simulação — modo congelado e energização (spec 004, tarefa #11, RF-15,
+ * D-9):** `congelado` (true durante a simulação) bloqueia toda mutação do
+ * diagrama por este componente — arrastar (paleta ou célula, ponteiro ou
+ * teclado), clicar/duplo-clicar numa célula, marcar, abrir o modal, mover a
+ * alça de um ramo, inserir/remover degrau, remover elemento/ramo. Cada
+ * função que aplicaria uma dessas jogadas passa a checar `congelado` logo no
+ * início e sair sem fazer nada — nenhuma tentativa nova de mecanismo. Este
+ * componente não passa `congelado` adiante para `GradeDegrau`/`Paleta` (são
+ * de outra frente — D e nenhuma dona nesta fatia, respectivamente): a grade
+ * continua desenhando os mesmos afetos visuais de "arrastável", só que
+ * nenhum gesto tem efeito — o congelamento é imposto aqui, na fronteira que
+ * fala com o núcleo, não como um estado visual em cada filho. O botão
+ * "Inserir degrau" (deste componente) ganha `disabled` de verdade, já que é
+ * seu.
+ *
+ * `simulacao` (RF-6, RF-14): quando presente, traz a energização de cada
+ * degrau (`EnergizacaoDegrau`, `ladder/simulacao.ts`) calculada pelo núcleo
+ * de simulação — este componente só repassa `simulacao.energizacao[rung.id]`
+ * a cada `GradeDegrau`, pela prop `energizacao` (contrato do plano §5.4,
+ * frente D); não interpreta o conteúdo.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { GitBranch, Plus } from 'lucide-react'
@@ -87,6 +108,7 @@ import {
 import type { ResultadoEdicao } from '../../ladder/edicao'
 import { atualizarCtu } from '../../ladder/ctu'
 import { COLUNAS_POR_DEGRAU, ehCtu, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
+import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import { descreverCelula, type Problema } from '../../ladder/validacao'
 import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalVariavel from './ModalVariavel'
@@ -116,6 +138,12 @@ export interface EditorLadderProps {
    * Console). Sem esta prop, a recusa fica só na marcação visual momentânea
    * (célula `aria-invalid`, prévia vermelha) e no anúncio `sr-only`. */
   aoRecusar?: (motivo: string) => void
+  /** Simulação ativa (spec 004, RF-15, D-9): nenhuma edição, nenhum arrasto,
+   * nenhuma paleta ativa, nenhuma remoção — ver o comentário do arquivo. */
+  congelado?: boolean
+  /** Energização por degrau, calculada pelo motor de simulação (RF-6, RF-14,
+   * plano §5.4) — `null`/ausente é o comportamento de hoje (sem simulação). */
+  simulacao?: { energizacao: Record<string, EnergizacaoDegrau> } | null
 }
 
 /** Recusa de uma jogada, localizada no degrau (e, quando há, na célula)
@@ -355,7 +383,7 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
   return alvo
 }
 
-export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRecusar }: EditorLadderProps) {
+export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRecusar, congelado = false, simulacao = null }: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
   const [ramoMarcado, setRamoMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
@@ -382,6 +410,10 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   const aoMudarRef = useRef(aoMudar)
   const aoRecusarRef = useRef(aoRecusar)
   const pointerPendenteRef = useRef<PointerPendente | null>(null)
+  /** Espelha `congelado` para os listeners de `window` (registrados uma
+   * única vez, ver abaixo) — mesmo padrão de `aoMudarRef`/`aoRecusarRef`:
+   * eles não podem depender do valor de `congelado` capturado no mount. */
+  const congeladoRef = useRef(congelado)
 
   useEffect(() => {
     diagramaRef.current = diagrama
@@ -392,6 +424,9 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   useEffect(() => {
     aoRecusarRef.current = aoRecusar
   }, [aoRecusar])
+  useEffect(() => {
+    congeladoRef.current = congelado
+  }, [congelado])
 
   function atualizarArrasto(novo: EstadoArrasto | null) {
     arrastoRef.current = novo
@@ -467,6 +502,15 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * recém-criado e não abre o modal — o próximo clique/Enter é que abre.
    * Mover ou remover continuam desmarcando ao final (D-12, sem regressão). */
   function finalizarDrop(origem: OrigemArrasto, alvo: AlvoArrasto) {
+    // Defesa contra simulação iniciar no meio de um arrasto em curso (spec
+    // 004, RF-15) — `congeladoRef`, não o `congelado` capturado no fecho,
+    // porque este listener é registrado uma única vez no mount (ver o
+    // `useEffect` de `window.addEventListener('pointerup', ...)` abaixo).
+    if (congeladoRef.current) {
+      setMarcado(null)
+      atualizarArrasto(null)
+      return
+    }
     if (alvo === null) {
       setMarcado(null)
       setAnuncio('arrasto cancelado')
@@ -656,16 +700,19 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   }
 
   function aoIniciarArrastoPonteiroPaleta(tipo: TipoPaleta, evento: ReactPointerEvent<HTMLDivElement>) {
+    if (congelado) return
     armarPonteiro({ de: 'paleta', tipo }, evento)
   }
 
   function aoIniciarArrastoPonteiroCelula(evento: ReactPointerEvent<SVGGElement>, rungId: string, celula: Celula) {
+    if (congelado) return
     const elemento = elementoNaCelula(diagrama, rungId, celula)
     if (!elemento) return
     armarPonteiro({ de: 'celula', elementoId: elemento.id }, evento)
   }
 
   function iniciarArrastoTeclado(origem: OrigemArrasto) {
+    if (congelado) return
     const alvoInicial: AlvoArrasto =
       origem.de === 'paleta'
         ? { rungId: diagrama.rungs[0].id, celula: { linha: 0, coluna: 0 } }
@@ -700,6 +747,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * desmarca o outro). Recusa de `removerRamo` (ramo com contato dentro)
    * aparece no mesmo alerta das demais recusas. */
   function removerMarcado() {
+    if (congelado) return
     if (ramoMarcado !== null) {
       const resultado = removerRamo(diagrama, ramoMarcado)
       if (resultado.ok) {
@@ -730,6 +778,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * sempre uma posição válida) usa o mesmo alerta das demais jogadas,
    * ancorado no último degrau, sem alterar o diagrama. */
   function aoInserirDegrauNoFim() {
+    if (congelado) return
     const resultado = inserirDegrau(diagrama, diagrama.rungs.length)
     if (!resultado.ok) {
       const ultimo = diagrama.rungs[diagrama.rungs.length - 1]
@@ -744,6 +793,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
 
   /** Insere um degrau vazio logo abaixo de `rungId` (tarefa #10, CA-6). */
   function aoInserirDegrauAbaixoDe(rungId: string) {
+    if (congelado) return
     const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
     if (indice === -1) return
     const resultado = inserirDegrau(diagrama, indice + 1)
@@ -763,6 +813,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * pertencesse ao degrau removido — do contrário ficaria apontando para algo
    * que não existe mais. */
   function aoRemoverDegrauHandler(rungId: string) {
+    if (congelado) return
     const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
     const marcadoNesteDegrau = marcado !== null && encontrarElementoPorId(diagrama, marcado)?.rungId === rungId
     const ramoMarcadoNesteDegrau = ramoMarcado !== null && encontrarRamoPorId(diagrama, ramoMarcado)?.rungId === rungId
@@ -794,6 +845,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   // D-14: célula vazia de linha > 0 dentro de um ramo marca o ramo (visual
   // `ide-destaque`, `aria-selected`) em vez de só desmarcar.
   function aoClicarCelula(rungId: string, celula: Celula) {
+    if (congelado) return
     const elemento = elementoNaCelula(diagrama, rungId, celula)
     if (!elemento) {
       const ramo = encontrarRamoPorCelula(diagrama, rungId, celula)
@@ -815,11 +867,13 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   }
 
   function aoDuploClicarCelula(rungId: string, celula: Celula) {
+    if (congelado) return
     const elemento = elementoNaCelula(diagrama, rungId, celula)
     if (elemento) setModal({ elementoId: elemento.id })
   }
 
   function aoTeclarNaCelula(evento: ReactKeyboardEvent<SVGGElement>, rungId: string, celula: Celula) {
+    if (congelado) return
     const elemento = elementoNaCelula(diagrama, rungId, celula)
 
     if (arrasto && arrasto.via === 'teclado') {
@@ -876,6 +930,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * tecla de seta durante o arrasto por teclado. Inválida repassa o motivo a
    * `aoRecusar` (tarefa #25), âncorado na linha do ramo. */
   function atualizarPreviaAlca(rungId: string, ramoId: string, coluna: number) {
+    if (congelado) return
     const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
     setPreviaAlca({ rungId, ramoId, colunaFim: coluna, valido: resultado.ok })
     if (resultado.ok) {
@@ -894,6 +949,10 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   /** Aplica o redimensionamento na coluna dada (fim do arrasto por ponteiro,
    * ou Espaço com a alça pega pelo teclado). */
   function aplicarAlca(rungId: string, ramoId: string, coluna: number) {
+    if (congelado) {
+      setPreviaAlca(null)
+      return
+    }
     const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
     if (resultado.ok) {
       aoMudarRef.current(resultado.diagrama)
@@ -921,6 +980,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * núcleo — nada mudou ainda); com a alça pega, ←/→ recalculam a prévia,
    * Espaço/Enter aplicam e Esc cancela. */
   function aoTeclarNaAlca(evento: ReactKeyboardEvent<SVGGElement>, rungId: string, ramoId: string) {
+    if (congelado) return
     const achado = encontrarRamoPorId(diagrama, ramoId)
     if (!achado) return
     const pega = previaAlca !== null && previaAlca.ramoId === ramoId
@@ -1004,6 +1064,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   }
 
   function aoEscolherNoModal(nome: string | null) {
+    if (congelado) return
     if (!modal) return
     const resultado = vincularVariavel(diagrama, modal.elementoId, nome)
     if (resultado.ok) {
@@ -1020,6 +1081,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * autor pode querer ajustar o limite e ainda escolher a variável de saída
    * na mesma visita. */
   function aoAlterarLimiteNoModal(pv: number) {
+    if (congelado) return
     if (!modal) return
     const achado = encontrarElementoPorId(diagrama, modal.elementoId)
     const resultado = atualizarCtu(diagrama, modal.elementoId, { pv })
@@ -1121,6 +1183,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
               problemas={problemas?.filter((p) => p.rungId === rung.id)}
               aoInserirDegrauAbaixo={() => aoInserirDegrauAbaixoDe(rung.id)}
               aoRemoverDegrau={() => aoRemoverDegrauHandler(rung.id)}
+              energizacao={simulacao?.energizacao[rung.id] ?? null}
             />
           )
         })}
@@ -1129,8 +1192,9 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
           <button
             type="button"
             onClick={aoInserirDegrauNoFim}
+            disabled={congelado}
             aria-label="Inserir degrau"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none hover:bg-ide-painel focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none hover:bg-ide-painel focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus aria-hidden="true" size={16} />
             Inserir degrau

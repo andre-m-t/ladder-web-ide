@@ -1,13 +1,15 @@
 /**
  * Barra superior da IDE (spec 002, tarefa #26; painel lateral restaurado na
  * revisão da mesma tarefa; menu Baixar acrescentado na tarefa #11 da spec
- * 003): a IDE trabalha com um **projeto** de linguagem única (LD ou ST —
+ * 003; controles de simulação acrescentados na tarefa #11 da spec 004): a
+ * IDE trabalha com um **projeto** de linguagem única (LD ou ST —
  * `projeto/projeto.ts`, frente P), criado por "Novo projeto". Uma única
  * faixa (~44px): marca "LadderFlow", "Novo projeto", separador, título do
  * projeto (truncado) + chip da linguagem; à direita, Compilar, Baixar,
- * Gravar, separador, alternar painel de variáveis (só em projeto Ladder —
- * ST não tem variáveis de E/S mapeadas em ladder), alternar painel inferior,
- * separador, tema.
+ * Gravar, separador, Simular (+ Executar/Pausar, Passo, Reiniciar e a marcha,
+ * só quando a simulação está ativa), separador, alternar painel de
+ * variáveis (só em projeto Ladder — ST não tem variáveis de E/S mapeadas em
+ * ladder), alternar painel inferior, separador, tema.
  *
  * O painel de variáveis em si (conteúdo e redimensionamento) mora em
  * `PainelLateral`, ao lado do editor, em `App`; esta barra só expõe o botão
@@ -16,21 +18,40 @@
  * existe e o que está desabilitado) e `aoBaixar` (o que cada escolha faz)
  * vêm prontos de `App`.
  *
- * `motivoIndisponivel`, quando definido (ex.: nenhum projeto aberto),
- * desabilita Compilar e Gravar juntos — motivo no `title` de cada botão e
- * exposto via `aria-describedby` a um texto `sr-only` — além das regras de
- * sempre (`compilando`, `podeGravar`). A opção ".st" do menu Baixar usa o
- * mesmo motivo, via `opcoesDownload`, mas isso é decidido por `App`, não
- * por este componente.
+ * `motivoIndisponivel`, quando definido (ex.: nenhum projeto aberto, ou
+ * simulação ativa — spec 004, RF-15), desabilita Compilar e Gravar juntos —
+ * motivo no `title` de cada botão e exposto via `aria-describedby` a um
+ * texto `sr-only` — além das regras de sempre (`compilando`, `podeGravar`).
+ * A opção ".st" do menu Baixar usa o mesmo motivo, via `opcoesDownload`, mas
+ * isso é decidido por `App`, não por este componente.
+ *
+ * **Simulação (spec 004, RF-10, RF-11, RF-16, CA-6, CA-7):** o botão
+ * "Simular"/"Sair da simulação" existe sempre — mesmo em projeto ST, onde
+ * fica desabilitado com `motivoSimulacaoIndisponivel` visível (RF-16),
+ * nunca escondido, no mesmo mecanismo de `motivoIndisponivel` acima
+ * (`title` + `aria-describedby`). Com a simulação ativa (`simulando`),
+ * aparecem Executar/Pausar, Passo, Reiniciar e o `<select>` de marcha — todo
+ * o relógio e o estado da simulação são decididos por `App` (dono do
+ * relógio, plano D-8); este componente só encaminha os cliques/seleção.
  *
  * Puramente apresentacional: todo estado (painel de variáveis, progresso de
- * compilação/gravação, tema) mora em `App`, que decide o que cada botão faz.
+ * compilação/gravação, tema, simulação) mora em `App`, que decide o que cada
+ * botão faz.
  */
-import { FilePlus, Hammer, Loader2, Moon, PanelBottom, PanelRight, Sun, Usb } from 'lucide-react'
+import { FilePlus, Hammer, Loader2, Moon, Pause, PanelBottom, PanelRight, Play, RotateCcw, SkipForward, Square, Sun, Usb } from 'lucide-react'
 
 import type { Tema } from '../../lib/tema'
 import type { Linguagem } from '../../projeto/projeto'
 import MenuDownload, { type OpcaoDownload } from './MenuDownload'
+
+/** Uma marcha de execução da simulação (spec 004, RF-11): id estável (usado
+ * pelo `<select>`) e rótulo já com o intervalo declarado por extenso — a
+ * lista em si (tempo real + ao menos uma marcha lenta) vem de `App`, dono do
+ * relógio. */
+export interface MarchaSimulacao {
+  id: string
+  rotulo: string
+}
 
 export interface BarraSuperiorProps {
   titulo: string
@@ -48,8 +69,29 @@ export interface BarraSuperiorProps {
   opcoesDownload: OpcaoDownload[]
   aoBaixar: (id: OpcaoDownload['id']) => void
   /** Definido quando Compilar/Gravar não podem agir por um motivo além dos
-   * de sempre (ex.: nenhum projeto aberto) — desabilita os dois botões. */
+   * de sempre (ex.: nenhum projeto aberto, simulação ativa) — desabilita os
+   * dois botões (spec 004, RF-15). */
   motivoIndisponivel?: string
+  /** Simulação ativa (spec 004, RF-10, D-9) — liga Executar/Pausar, Passo,
+   * Reiniciar e o seletor de marcha; o rótulo do botão "Simular" vira "Sair
+   * da simulação". */
+  simulando: boolean
+  /** Só importa com `simulando`: laço rodando (Executar) ou parado (Pausar). */
+  simulacaoRodando: boolean
+  /** Definido quando o botão "Simular" não pode **entrar** em simulação
+   * (projeto ST — RF-16 — ou diagrama com erro de validação — RF-18) —
+   * motivo visível, nunca escondido, mesmo mecanismo de `motivoIndisponivel`.
+   * Não desabilita **sair** de uma simulação já ativa. */
+  motivoSimulacaoIndisponivel?: string
+  aoAlternarSimulacao: () => void
+  aoAlternarExecucaoSimulacao: () => void
+  aoPassoSimulacao: () => void
+  aoReiniciarSimulacao: () => void
+  /** Marchas oferecidas (RF-11: tempo real + ao menos uma lenta), na ordem
+   * de exibição do `<select>`. */
+  marchas: MarchaSimulacao[]
+  marchaAtual: string
+  aoEscolherMarcha: (id: string) => void
   /** Só relevante em projeto Ladder — ST não tem painel de variáveis. */
   painelVariaveisAberto: boolean
   aoAlternarPainelVariaveis: () => void
@@ -63,6 +105,8 @@ export interface BarraSuperiorProps {
 const TAMANHO_ICONE = 16
 
 const ID_MOTIVO_INDISPONIVEL = 'barra-superior-motivo-indisponivel'
+const ID_MOTIVO_SIMULACAO_INDISPONIVEL = 'barra-superior-motivo-simulacao-indisponivel'
+const ID_MARCHA_SIMULACAO = 'barra-superior-marcha-simulacao'
 
 function Separador() {
   return <div aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-ide-borda" />
@@ -81,6 +125,16 @@ export default function BarraSuperior({
   opcoesDownload,
   aoBaixar,
   motivoIndisponivel,
+  simulando,
+  simulacaoRodando,
+  motivoSimulacaoIndisponivel,
+  aoAlternarSimulacao,
+  aoAlternarExecucaoSimulacao,
+  aoPassoSimulacao,
+  aoReiniciarSimulacao,
+  marchas,
+  marchaAtual,
+  aoEscolherMarcha,
   painelVariaveisAberto,
   aoAlternarPainelVariaveis,
   painelInferiorAberto,
@@ -90,6 +144,10 @@ export default function BarraSuperior({
 }: BarraSuperiorProps) {
   const indisponivel = Boolean(motivoIndisponivel)
   const mostraAlternadorVariaveis = linguagem === 'ld'
+  // Sair de uma simulação já ativa nunca é bloqueado por
+  // `motivoSimulacaoIndisponivel` (esse motivo só impede **entrar**) — só
+  // desabilita o botão quando ele ainda vai iniciar a simulação.
+  const simulacaoIndisponivel = Boolean(motivoSimulacaoIndisponivel) && !simulando
 
   const rotuloCompilar = compilando ? 'Compilando…' : 'Compilar'
   const rotuloGravar = gravando ? `Gravando… ${Math.round(progressoGravacao ?? 0)}%` : 'Gravar no ESP32'
@@ -160,6 +218,79 @@ export default function BarraSuperior({
           )}
           <span className="hidden sm:inline">{rotuloGravar}</span>
         </button>
+
+        <Separador />
+
+        {motivoSimulacaoIndisponivel && (
+          <span id={ID_MOTIVO_SIMULACAO_INDISPONIVEL} className="sr-only">
+            {motivoSimulacaoIndisponivel}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={aoAlternarSimulacao}
+          disabled={simulacaoIndisponivel}
+          aria-pressed={simulando}
+          title={simulacaoIndisponivel ? motivoSimulacaoIndisponivel : simulando ? 'Sair da simulação' : 'Simular'}
+          aria-label={simulando ? 'Sair da simulação' : 'Simular'}
+          aria-describedby={simulacaoIndisponivel ? ID_MOTIVO_SIMULACAO_INDISPONIVEL : undefined}
+          className={
+            simulando
+              ? 'flex items-center gap-1.5 rounded-md border border-ide-borda bg-ide-elevado px-2.5 py-1.5 font-medium text-ide-texto disabled:cursor-not-allowed disabled:opacity-50'
+              : 'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium text-ide-texto hover:bg-ide-elevado disabled:cursor-not-allowed disabled:opacity-50'
+          }
+        >
+          {simulando ? <Square aria-hidden="true" size={TAMANHO_ICONE} /> : <Play aria-hidden="true" size={TAMANHO_ICONE} />}
+          <span className="hidden sm:inline">{simulando ? 'Sair da simulação' : 'Simular'}</span>
+        </button>
+
+        {simulando && (
+          <>
+            <button
+              type="button"
+              onClick={aoAlternarExecucaoSimulacao}
+              title={simulacaoRodando ? 'Pausar' : 'Executar'}
+              aria-label={simulacaoRodando ? 'Pausar simulação' : 'Executar simulação'}
+              className="flex items-center rounded-md p-1.5 text-ide-texto hover:bg-ide-elevado"
+            >
+              {simulacaoRodando ? <Pause aria-hidden="true" size={TAMANHO_ICONE} /> : <Play aria-hidden="true" size={TAMANHO_ICONE} />}
+            </button>
+            <button
+              type="button"
+              onClick={aoPassoSimulacao}
+              title="Passo — avança exatamente um ciclo"
+              aria-label="Avançar um ciclo"
+              className="flex items-center rounded-md p-1.5 text-ide-texto hover:bg-ide-elevado"
+            >
+              <SkipForward aria-hidden="true" size={TAMANHO_ICONE} />
+            </button>
+            <button
+              type="button"
+              onClick={aoReiniciarSimulacao}
+              title="Reiniciar simulação"
+              aria-label="Reiniciar simulação"
+              className="flex items-center rounded-md p-1.5 text-ide-texto hover:bg-ide-elevado"
+            >
+              <RotateCcw aria-hidden="true" size={TAMANHO_ICONE} />
+            </button>
+            <label htmlFor={ID_MARCHA_SIMULACAO} className="sr-only">
+              Marcha da simulação
+            </label>
+            <select
+              id={ID_MARCHA_SIMULACAO}
+              value={marchaAtual}
+              onChange={(evento) => aoEscolherMarcha(evento.target.value)}
+              className="rounded-md border border-ide-borda bg-ide-painel px-1.5 py-1 text-xs text-ide-texto"
+            >
+              {marchas.map((marcha) => (
+                <option key={marcha.id} value={marcha.id}>
+                  {marcha.rotulo}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
         <Separador />
 

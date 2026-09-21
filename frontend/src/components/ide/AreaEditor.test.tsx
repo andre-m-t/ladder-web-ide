@@ -92,4 +92,21 @@ describe('AreaEditor', () => {
     )
     expect(screen.getByLabelText(/structured text/i)).toHaveValue('conteudo st')
   })
+
+  it('congelado (spec 004, RF-15) repassa ao EditorLadder: "Inserir degrau" fica desabilitado', () => {
+    render(
+      <AreaEditor
+        projeto={projetoLD()}
+        aoMudarProjeto={() => {}}
+        problemas={[]}
+        foco={null}
+        compilando={false}
+        erroCompilacao={null}
+        aoRecusar={() => {}}
+        congelado
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Inserir degrau' })).toBeDisabled()
+  })
 })

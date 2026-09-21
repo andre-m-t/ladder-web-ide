@@ -1,0 +1,255 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "botao",
+      "tipo": "BOOL",
+      "endereco": "%IX0.0"
+    },
+    {
+      "nome": "led",
+      "tipo": "BOOL",
+      "endereco": "%QX0.0"
+    },
+    {
+      "nome": "pulso",
+      "tipo": "BOOL"
+    },
+    {
+      "nome": "reset_ctu",
+      "tipo": "BOOL"
+    },
+    {
+      "nome": "atingiu",
+      "tipo": "BOOL"
+    },
+    {
+      "nome": "led_estava_aceso",
+      "tipo": "BOOL"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "pulso"
+        },
+        {
+          "id": "e2",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 1,
+            "coluna": 0
+          },
+          "variavel": "reset_ctu"
+        },
+        {
+          "id": "e3",
+          "tipo": "ctu",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "linhaReset": 1,
+          "instancia": "ctu0",
+          "pv": 12,
+          "saida": "atingiu"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r2",
+      "elementos": [
+        {
+          "id": "e4",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "atingiu"
+        },
+        {
+          "id": "e5",
+          "tipo": "bobina_reset",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "pulso"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r3",
+      "elementos": [
+        {
+          "id": "e6",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "pulso"
+        },
+        {
+          "id": "e7",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "pulso"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r4",
+      "elementos": [
+        {
+          "id": "e8",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "led"
+        },
+        {
+          "id": "e9",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "led_estava_aceso"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r5",
+      "elementos": [
+        {
+          "id": "e10",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "reset_ctu"
+        },
+        {
+          "id": "e11",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "led_estava_aceso"
+        },
+        {
+          "id": "e12",
+          "tipo": "bobina_set",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "led"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r6",
+      "elementos": [
+        {
+          "id": "e13",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "reset_ctu"
+        },
+        {
+          "id": "e14",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "led_estava_aceso"
+        },
+        {
+          "id": "e15",
+          "tipo": "bobina_reset",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "led"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r7",
+      "elementos": [
+        {
+          "id": "e16",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "atingiu"
+        },
+        {
+          "id": "e17",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "reset_ctu"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r8",
+      "elementos": [
+        {
+          "id": "e18",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "botao"
+        },
+        {
+          "id": "e19",
+          "tipo": "bobina_set",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "led"
+        }
+      ],
+      "ramos": []
+    }
+  ]
+}

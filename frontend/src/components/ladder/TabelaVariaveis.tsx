@@ -26,10 +26,21 @@
  * classe é trocar de endereço, no seletor da própria coluna "Pino" (o núcleo
  * permite ir de entrada para saída e vice-versa, ou para Memória).
  *
- * "Valor" é o estado ao vivo da variável — hoje sem fonte (chega com o
- * simulador, F9). A prop opcional `valores` já deixa a célula pronta: sem ela
- * (ou sem entrada para o nome), mostra "—" com dica acessível; com ela,
- * mostra o booleano em selo `TRUE`/`FALSE`.
+ * "Valor" é o estado ao vivo da variável (spec 004, tarefa #12): a prop
+ * `valores`, reservada desde a tarefa #23, chega preenchida com a simulação
+ * ativa — sem ela (ou sem entrada para o nome), a célula mostra "—" com dica
+ * acessível, como sempre; com ela, mostra o booleano em selo `TRUE`/`FALSE`.
+ * Para variáveis de **entrada**, o selo vira um botão (`aoAcionar`,
+ * RF-12/CA-9): clicável e operável por teclado (`role="switch"`,
+ * `aria-checked`), aciona o nível oposto ao mostrado. Saída e memória
+ * continuam só leitura — mostram o valor e não respondem a clique nenhum,
+ * mesma aparência de selo de sempre. Nenhuma mudança de layout: é a mesma
+ * célula, só troca `<span>` por `<button>` quando é entrada e há
+ * `aoAcionar`.
+ *
+ * A contagem de ciclos (`ciclo`, RF-13) aparece no cabeçalho, ao lado da
+ * contagem de variáveis declaradas — sóbria, sem linha nova nem mudança de
+ * layout — só quando a simulação está ativa (`ciclo !== undefined`).
  *
  * Só tokens de tema (`index.css`, `bg-ide-*`/`text-ide-*`/`border-ide-*`) —
  * nenhuma cor Tailwind fixa (`slate-*`, `sky-*`, `red-*`...).
@@ -62,8 +73,16 @@ import type { Variavel } from '../../ladder/modelo'
 
 export interface TabelaVariaveisProps {
   variaveis: Variavel[]
-  /** Estado ao vivo por nome de variável (ainda sem fonte — estrutura para o simulador, F9). */
+  /** Estado ao vivo por nome de variável — preenchido com a simulação ativa
+   * (spec 004, tarefa #12); ausente/sem entrada para o nome é "—", como hoje. */
   valores?: Record<string, boolean>
+  /** Aciona uma variável de **entrada** manualmente (RF-12); saída e memória
+   * ignoram esta prop — nunca ficam acionáveis, mesmo se ela vier definida
+   * (a checagem de classe é feita aqui, não por quem chama). */
+  aoAcionar?: (nome: string, nivel: boolean) => void
+  /** Ciclos decorridos da simulação (RF-13) — mostrado no cabeçalho só
+   * quando definido (simulação ativa); ausente é o cabeçalho de hoje. */
+  ciclo?: number
   aoDeclarar: (v: { nome: string; endereco?: string }) => void
   aoAtualizar: (nomeAtual: string, v: { nome: string; endereco?: string }) => void
   aoRemover: (nome: string) => void
@@ -218,7 +237,28 @@ function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
   )
 }
 
-function ValorCelula({ nome, valor }: { nome: string; valor?: boolean }) {
+/** Classes do selo de valor, compartilhadas entre a variante só-leitura
+ * (`<span>`) e a acionável (`<button>`, entrada) — mesmo desenho visual nos
+ * dois casos, só muda se responde a clique. */
+function classeSeloValor(valor: boolean): string {
+  return valor
+    ? 'rounded bg-ide-sucesso px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ide-fundo'
+    : 'rounded bg-ide-elevado px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ide-suave'
+}
+
+function ValorCelula({
+  nome,
+  valor,
+  acionavel,
+  aoAcionar,
+}: {
+  nome: string
+  valor?: boolean
+  /** Só variáveis de entrada chegam com isto `true` (decidido por quem
+   * monta a linha, via `classeDaVariavel`) — RF-12/CA-9. */
+  acionavel?: boolean
+  aoAcionar?: (nivel: boolean) => void
+}) {
   if (valor === undefined) {
     return (
       <span
@@ -231,15 +271,24 @@ function ValorCelula({ nome, valor }: { nome: string; valor?: boolean }) {
     )
   }
 
+  if (acionavel && aoAcionar) {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={valor}
+        aria-label={`Acionar ${nome} (${valor ? 'verdadeiro' : 'falso'})`}
+        title="Clique para acionar — o novo nível vale a partir do próximo ciclo"
+        onClick={() => aoAcionar(!valor)}
+        className={`${classeSeloValor(valor)} cursor-pointer outline-none hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque`}
+      >
+        {valor ? 'TRUE' : 'FALSE'}
+      </button>
+    )
+  }
+
   return (
-    <span
-      aria-label={`Valor de ${nome}: ${valor ? 'verdadeiro' : 'falso'}`}
-      className={
-        valor
-          ? 'rounded bg-ide-sucesso px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ide-fundo'
-          : 'rounded bg-ide-elevado px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ide-suave'
-      }
-    >
+    <span aria-label={`Valor de ${nome}: ${valor ? 'verdadeiro' : 'falso'}`} className={classeSeloValor(valor)}>
       {valor ? 'TRUE' : 'FALSE'}
     </span>
   )
@@ -332,12 +381,15 @@ interface LinhaVariavelProps {
   variavel: Variavel
   variaveis: Variavel[]
   valor?: boolean
+  /** Repassado só para a variável ser de entrada (`ValorCelula` decide o
+   * `role="switch"`) — RF-12/CA-9. */
+  aoAcionar?: (nome: string, nivel: boolean) => void
   zebra: boolean
   aoAtualizar: TabelaVariaveisProps['aoAtualizar']
   aoRemover: TabelaVariaveisProps['aoRemover']
 }
 
-function LinhaVariavel({ variavel, variaveis, valor, zebra, aoAtualizar, aoRemover }: LinhaVariavelProps) {
+function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualizar, aoRemover }: LinhaVariavelProps) {
   const [nome, setNome] = useState(variavel.nome)
   /** Marca que o próximo `blur` é efeito do `Esc`, não deve confirmar — o
    * `blur` roda no mesmo fechamento (closure) que leu `nome` antes do
@@ -389,7 +441,12 @@ function LinhaVariavel({ variavel, variaveis, valor, zebra, aoAtualizar, aoRemov
         <PinoCelula variavel={variavel} variaveis={variaveis} aoAtualizar={aoAtualizar} />
       </td>
       <td className="py-1.5 pr-2 align-top">
-        <ValorCelula nome={variavel.nome} valor={valor} />
+        <ValorCelula
+          nome={variavel.nome}
+          valor={valor}
+          acionavel={classeDaVariavel(variavel) === 'entrada'}
+          aoAcionar={aoAcionar ? (nivel) => aoAcionar(variavel.nome, nivel) : undefined}
+        />
       </td>
       <td className="py-1.5 pr-4 align-top text-right">
         <button
@@ -586,7 +643,15 @@ function MapaDePinos({ variaveis }: { variaveis: Variavel[] }) {
   )
 }
 
-export default function TabelaVariaveis({ variaveis, valores, aoDeclarar, aoAtualizar, aoRemover }: TabelaVariaveisProps) {
+export default function TabelaVariaveis({
+  variaveis,
+  valores,
+  aoAcionar,
+  ciclo,
+  aoDeclarar,
+  aoAtualizar,
+  aoRemover,
+}: TabelaVariaveisProps) {
   const [filtro, setFiltro] = useState<ClasseFiltro>('todas')
 
   const visiveis = filtro === 'todas' ? variaveis : variaveis.filter((v) => classeDaVariavel(v) === filtro)
@@ -616,6 +681,7 @@ export default function TabelaVariaveis({ variaveis, valores, aoDeclarar, aoAtua
         </div>
 
         <span className="ml-auto text-xs text-ide-suave">
+          {ciclo !== undefined && <span className="mr-2 font-mono">Ciclo {ciclo}</span>}
           {variaveis.length} declarada{variaveis.length === 1 ? '' : 's'}
         </span>
       </header>
@@ -670,6 +736,7 @@ export default function TabelaVariaveis({ variaveis, valores, aoDeclarar, aoAtua
                 variavel={variavel}
                 variaveis={variaveis}
                 valor={valores?.[variavel.nome]}
+                aoAcionar={aoAcionar}
                 zebra={indice % 2 === 1}
                 aoAtualizar={aoAtualizar}
                 aoRemover={aoRemover}

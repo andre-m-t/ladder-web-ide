@@ -27,6 +27,15 @@
  * status, Console). Sem `aoRecusar`, a recusa é ignorada visualmente (o
  * diagrama continua intacto do mesmo jeito, só não há mais para onde mandar
  * o motivo).
+ *
+ * **Simulação (spec 004, tarefa #12, RF-12/RF-13):** `valores`, `aoAcionar`
+ * e `ciclo` são passagem cega até `TabelaVariaveis` — este componente não
+ * decide nada sobre eles, só repassa; `App` (dono do modo/relógio de
+ * simulação) decide os valores. Sem simulação ativa, os três ficam
+ * ausentes/`undefined` e o comportamento é o de hoje. Este painel **não**
+ * congela a declaração/edição/remoção de variáveis durante a simulação —
+ * não é um requisito desta fatia (só `EditorLadder`/a grade são, RF-15); ver
+ * o relatório da tarefa #11 para a decisão registrada.
  */
 import { atualizarVariavel, declararVariavel, removerVariavel, type ResultadoEdicao } from '../../ladder/edicao'
 import type { Diagrama } from '../../ladder/modelo'
@@ -39,9 +48,18 @@ export interface PainelVariaveisProps {
    * com o motivo em português — tarefa #25. Sem esta prop, a recusa não
    * aparece em lugar nenhum (não há mais estado/exibição interna). */
   aoRecusar?: (motivo: string) => void
+  /** Estado ao vivo por variável — presente só com a simulação ativa (spec
+   * 004, tarefa #12). */
+  valores?: Record<string, boolean>
+  /** Aciona uma entrada durante a simulação (RF-12) — `TabelaVariaveis`
+   * decide sozinha que só entrada responde. */
+  aoAcionar?: (nome: string, nivel: boolean) => void
+  /** Ciclos decorridos da simulação (RF-13) — presente só com a simulação
+   * ativa. */
+  ciclo?: number
 }
 
-export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar }: PainelVariaveisProps) {
+export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar, valores, aoAcionar, ciclo }: PainelVariaveisProps) {
   function aplicar(resultado: ResultadoEdicao) {
     if (resultado.ok) {
       aoMudar(resultado.diagrama)
@@ -64,7 +82,15 @@ export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar }: Painel
 
   return (
     <div className="flex h-full flex-col">
-      <TabelaVariaveis variaveis={diagrama.variaveis} aoDeclarar={aoDeclarar} aoAtualizar={aoAtualizar} aoRemover={aoRemover} />
+      <TabelaVariaveis
+        variaveis={diagrama.variaveis}
+        valores={valores}
+        aoAcionar={aoAcionar}
+        ciclo={ciclo}
+        aoDeclarar={aoDeclarar}
+        aoAtualizar={aoAtualizar}
+        aoRemover={aoRemover}
+      />
     </div>
   )
 }

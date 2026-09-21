@@ -12,12 +12,19 @@
  * `problemas`/`foco` (herdado da tarefa #13): `App` calcula `validarDiagrama`
  * (só faz sentido em LD; ST não tem diagrama) e repassa aqui; `foco` é o
  * pedido de "ir até a célula" que nasce de um clique em `ListaProblemas`.
+ *
+ * `congelado`/`simulacao` (spec 004, tarefa #11, RF-15, D-9): simples
+ * passagem cega até `EditorLadder`, dono de verdade das duas props — `App`
+ * (dona do relógio/modo de simulação) decide os valores, este componente só
+ * repassa, sem interpretar. Sem mudança nenhuma para o lado ST (a simulação
+ * é fora de escopo em Texto Estruturado, RF-16/Q-6).
  */
 import EditorST from '../EditorST'
 import PainelErro from '../PainelErro'
 import EditorLadder from '../ladder/EditorLadder'
 import type { ErroCompilacao, ErroHttpCompilacao, ErroRedeCompilacao } from '../../lib/api'
 import type { Problema } from '../../ladder/validacao'
+import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import type { Projeto } from '../../projeto/projeto'
 
 type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
@@ -44,9 +51,25 @@ export interface AreaEditorProps {
    * #27): a IDE mostra o motivo como um toast no canto da tela, em vez do
    * editor mostrar o texto sozinho. Repassado cru a `EditorLadder`. */
   aoRecusar: (motivo: string) => void
+  /** Simulação ativa (spec 004, RF-15, D-9): congela `EditorLadder` — sem
+   * efeito em projeto ST. */
+  congelado?: boolean
+  /** Energização por degrau da simulação em curso (RF-6, RF-14) — repassada
+   * crua a `EditorLadder`; `null`/ausente é "sem simulação". */
+  simulacao?: { energizacao: Record<string, EnergizacaoDegrau> } | null
 }
 
-export default function AreaEditor({ projeto, aoMudarProjeto, problemas, foco, compilando, erroCompilacao, aoRecusar }: AreaEditorProps) {
+export default function AreaEditor({
+  projeto,
+  aoMudarProjeto,
+  problemas,
+  foco,
+  compilando,
+  erroCompilacao,
+  aoRecusar,
+  congelado,
+  simulacao,
+}: AreaEditorProps) {
   return (
     <div className="min-w-0 flex-1 overflow-auto bg-ide-fundo p-4">
       {projeto.linguagem === 'ld' && (
@@ -56,6 +79,8 @@ export default function AreaEditor({ projeto, aoMudarProjeto, problemas, foco, c
           problemas={problemas}
           foco={foco}
           aoRecusar={aoRecusar}
+          congelado={congelado}
+          simulacao={simulacao}
         />
       )}
 

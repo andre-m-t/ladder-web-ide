@@ -136,3 +136,72 @@ describe('SimboloCtu — estados (perigo > fantasma > selecionado > normal)', ()
     expect(container.innerHTML).not.toMatch(COR_FIXA)
   })
 })
+
+describe('SimboloCtu — energização do CU (spec 004, tarefa #10)', () => {
+  it('sem cuEnergizado (undefined), não desenha nenhum traço extra — desenho idêntico ao de hoje', () => {
+    const { container: base } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} />
+      </svg>,
+    )
+    const { container: comProp } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} cuEnergizado={undefined} />
+      </svg>,
+    )
+
+    expect(base.innerHTML).toBe(comProp.innerHTML)
+    // só rect (caixa) + 5 text (título, CU, R, PV, Q) — nenhuma <line> nova.
+    expect(base.querySelectorAll('line')).toHaveLength(0)
+  })
+
+  it('cuEnergizado true desenha um traço curto na entrada CU, com o token de cor e espessura maior que o normal', () => {
+    const { container } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} cuEnergizado />
+      </svg>,
+    )
+
+    const linhas = container.querySelectorAll('line')
+    expect(linhas).toHaveLength(1)
+    expect(linhas[0].getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(Number(linhas[0].getAttribute('stroke-width'))).toBeGreaterThan(2)
+    // na altura de yEntradaCu, não da caixa inteira nem de yEntradaR.
+    expect(linhas[0].getAttribute('y1')).toBe(String(PROPS_BASE.yEntradaCu))
+    expect(linhas[0].getAttribute('y2')).toBe(String(PROPS_BASE.yEntradaCu))
+  })
+
+  it('cuEnergizado false desenha o traço, mas sem o token de energizado (desenergizado explícito, em simulação)', () => {
+    const { container } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} cuEnergizado={false} />
+      </svg>,
+    )
+
+    const linha = container.querySelector('line')
+    expect(linha).not.toBeNull()
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+  })
+
+  it('cuEnergizado nunca recolore a caixa inteira (rect) — só o traço de CU', () => {
+    const { container } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} cuEnergizado />
+      </svg>,
+    )
+
+    expect(container.querySelector('rect')?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+  })
+
+  it('perigo tem precedência de cor sobre cuEnergizado no traço de CU', () => {
+    const { container } = render(
+      <svg>
+        <SimboloCtu {...PROPS_BASE} cuEnergizado perigo />
+      </svg>,
+    )
+
+    const linha = container.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-perigo')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+  })
+})

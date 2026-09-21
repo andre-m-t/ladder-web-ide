@@ -1,0 +1,62 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "a",
+      "tipo": "BOOL",
+      "endereco": "%IX0.0"
+    },
+    {
+      "nome": "b",
+      "tipo": "BOOL",
+      "endereco": "%IX0.1"
+    },
+    {
+      "nome": "q",
+      "tipo": "BOOL",
+      "endereco": "%QX0.0"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "a"
+        },
+        {
+          "id": "e2",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 1,
+            "coluna": 0
+          },
+          "variavel": "b"
+        },
+        {
+          "id": "e3",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "q"
+        }
+      ],
+      "ramos": [
+        {
+          "id": "b1",
+          "linha": 1,
+          "colunaInicio": 0,
+          "colunaFim": 0
+        }
+      ]
+    }
+  ]
+}

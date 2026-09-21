@@ -681,3 +681,195 @@ describe('App', () => {
     }
   })
 })
+
+describe('App — modo simulação (spec 004, tarefa #11)', () => {
+  beforeEach(() => {
+    try {
+      window.localStorage.clear()
+    } catch {
+      // ambiente sem localStorage — sem efeito nos testes.
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (urlDaRequisicao(input).endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+        return Promise.reject(new Error(`URL inesperada no teste: ${urlDaRequisicao(input)}`))
+      }),
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('CA-12: diagrama com erro de validação — "Simular" fica indisponível com o motivo visível e não entra em simulação', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(DIAGRAMA_COM_ERRO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const botaoSimular = screen.getByRole('button', { name: 'Simular' })
+    expect(botaoSimular).toBeDisabled()
+    expect(botaoSimular.getAttribute('title')).toMatch(/problema/i)
+
+    await usuario.click(botaoSimular)
+    expect(screen.queryByRole('button', { name: 'Sair da simulação' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Avançar um ciclo' })).not.toBeInTheDocument()
+  })
+
+  it('CA-7 (também via BarraSuperior): projeto ST — "Simular" some do lugar certo? Não: fica visível e desabilitado com o motivo, nunca escondido', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify({ versao: 1, titulo: 'Programa', linguagem: 'st', fonte: ESQUELETO_ST }))
+    render(<App />)
+    await screen.findByLabelText(/structured text/i)
+
+    const botaoSimular = screen.getByRole('button', { name: 'Simular' })
+    expect(botaoSimular).toBeDisabled()
+    expect(botaoSimular.getAttribute('title')).toMatch(/ladder/i)
+  })
+
+  it('CA-6: entra em simulação, Passo avança exatamente um ciclo por clique, Reiniciar zera', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    expect(screen.getByRole('button', { name: 'Sair da simulação' })).toBeInTheDocument()
+
+    // Pausa logo ao entrar: o relógio (RAF) roda por padrão (RF-11) e
+    // avançaria ciclos sozinho durante o teste — Passo precisa ser
+    // determinístico, isolado do laço de tempo real.
+    await usuario.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+
+    expect(screen.getByText('Ciclo 0')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Avançar um ciclo' }))
+    expect(screen.getByText('Ciclo 1')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: 'Avançar um ciclo' }))
+    expect(screen.getByText('Ciclo 2')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Reiniciar simulação' }))
+    expect(screen.getByText('Ciclo 0')).toBeInTheDocument()
+  })
+
+  it('CA-8: simulação ativa congela a edição (Inserir degrau desabilitado) e deixa Compilar/Gravar indisponíveis com o motivo; sair devolve os três', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    await usuario.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+
+    const botaoCompilar = screen.getByRole('button', { name: /^compilar$/i })
+    const botaoGravar = screen.getByRole('button', { name: /gravar no esp32/i })
+    const botaoInserirDegrau = screen.getByRole('button', { name: 'Inserir degrau' })
+
+    expect(botaoCompilar).toBeDisabled()
+    expect(botaoCompilar.getAttribute('title')).toMatch(/simulação/i)
+    expect(botaoGravar).toBeDisabled()
+    expect(botaoInserirDegrau).toBeDisabled()
+
+    await usuario.click(screen.getByRole('button', { name: 'Sair da simulação' }))
+
+    expect(screen.getByRole('button', { name: /^compilar$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Inserir degrau' })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Sair da simulação' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Simular' })).toBeInTheDocument()
+  })
+
+  it('CA-9: valores ao vivo no painel — entrada é acionável (switch), saída não (só selo)', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    await usuario.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+
+    // `entrada`/`saida` são os nomes das variáveis de `IO_ESPELHO`.
+    const switchEntrada = screen.getByRole('switch', { name: /acionar entrada/i })
+    expect(switchEntrada).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByRole('switch', { name: /acionar saida/i })).not.toBeInTheDocument()
+
+    await usuario.click(switchEntrada)
+    // O acionamento só vale a partir do ciclo seguinte (RF-1/RF-12, D-2): o
+    // selo mostra a imagem de processo do último ciclo, não o pedido
+    // pendente — continua "false" até um ciclo rodar.
+    expect(switchEntrada).toHaveAttribute('aria-checked', 'false')
+
+    await usuario.click(screen.getByRole('button', { name: 'Avançar um ciclo' }))
+    expect(screen.getByText('Ciclo 1')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /acionar entrada/i })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('CA-13: recarregar a página (montar App de novo) volta ao modo edição, com o diagrama preservado — nada de simulação sobrevive', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO, 'Esteira 1')))
+    const usuario = userEvent.setup()
+    const primeiraMontagem = render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    await usuario.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+    await usuario.click(screen.getByRole('button', { name: 'Avançar um ciclo' }))
+    expect(screen.getByText('Ciclo 1')).toBeInTheDocument()
+
+    // "Recarregar a página": desmonta e monta uma instância nova de `App` —
+    // o estado de simulação nunca foi para `localStorage` (RF-17), só o
+    // `projeto` foi salvo pelo efeito de persistência de sempre.
+    primeiraMontagem.unmount()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    expect(screen.getByTitle('Esteira 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Simular' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sair da simulação' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Ciclo /)).not.toBeInTheDocument()
+  })
+
+  it('o relógio da simulação (RAF, D-8) avança ciclos sozinho em Executar, e para em Pausar — sob controle de fake timers, sem depender de tempo real de parede', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    vi.useFakeTimers()
+    try {
+      // `userEvent` sem `advanceTimers` configurado não mistura bem com fake
+      // timers já ativos — usa `fireEvent` (síncrono) daqui em diante, como o
+      // teste do toast de recusa já faz.
+      fireEvent.click(screen.getByRole('button', { name: 'Simular' }))
+      expect(screen.getByText('Ciclo 0')).toBeInTheDocument()
+
+      // Executar é o padrão ao entrar — alguns quadros a 20 ms/ciclo (tempo
+      // real, o padrão) já devem render pelo menos um ciclo.
+      act(() => {
+        for (let i = 0; i < 5; i++) vi.advanceTimersToNextFrame()
+      })
+      const cicloTexto = screen.getByText(/^Ciclo \d+$/).textContent ?? 'Ciclo 0'
+      const cicloAposExecutar = Number(cicloTexto.replace('Ciclo ', ''))
+      expect(cicloAposExecutar).toBeGreaterThan(0)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+      act(() => {
+        for (let i = 0; i < 5; i++) vi.advanceTimersToNextFrame()
+      })
+      expect(screen.getByText(`Ciclo ${cicloAposExecutar}`)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('marcha lenta é oferecida no seletor e pode ser escolhida durante a simulação', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    const seletorMarcha = screen.getByLabelText('Marcha da simulação')
+    expect(within(seletorMarcha).getByText(/tempo real/i)).toBeInTheDocument()
+    expect(within(seletorMarcha).getByText(/marcha lenta/i)).toBeInTheDocument()
+
+    await usuario.selectOptions(seletorMarcha, 'lenta')
+    expect(seletorMarcha).toHaveValue('lenta')
+  })
+})

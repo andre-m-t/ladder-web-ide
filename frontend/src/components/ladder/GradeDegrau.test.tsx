@@ -2,8 +2,9 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { IO_ESPELHO } from '../../ladder/fixtures'
+import { IO_ESPELHO, RAMO_OU } from '../../ladder/fixtures'
 import type { Ramo } from '../../ladder/modelo'
+import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import type { Problema } from '../../ladder/validacao'
 import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
 
@@ -671,5 +672,232 @@ describe('GradeDegrau — ações de degrau no cabeçalho (tarefa #10, CA-6)', (
     await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
 
     expect(aoRemoverDegrau).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/CA-10)', () => {
+  // IO_ESPELHO: e1 = contato NA "entrada" em (0,0); e2 = bobina "saida" em (0,7).
+  const energizadoIoEspelho: EnergizacaoDegrau = {
+    nos: { '0:0': true, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true, '0:7': true },
+    celulas: { '0:0': true, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true },
+    elementos: { e1: true, e2: true },
+  }
+  const desenergizadoIoEspelho: EnergizacaoDegrau = {
+    nos: { '0:0': true, '0:1': false, '0:2': false, '0:3': false, '0:4': false, '0:5': false, '0:6': false, '0:7': false },
+    celulas: { '0:0': false, '0:1': false, '0:2': false, '0:3': false, '0:4': false, '0:5': false, '0:6': false },
+    elementos: { e1: false, e2: false },
+  }
+
+  it('prop ausente: o desenho é idêntico ao de hoje (sem energizacao vs. sem a prop nenhuma)', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container: semProp } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+    const { container: comNull } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={null} />)
+
+    expect(semProp.innerHTML).toBe(comNull.innerHTML)
+    expect(semProp.innerHTML).not.toContain('stroke-ide-energizado')
+    expect(screen.getAllByRole('button', { name: /^Degrau 1, coluna 1, contato NA entrada$/ })[0]).toBeInTheDocument()
+  })
+
+  it('prop ausente: aria-label não ganha sufixo de estado', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })
+    expect(celula.getAttribute('aria-label')).not.toMatch(/energizado/)
+  })
+
+  it('célula energizada: aria-label ganha ", energizado" e o traço do contato usa o token de cor E fica mais espesso', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizadoIoEspelho} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada, energizado' })
+    const linha = celula.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(Number(linha?.getAttribute('stroke-width'))).toBeGreaterThan(2)
+  })
+
+  it('célula desenergizada: aria-label ganha ", desenergizado" e o traço mantém a cor/espessura de hoje', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={desenergizadoIoEspelho} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada, desenergizado' })
+    const linha = celula.querySelector('line')
+    expect(linha?.getAttribute('class')).toContain('stroke-ide-fio')
+    expect(linha?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+    expect(linha?.getAttribute('stroke-width')).toBe('2')
+  })
+
+  it('energizado e desenergizado se distinguem por DOIS atributos (cor do token E espessura do traço) — não só cor', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container: energ } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizadoIoEspelho} />)
+    const { container: desenerg } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={desenergizadoIoEspelho} />)
+
+    const linhaEnerg = energ.querySelector('[data-celula="r1:0:0"] line')
+    const linhaDesenerg = desenerg.querySelector('[data-celula="r1:0:0"] line')
+
+    // atributo 1: classe de cor diferente.
+    expect(linhaEnerg?.getAttribute('class')).not.toBe(linhaDesenerg?.getAttribute('class'))
+    // atributo 2: espessura diferente (redundância exigida por RF-14/CA-10).
+    expect(linhaEnerg?.getAttribute('stroke-width')).not.toBe(linhaDesenerg?.getAttribute('stroke-width'))
+  })
+
+  it('a bobina energizada mostra "a energia chega até ela" (elementos[id] da bobina), não o valor de outra célula', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizadoIoEspelho} />)
+
+    const bobina = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina saida, energizado' })
+    expect(bobina.querySelector('path')?.getAttribute('class')).toContain('stroke-ide-energizado')
+  })
+
+  it('trecho de fio de uma célula vazia também reflete a energização (não só células com elemento)', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container: energ } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizadoIoEspelho} />)
+    const { container: desenerg } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={desenergizadoIoEspelho} />)
+
+    // coluna 2 (0-based coluna 1) é vazia (fio) no IO_ESPELHO: x1 = MARGEM_ESQUERDA (32) + 1 * larguraCelula (64) = 96.
+    const segmentoEnerg = Array.from(energ.querySelectorAll('svg > line')).find((l) => l.getAttribute('x1') === '96' && l.getAttribute('y1') === l.getAttribute('y2'))
+    const segmentoDesenerg = Array.from(desenerg.querySelectorAll('svg > line')).find((l) => l.getAttribute('x1') === '96' && l.getAttribute('y1') === l.getAttribute('y2'))
+
+    expect(segmentoEnerg?.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(segmentoDesenerg?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+  })
+
+  it('célula terminal com bobina energizada: o fio da própria célula acompanha a bobina até o trilho direito (não usa `celulas`, que é sempre falso ali — bobina é carga, não conduz)', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizadoIoEspelho} />)
+
+    // coluna 8 (0-based coluna 7, terminal): x1 = MARGEM_ESQUERDA (32) + 7 * larguraCelula (64) = 480.
+    const fioTerminal = Array.from(container.querySelectorAll('svg > line')).find(
+      (l) => l.getAttribute('x1') === '480' && l.getAttribute('y1') === l.getAttribute('y2'),
+    )
+
+    expect(fioTerminal).toBeDefined()
+    expect(fioTerminal?.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(Number(fioTerminal?.getAttribute('stroke-width'))).toBeGreaterThan(2)
+  })
+
+  it('célula terminal com bobina desenergizada: o fio da célula mantém o traço de hoje', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={desenergizadoIoEspelho} />)
+
+    const fioTerminal = Array.from(container.querySelectorAll('svg > line')).find(
+      (l) => l.getAttribute('x1') === '480' && l.getAttribute('y1') === l.getAttribute('y2'),
+    )
+
+    expect(fioTerminal?.getAttribute('class')).toContain('stroke-ide-fio')
+    expect(fioTerminal?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+    expect(fioTerminal?.getAttribute('stroke-width')).toBe('2')
+  })
+
+  it('trilho esquerdo fica energizado (cor + espessura) sempre que há simulação — é o nó sempre vivo do contrato', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const { container: semSimulacao } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+    const { container: comSimulacao } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={desenergizadoIoEspelho} />)
+
+    const svgSem = semSimulacao.querySelector('svg') as SVGSVGElement
+    const svgCom = comSimulacao.querySelector('svg') as SVGSVGElement
+    const trilhoSem = svgSem.querySelectorAll('line')[0]
+    const trilhoCom = svgCom.querySelectorAll('line')[0]
+
+    expect(trilhoSem.getAttribute('class')).toContain('stroke-ide-trilho')
+    expect(trilhoCom.getAttribute('class')).toContain('stroke-ide-energizado')
+    expect(Number(trilhoCom.getAttribute('stroke-width'))).toBeGreaterThan(Number(trilhoSem.getAttribute('stroke-width')))
+  })
+
+  it('selo de problema convive com a energização na mesma célula: um no canto (selo), outro no traço — não disputam o mesmo atributo', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    const problemas: Problema[] = [
+      { codigo: 'variavel_nao_atribuida', severidade: 'erro', rungId: 'r1', elementoId: 'e1', mensagem: 'problema de exemplo' },
+    ]
+    render(
+      <GradeDegrau rung={rung} indice={0} {...propsBase()} problemas={problemas} energizacao={energizadoIoEspelho} />,
+    )
+
+    const celula = screen.getByRole('button', { name: /Degrau 1, coluna 1, contato NA entrada, erro: problema de exemplo, energizado/ })
+    // selo no canto (data-problema + o círculo vermelho do SeloProblema).
+    expect(celula).toHaveAttribute('data-problema', 'erro')
+    expect(celula.querySelector('circle[class*="fill-ide-perigo"]')).not.toBeNull()
+    // energização no traço, intocada pelo problema.
+    expect(celula.querySelector('line')?.getAttribute('class')).toContain('stroke-ide-energizado')
+  })
+
+  it('ramo paralelo: conectores verticais e cada segmento do traço horizontal refletem a energização por coluna', () => {
+    // RAMO_OU: e1 = NA "a" em (0,0), trunk aberto; ramo b1 (linha 1, col 0) com
+    // e2 = NA "b" fechado — energiza via ramo mesmo com o trunk direto aberto.
+    const rung = RAMO_OU.rungs[0]
+    const energizacao: EnergizacaoDegrau = {
+      nos: { '0:0': true, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true, '0:7': true, '1:0': true, '1:1': true },
+      celulas: { '0:0': false, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true, '1:0': true },
+      elementos: { e1: false, e2: true, e3: true },
+    }
+    const { container } = render(<GradeDegrau rung={rung} indice={0} {...propsBase()} energizacao={energizacao} />)
+
+    // contato "a" (trunk direto) não conduz — desenergizado.
+    const contatoA = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA a, desenergizado' })
+    expect(contatoA.querySelector('line')?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+
+    // contato "b" no ramo conduz — energizado.
+    const contatoB = screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, contato NA b, energizado' })
+    expect(contatoB.querySelector('line')?.getAttribute('class')).toContain('stroke-ide-energizado')
+
+    // bobina "q" recebe energia pelo ramo, mesmo com o trunk direto aberto.
+    const bobina = screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina q, energizado' })
+    expect(bobina.querySelector('path')?.getAttribute('class')).toContain('stroke-ide-energizado')
+
+    // os conectores verticais do ramo: linhas verticais (x1 === x2) dentro do
+    // grupo aria-hidden do traço do ramo — pelo menos uma energizada.
+    const grupoTraco = container.querySelector('g[aria-hidden="true"]')
+    const conectores = Array.from(grupoTraco?.querySelectorAll('line') ?? []).filter((l) => l.getAttribute('x1') === l.getAttribute('x2'))
+    expect(conectores.length).toBeGreaterThan(0)
+    expect(conectores.some((l) => l.getAttribute('class')?.includes('stroke-ide-energizado'))).toBe(true)
+  })
+
+  it('CTU: CU energizado quando a energia chega à entrada de contagem — não pinta a caixa inteira', () => {
+    const rungComCtu = {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+        { id: 'e2', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
+        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaReset: 1, instancia: 'ctu0', pv: 12, saida: 'atingiu' },
+      ],
+      ramos: [],
+    }
+    const cuEnergizado: EnergizacaoDegrau = {
+      nos: { '0:0': true, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true, '0:7': true, '1:0': true, '1:1': false },
+      celulas: { '0:0': true, '0:1': true, '0:2': true, '0:3': true, '0:4': true, '0:5': true, '0:6': true, '1:0': false, '1:1': false, '1:2': false, '1:3': false, '1:4': false, '1:5': false, '1:6': false },
+      elementos: { e1: true, e2: false, e3: true },
+    }
+    render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} energizacao={cuEnergizado} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu, energizado' })
+    // o traço de CU (uma <line> extra dentro do símbolo do CTU) fica energizado...
+    const linhaCu = celula.querySelector('line')
+    expect(linhaCu?.getAttribute('class')).toContain('stroke-ide-energizado')
+    // ...mas a caixa (rect) não muda de cor por causa disso — nunca a caixa inteira.
+    expect(celula.querySelector('rect')?.getAttribute('class')).not.toContain('stroke-ide-energizado')
+    // o resto da caixa (CTU/PV/Q) continua no lugar.
+    expect(celula.textContent).toContain('PV=12')
+  })
+
+  it('CTU: CU desenergizado quando a energia não chega (reset_ctu não afeta o traço de CU)', () => {
+    const rungComCtu = {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+        { id: 'e2', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
+        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaReset: 1, instancia: 'ctu0', pv: 12, saida: 'atingiu' },
+      ],
+      ramos: [],
+    }
+    const cuDesenergizado: EnergizacaoDegrau = {
+      nos: { '0:0': true, '0:1': false, '0:2': false, '0:3': false, '0:4': false, '0:5': false, '0:6': false, '0:7': false, '1:0': true, '1:1': true },
+      celulas: { '0:0': false, '0:1': false, '0:2': false, '0:3': false, '0:4': false, '0:5': false, '0:6': false, '1:0': true, '1:1': true, '1:2': true, '1:3': true, '1:4': true, '1:5': true, '1:6': true },
+      elementos: { e1: false, e2: true, e3: false },
+    }
+    render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} energizacao={cuDesenergizado} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu, desenergizado' })
+    const linhaCu = celula.querySelector('line')
+    expect(linhaCu?.getAttribute('class')).not.toContain('stroke-ide-energizado')
   })
 })

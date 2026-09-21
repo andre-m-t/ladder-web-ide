@@ -39,6 +39,18 @@
  * Estados `selecionado`/`perigo`/`fantasma` seguem a mesma precedência de
  * `Simbolos.tsx` (perigo > fantasma > selecionado > normal). Só tokens
  * `ide-*` — nenhuma cor Tailwind fixa.
+ *
+ * **Energização — só o CU, nunca a caixa inteira (spec 004, RF-6/RF-14):**
+ * `cuEnergizado` reflete `elementos[id]` do CTU — "a energia chega à entrada
+ * de contagem (CU)", **não** o resultado `Q` do contador (esse é lido pelos
+ * contatos de outros degraus, fora deste componente). Pintar a caixa inteira
+ * de energizado sugeriria "o contador atingiu o limite", que é outra coisa —
+ * por isso o desenho é um traço próprio, colado à borda esquerda na altura
+ * de `yEntradaCu` (onde o fio de CU de fato entra), com a mesma codificação
+ * redundante dos demais símbolos (cor `ide-energizado` **e** espessura maior
+ * que o traço normal). A caixa e o restante do rótulo não mudam. Precedência
+ * igual à de `Simbolos.tsx`: `perigo` > `fantasma` > `cuEnergizado` >
+ * `selecionado` > normal.
  */
 
 export interface SimboloCtuProps {
@@ -65,17 +77,43 @@ export interface SimboloCtuProps {
   fantasma?: boolean
   /** Traço `ide-perigo` (prévia de remoção sobre o elemento). */
   perigo?: boolean
+  /** Energia da simulação chega à entrada de contagem (CU) — spec 004,
+   * RF-6. **Tri-estado, de propósito:** `undefined` (sem simulação) não
+   * desenha o traço de CU — comportamento idêntico ao de hoje; `true`/
+   * `false` (em simulação) desenha o traço, energizado ou não. Ver nota
+   * acima: nunca a caixa inteira, só o traço de entrada do CU. */
+  cuEnergizado?: boolean
 }
 
 const MARGEM_CAIXA = 4
 /** Espaço vertical entre as linhas do bloco central (PV/endereço/Q). */
 const ALTURA_LINHA_TEXTO = 12
+/** Comprimento do traço de entrada do CU, saindo da borda esquerda da caixa. */
+const COMPRIMENTO_TRACO_CU = 10
+const LARGURA_TRACO_CU_ENERGIZADO = 3
+const LARGURA_TRACO_CU_NORMAL = 2
 
 function corTraco({ selecionado, fantasma, perigo }: SimboloCtuProps): string {
   if (perigo) return 'stroke-ide-perigo'
   if (fantasma) return 'stroke-ide-previa opacity-50'
   if (selecionado) return 'stroke-ide-destaque'
   return 'stroke-ide-fio'
+}
+
+/** Cor do traço de entrada do CU — mesma precedência de `Simbolos.tsx`
+ * (perigo > fantasma > energizado > selecionado > normal). */
+function corTracoCu(props: SimboloCtuProps): string {
+  if (props.perigo) return 'stroke-ide-perigo'
+  if (props.fantasma) return 'stroke-ide-previa opacity-50'
+  if (props.cuEnergizado) return 'stroke-ide-energizado'
+  if (props.selecionado) return 'stroke-ide-destaque'
+  return 'stroke-ide-fio'
+}
+
+/** Espessura do traço de entrada do CU: só a energização altera (RF-14). */
+function larguraTracoCu({ perigo, fantasma, cuEnergizado }: SimboloCtuProps): number {
+  if (!perigo && !fantasma && cuEnergizado) return LARGURA_TRACO_CU_ENERGIZADO
+  return LARGURA_TRACO_CU_NORMAL
 }
 
 function corTexto({ selecionado, fantasma, perigo }: SimboloCtuProps): string {
@@ -86,7 +124,7 @@ function corTexto({ selecionado, fantasma, perigo }: SimboloCtuProps): string {
 }
 
 export default function SimboloCtu(props: SimboloCtuProps) {
-  const { cx, yTopo, yBase, largura, yEntradaCu, yEntradaR, instancia, pv, saida, endereco, fantasma } = props
+  const { cx, yTopo, yBase, largura, yEntradaCu, yEntradaR, instancia, pv, saida, endereco, fantasma, cuEnergizado } = props
   const xEsquerda = cx - largura / 2 + MARGEM_CAIXA
   const xDireita = cx + largura / 2 - MARGEM_CAIXA
   // Fundo sólido (não "fill-none"): sem ele, o fio da linha 0/linha de reset
@@ -126,6 +164,23 @@ export default function SimboloCtu(props: SimboloCtuProps) {
       <text x={cx} y={yTitulo} textAnchor="middle" className={`select-none text-[9px] font-bold ${classeTexto}`}>
         {`CTU ${instancia}`}
       </text>
+
+      {/* Traço de entrada do CU (spec 004, RF-6/RF-14): curto, colado à
+       * borda esquerda, na altura real de `yEntradaCu` — onde o fio de
+       * contagem entra. Não afeta a caixa nem o restante do rótulo. Só
+       * existe fora de edição (`cuEnergizado` presente, ou seja, em
+       * simulação): `undefined` (sem simulação) não desenha nada — o
+       * desenho fica idêntico ao de hoje. */}
+      {cuEnergizado !== undefined && (
+        <line
+          x1={xEsquerda - COMPRIMENTO_TRACO_CU}
+          y1={yEntradaCu}
+          x2={xEsquerda}
+          y2={yEntradaCu}
+          strokeWidth={larguraTracoCu(props)}
+          className={corTracoCu(props)}
+        />
+      )}
 
       <text x={xEsquerda + 6} y={yEntradaCu + 3} textAnchor="start" className={`select-none text-[9px] font-semibold ${classeTexto}`}>
         CU

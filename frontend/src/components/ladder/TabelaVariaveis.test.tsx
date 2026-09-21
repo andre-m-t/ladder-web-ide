@@ -478,6 +478,66 @@ describe('TabelaVariaveis — valor', () => {
   })
 })
 
+describe('TabelaVariaveis — acionamento de entrada durante a simulação (spec 004, tarefa #12, RF-12/CA-9)', () => {
+  it('entrada com `aoAcionar`: o selo vira um switch clicável, chama aoAcionar(nome, !valor)', async () => {
+    const usuario = userEvent.setup()
+    const aoAcionar = vi.fn()
+    const entrada = variavel('botao', ENTRADAS_LOCALIZADAS[0])
+    renderizar([entrada], { valores: { botao: false }, aoAcionar })
+
+    const botaoValor = screen.getByRole('switch', { name: /acionar botao/i })
+    expect(botaoValor).toHaveAttribute('aria-checked', 'false')
+
+    await usuario.click(botaoValor)
+    expect(aoAcionar).toHaveBeenCalledWith('botao', true)
+  })
+
+  it('entrada acionável responde ao teclado (Enter/Espaço nativos do <button>)', async () => {
+    const usuario = userEvent.setup()
+    const aoAcionar = vi.fn()
+    const entrada = variavel('botao', ENTRADAS_LOCALIZADAS[0])
+    renderizar([entrada], { valores: { botao: true }, aoAcionar })
+
+    const botaoValor = screen.getByRole('switch', { name: /acionar botao/i })
+    botaoValor.focus()
+    await usuario.keyboard('{Enter}')
+
+    expect(aoAcionar).toHaveBeenCalledWith('botao', false)
+  })
+
+  it('saída e memória nunca ficam acionáveis, mesmo com `aoAcionar` presente — mostram TRUE/FALSE sem responder', () => {
+    const aoAcionar = vi.fn()
+    const saida = variavel('motor', SAIDAS_LOCALIZADAS[0])
+    const memoria = variavel('passo')
+    renderizar([saida, memoria], { valores: { motor: true, passo: false }, aoAcionar })
+
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    expect(screen.getByText('TRUE')).toBeInTheDocument()
+    expect(screen.getByText('FALSE')).toBeInTheDocument()
+  })
+
+  it('sem `aoAcionar`, mesmo uma entrada com `valores` mostra o selo só leitura (sem switch)', () => {
+    const entrada = variavel('botao', ENTRADAS_LOCALIZADAS[0])
+    renderizar([entrada], { valores: { botao: true } })
+
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+    expect(screen.getByText('TRUE')).toBeInTheDocument()
+  })
+})
+
+describe('TabelaVariaveis — contagem de ciclos (spec 004, tarefa #12, RF-13)', () => {
+  it('sem `ciclo`, o cabeçalho não menciona ciclo nenhum', () => {
+    renderizar([variavel('x')])
+    expect(screen.queryByText(/^Ciclo /)).not.toBeInTheDocument()
+  })
+
+  it('com `ciclo`, mostra "Ciclo N" no cabeçalho, sem sumir a contagem de declaradas', () => {
+    renderizar([variavel('x')], { ciclo: 42 })
+    expect(screen.getByText('Ciclo 42')).toBeInTheDocument()
+    expect(screen.getByText('1 declarada')).toBeInTheDocument()
+  })
+})
+
 describe('TabelaVariaveis — área rolável única', () => {
   it('tabela (com a linha de adicionar) e mapa de pinos ficam dentro do mesmo contêiner rolável', () => {
     const { container } = renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])

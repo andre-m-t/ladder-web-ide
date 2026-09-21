@@ -212,6 +212,31 @@ describe('PainelVariaveis — recusa do núcleo chama aoRecusar, sem texto (tare
   })
 })
 
+describe('PainelVariaveis — passagem cega de valores/aoAcionar/ciclo (spec 004, tarefa #12)', () => {
+  it('repassa `valores`, `aoAcionar` e `ciclo` a TabelaVariaveis sem interpretar nada', async () => {
+    const usuario = userEvent.setup()
+    const aoAcionar = vi.fn()
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [{ nome: 'botao', tipo: 'BOOL', endereco: ENTRADAS_LOCALIZADAS[0] }],
+      rungs: [{ id: 'r1', elementos: [], ramos: [] }],
+    }
+    render(
+      <PainelVariaveis
+        diagrama={diagrama}
+        aoMudar={() => {}}
+        valores={{ botao: false }}
+        aoAcionar={aoAcionar}
+        ciclo={7}
+      />,
+    )
+
+    expect(screen.getByText('Ciclo 7')).toBeInTheDocument()
+    await usuario.click(screen.getByRole('switch', { name: /acionar botao/i }))
+    expect(aoAcionar).toHaveBeenCalledWith('botao', true)
+  })
+})
+
 describe('PainelVariaveis — tokens de tema', () => {
   it('não usa classes de cor fixas do Tailwind (slate/sky/red/emerald/amber)', () => {
     expect(codigoFonte).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)

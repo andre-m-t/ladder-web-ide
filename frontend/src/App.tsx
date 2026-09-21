@@ -12,6 +12,14 @@ import Toasts from './components/ide/Toasts'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
 import type { Diagrama } from './ladder/modelo'
 import { degrauDaLinha, serializar, type TrechoDegrau } from './ladder/serializador'
+import {
+  acionarEntrada,
+  criarEstado,
+  executarCiclo,
+  reiniciar,
+  INTERVALO_TEMPO_REAL_MS,
+  type EstadoSimulacao,
+} from './ladder/simulacao'
 import { validarDiagrama, type Problema } from './ladder/validacao'
 import {
   compilarPacote,
@@ -77,6 +85,57 @@ const PAINEL_VARIAVEIS_LARGURA_MIN = 288 // 18rem
 const PAINEL_VARIAVEIS_LARGURA_MAX = 640 // 40rem
 const CONSOLE_ALTURA_PADRAO = 192
 const CONSOLE_ALTURA_MIN = 96 // 6rem
+
+// --- Simulação (spec 004, tarefa #11, D-8/D-9) -------------------------------
+// `App` é dona do relógio: um laço em `requestAnimationFrame` (efeito mais
+// abaixo) calcula quantos ciclos cabem no tempo decorrido desde o último
+// quadro e executa todos em sequência antes de um único redesenho — nunca um
+// `setState` por ciclo (RF-11). O estado da simulação (`EstadoModoSimulacao`)
+// nunca é persistido em `localStorage`: é assim, de graça, que a spec cumpre
+// RF-17 (volátil) — o efeito de gravação de preferências abaixo nunca toca
+// `simulacao`.
+
+interface MarchaSimulacao {
+  id: string
+  rotulo: string
+  intervaloMs: number
+}
+
+/** Tempo real (20 ms/ciclo, o `T#20ms` do firmware) como padrão, e uma marcha
+ * lenta (RF-11: "ao menos uma") — 500 ms é devagar o bastante para acompanhar
+ * um degrau combinacional a olho nu, sem virar um segundo controle de tempo
+ * arbitrário (decisão registrada no relatório: a spec só pede "ao menos
+ * uma"). */
+const MARCHAS_SIMULACAO: MarchaSimulacao[] = [
+  { id: 'tempo-real', rotulo: `Tempo real (${INTERVALO_TEMPO_REAL_MS} ms/ciclo)`, intervaloMs: INTERVALO_TEMPO_REAL_MS },
+  { id: 'lenta', rotulo: 'Marcha lenta (500 ms/ciclo)', intervaloMs: 500 },
+]
+const MARCHA_SIMULACAO_PADRAO = MARCHAS_SIMULACAO[0].id
+
+/** Teto de ciclos executados num único quadro (D-8): protege a aba de tentar
+ * "recuperar" o atraso todo de uma vez quando a janela volta de segundo
+ * plano (o navegador pausa `requestAnimationFrame`, então o próximo quadro
+ * pode chegar com `dt` de minutos). Acima do teto, o relógio de referência é
+ * ressincronizado com o presente em vez de perseguir o atraso em rajadas nos
+ * quadros seguintes — a simulação "pula" o tempo em segundo plano em vez de
+ * tentar reencenar cada ciclo perdido. Valor folgado para o alvo de 50
+ * degraus a 20 ms/ciclo da CA-11 (bem menos que isso por quadro em uso
+ * normal — 1 ciclo a 60 Hz em tempo real).
+ */
+const MAX_CICLOS_POR_QUADRO = 10
+
+function intervaloDaMarcha(marchaId: string): number {
+  return MARCHAS_SIMULACAO.find((m) => m.id === marchaId)?.intervaloMs ?? INTERVALO_TEMPO_REAL_MS
+}
+
+/** Estado do modo de simulação (D-9): `ativo: false` é o modo de edição de
+ * sempre. Com `ativo: true`, `rodando` é Executar (true) ou Pausar (false),
+ * `marchaId` escolhe entre `MARCHAS_SIMULACAO` e `estado` é o
+ * `EstadoSimulacao` do núcleo (`ladder/simulacao.ts`), avançado por
+ * `executarCiclo`. Nunca gravado em `localStorage` (RF-17). */
+type EstadoModoSimulacao =
+  | { ativo: false }
+  | { ativo: true; rodando: boolean; marchaId: string; estado: EstadoSimulacao }
 
 function lerPreferencia<T>(chave: string, converter: (bruto: string) => T | null, padrao: T): T {
   try {
@@ -150,6 +209,17 @@ function abaInferiorInicial(projeto: Projeto, veioDoArmazenamento: boolean): Aba
 /** "1 problema" / "N problemas" (plural correto) — D-6, regra 1. */
 function pluralizarProblema(quantidade: number): string {
   return quantidade === 1 ? 'problema' : 'problemas'
+}
+
+/** Estreita `Projeto` para o `Diagrama` de um projeto Ladder, ou `null` em
+ * projeto ST (spec 004, tarefa #11) — `Projeto` é uma união discriminada
+ * (`ladder/projeto.ts`) e `projetoRef.current`/o parâmetro `projeto` não
+ * narroweiam sozinhos fora de um `if` local; usado pelos manipuladores da
+ * simulação, que só são alcançáveis com `motivoSimulacaoIndisponivel`
+ * ausente (ou seja, já em projeto Ladder) — o `null` aqui é defensivo, não
+ * um caminho esperado em uso normal. */
+function diagramaLd(p: Projeto): Diagrama | null {
+  return p.linguagem === 'ld' ? p.diagrama : null
 }
 
 /**
@@ -231,6 +301,12 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [modalNovoProjeto, setModalNovoProjeto] = useState<EstadoModalNovoProjeto>('nenhum')
 
+  /** Modo de simulação (spec 004, tarefa #11, D-9) — ver `EstadoModoSimulacao`
+   * acima. Nunca entra no efeito de `salvarProjeto` (`projeto` é a única
+   * coisa persistida) nem em nenhuma das chaves de `localStorage` deste
+   * arquivo — é assim que RF-17 (volátil) é cumprido, por omissão. */
+  const [simulacao, setSimulacao] = useState<EstadoModoSimulacao>({ ativo: false })
+
   const problemasValidacao = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
 
   /** Diagnósticos do compilador já traduzidos para `Problema` (D-8/Q-3), só
@@ -273,6 +349,20 @@ export default function App() {
    * sucesso (herdado da tarefa #12). */
   const falhaSalvarRegistrada = useRef(false)
   const focoToken = useRef(0)
+
+  /** Espelham o `projeto`/`simulacao` mais recentes para leitura síncrona
+   * fora de `render` — o laço de `requestAnimationFrame` (efeito mais
+   * abaixo) e os manipuladores de Passo/Reiniciar/acionar entrada precisam
+   * do valor atual sem esperar o próximo `render` (mesmo padrão de
+   * `diagramaRef`/`aoMudarRef` em `EditorLadder.tsx`). */
+  const projetoRef = useRef(projeto)
+  const simulacaoRef = useRef(simulacao)
+  useEffect(() => {
+    projetoRef.current = projeto
+  }, [projeto])
+  useEffect(() => {
+    simulacaoRef.current = simulacao
+  }, [simulacao])
 
   function log(nivel: EntradaConsole['nivel'], mensagem: string) {
     setEntradasConsole((atual) => registrar(atual, nivel, mensagem))
@@ -369,8 +459,12 @@ export default function App() {
   const podeGravar = temPacoteValido && webSerialOk && !gravando
 
   /**
-   * Portão de Compilar/Gravar em projeto Ladder (spec 003, D-6), na primeira
-   * regra que valer:
+   * Portão de Compilar/Gravar em projeto Ladder (spec 003, D-6; spec 004,
+   * RF-15 acrescenta a regra 0), na primeira regra que valer:
+   *   0. a simulação está ativa (RF-15/CA-8) — "Indisponível durante a
+   *      simulação…", checado antes de tudo: a simulação nem olha para
+   *      `stGerado`/validação, que continuam sendo os do diagrama tal como
+   *      estava ao entrar no modo (o editor está congelado, então não mudam);
    *   1. há problema de severidade "erro" na **validação** (nunca nos
    *      diagnósticos de compilação — senão, depois de uma falha, Compilar
    *      ficaria travado até o autor editar o diagrama de novo, mesmo que o
@@ -379,9 +473,14 @@ export default function App() {
    *   3. a serialização recusa (D-5) — o motivo dela;
    *   4. nenhuma das anteriores: `undefined`, Compilar habilitado.
    * Avisos de validação nunca bloqueiam. Em projeto ST, continua `undefined`
-   * (compilar sempre disponível, como antes desta spec).
+   * fora de simulação (compilar sempre disponível, como antes desta spec) —
+   * simulação em si não é alcançável em projeto ST (RF-16), então a regra 0
+   * nunca dispara ali na prática, mas fica pela mesma ordem de leitura.
    */
   const motivoIndisponivel: string | undefined = useMemo(() => {
+    if (simulacao.ativo) {
+      return 'Indisponível durante a simulação — saia da simulação para compilar ou gravar'
+    }
     if (projeto.linguagem !== 'ld') return undefined
 
     const errosDeValidacao = problemasValidacao.filter((problema) => problema.severidade === 'erro')
@@ -395,7 +494,30 @@ export default function App() {
       return stGerado.motivo
     }
     return undefined
-  }, [projeto.linguagem, problemasValidacao, stGerado])
+  }, [simulacao.ativo, projeto.linguagem, problemasValidacao, stGerado])
+
+  /**
+   * Portão de **entrada** na simulação (spec 004, RF-16, RF-18; mesmo espírito
+   * de `motivoIndisponivel`, regra própria porque os critérios não coincidem:
+   * simulação não olha para `stGerado` — RF-9, o simulador não fala a língua
+   * do compilador):
+   *   1. projeto ST (RF-16/Q-6) — simulação fora de escopo, motivo fixo;
+   *   2. erro de `validarDiagrama` (RF-18/CA-12) — mesmo portão do Compilar,
+   *      mesma mensagem; aviso nunca bloqueia;
+   *   3. nenhuma das anteriores: `undefined`, botão "Simular" habilitado.
+   * Só decide se dá para **entrar**; sair de uma simulação já ativa nunca é
+   * bloqueado por este motivo (`BarraSuperior` trata isso à parte).
+   */
+  const motivoSimulacaoIndisponivel: string | undefined = useMemo(() => {
+    if (projeto.linguagem !== 'ld') {
+      return 'Simulação disponível apenas em projeto Ladder'
+    }
+    const errosDeValidacao = problemasValidacao.filter((problema) => problema.severidade === 'erro')
+    if (errosDeValidacao.length > 0) {
+      return `${errosDeValidacao.length} ${pluralizarProblema(errosDeValidacao.length)} no diagrama — ver aba Problemas`
+    }
+    return undefined
+  }, [projeto.linguagem, problemasValidacao])
 
   /**
    * Opções do menu Baixar (spec 003, D-12/tarefa #11): em projeto Ladder,
@@ -545,6 +667,143 @@ export default function App() {
     setTema(novoTema)
   }
 
+  // --- Simulação (spec 004, tarefa #11) --------------------------------------
+
+  /** Entra em simulação (RF-15/D-9): bloqueado pelo mesmo motivo que
+   * desabilita o botão "Simular" (`motivoSimulacaoIndisponivel` — RF-16/
+   * RF-18), defensivo aqui também (o botão já fica desabilitado). O estado
+   * nasce de `criarEstado`, sempre rodando (a marcha padrão é tempo real). */
+  function aoEntrarSimulacao() {
+    if (motivoSimulacaoIndisponivel) return
+    const diagrama = diagramaLd(projeto)
+    if (!diagrama) return
+    setSimulacao({ ativo: true, rodando: true, marchaId: MARCHA_SIMULACAO_PADRAO, estado: criarEstado(diagrama) })
+    log('info', 'Simulação iniciada.')
+  }
+
+  /** Sai da simulação (RF-15/RF-17): descarta o `EstadoSimulacao` — é assim
+   * que "volátil" é cumprido, não há para onde ele iria (nunca esteve em
+   * `localStorage`). Edição, Compilar e Gravar voltam juntos, porque todos
+   * checam `simulacao.ativo`/`motivoIndisponivel`, não um estado próprio. */
+  function aoSairSimulacao() {
+    if (!simulacaoRef.current.ativo) return
+    setSimulacao({ ativo: false })
+    log('info', 'Simulação encerrada.')
+  }
+
+  function aoAlternarSimulacao() {
+    if (simulacaoRef.current.ativo) aoSairSimulacao()
+    else aoEntrarSimulacao()
+  }
+
+  function aoAlternarExecucaoSimulacao() {
+    setSimulacao((atual) => (atual.ativo ? { ...atual, rodando: !atual.rodando } : atual))
+  }
+
+  /** Passo (CA-6): exatamente um ciclo, com a simulação rodando ou pausada —
+   * não depende do laço de `requestAnimationFrame` abaixo. */
+  function aoPassoSimulacao() {
+    const atual = simulacaoRef.current
+    if (!atual.ativo) return
+    const diagrama = diagramaLd(projetoRef.current)
+    if (!diagrama) return
+    setSimulacao({ ...atual, estado: executarCiclo(diagrama, atual.estado) })
+  }
+
+  /** Reiniciar (CA-6): volta ao estado inicial completo (`reiniciar` = o
+   * mesmo que `criarEstado`) — zera variáveis, contadores e a contagem de
+   * ciclos; não sai do modo simulação nem muda Executar/Pausar. */
+  function aoReiniciarSimulacao() {
+    const atual = simulacaoRef.current
+    if (!atual.ativo) return
+    const diagrama = diagramaLd(projetoRef.current)
+    if (!diagrama) return
+    setSimulacao({ ...atual, estado: reiniciar(diagrama) })
+  }
+
+  function aoEscolherMarchaSimulacao(marchaId: string) {
+    setSimulacao((atual) => (atual.ativo ? { ...atual, marchaId } : atual))
+  }
+
+  /** Aciona uma entrada durante a simulação (RF-12): repassado a
+   * `PainelVariaveis`/`TabelaVariaveis` como `aoAcionar`. Uma recusa do
+   * núcleo (variável que não é de entrada — não deveria ser alcançável, já
+   * que só entradas ganham o controle acionável, mas o núcleo decide, não a
+   * tela) vai pelo mesmo caminho de recusa de sempre (`recusar` → toast). */
+  function aoAcionarEntradaSimulacao(nome: string, nivel: boolean) {
+    const atual = simulacaoRef.current
+    if (!atual.ativo) return
+    const diagrama = diagramaLd(projetoRef.current)
+    if (!diagrama) return
+    const resultado = acionarEntrada(diagrama, atual.estado, nome, nivel)
+    if (!resultado.ok) {
+      recusar(resultado.motivo)
+      return
+    }
+    setSimulacao({ ...atual, estado: resultado.estado })
+  }
+
+  /**
+   * O relógio da simulação (RF-11, plano D-8): um laço em
+   * `requestAnimationFrame`, ativo só enquanto `simulacao.ativo && rodando`.
+   * A cada quadro, calcula quantos ciclos cabem no tempo decorrido desde o
+   * último (`floor(dt / intervalo)`), executa todos em sequência sobre o
+   * mesmo `EstadoSimulacao` e aplica **um único** `setSimulacao` — nunca um
+   * `setState` por ciclo. `MAX_CICLOS_POR_QUADRO` protege a aba de tentar
+   * recuperar em rajada um atraso grande (janela em segundo plano): acima do
+   * teto, o relógio de referência é ressincronizado com o presente em vez de
+   * perseguir os ciclos perdidos.
+   *
+   * A marcha (intervalo) é lida de `simulacaoRef` a cada quadro, não capturada
+   * no fechamento do efeito — trocar de marcha em pleno "Executar" tem efeito
+   * imediato, sem reiniciar o laço.
+   */
+  const simulacaoRodandoAgora = simulacao.ativo && simulacao.rodando
+
+  useEffect(() => {
+    if (!simulacao.ativo || !simulacao.rodando) return
+
+    let rafId = 0
+    let ultimoTempo: number | null = null
+
+    function quadro(agora: number) {
+      if (ultimoTempo === null) {
+        ultimoTempo = agora
+        rafId = requestAnimationFrame(quadro)
+        return
+      }
+
+      const atual = simulacaoRef.current
+      const intervalo = atual.ativo ? intervaloDaMarcha(atual.marchaId) : INTERVALO_TEMPO_REAL_MS
+      const dt = agora - ultimoTempo
+      const ciclosCabidos = Math.floor(dt / intervalo)
+
+      if (ciclosCabidos > 0) {
+        const ciclos = Math.min(ciclosCabidos, MAX_CICLOS_POR_QUADRO)
+        ultimoTempo = ciclosCabidos > MAX_CICLOS_POR_QUADRO ? agora : ultimoTempo + ciclos * intervalo
+
+        const diagramaAtual = diagramaLd(projetoRef.current)
+        if (diagramaAtual) {
+          setSimulacao((estadoAtual) => {
+            if (!estadoAtual.ativo) return estadoAtual
+            let estado = estadoAtual.estado
+            for (let i = 0; i < ciclos; i++) estado = executarCiclo(diagramaAtual, estado)
+            return { ...estadoAtual, estado }
+          })
+        }
+      }
+
+      rafId = requestAnimationFrame(quadro)
+    }
+
+    rafId = requestAnimationFrame(quadro)
+    return () => cancelAnimationFrame(rafId)
+    // `simulacaoRodandoAgora` (não `simulacao.rodando` cru) porque `Projeto`
+    // e `EstadoModoSimulacao` são uniões discriminadas: acessar `.rodando`
+    // direto num array de dependências não estreita `simulacao.ativo` da
+    // mesma expressão (só um `if`/`?:` local estreita) — ver `diagramaLd`.
+  }, [simulacao.ativo, simulacaoRodandoAgora])
+
   /** Clicar num problema (herdado da tarefa #13): pede ao `EditorLadder` para
    * focar a célula do problema — `token` incrementa a cada escolha para
    * repetir o mesmo alvo duas vezes seguidas ainda disparar o foco. */
@@ -580,6 +839,12 @@ export default function App() {
     setProjeto(novo)
     setCompilacao({ fase: 'ocioso' })
     setGravacao({ fase: 'ocioso' })
+    // Defensivo (spec 004): "Novo projeto" troca o diagrama inteiro por
+    // baixo de uma simulação que estaria rodando sobre o anterior — sem
+    // caminho de UI hoje para chegar aqui com `simulacao.ativo` (o editor
+    // está congelado, então "Novo projeto" seguiria funcionando, mas
+    // encerrar a simulação é o comportamento seguro caso isso mude).
+    setSimulacao({ ativo: false })
     setFoco(null)
     setModalNovoProjeto('nenhum')
     log('info', `Projeto «${novo.titulo}» (${linguagem.toUpperCase()}) criado.`)
@@ -601,6 +866,16 @@ export default function App() {
         opcoesDownload={opcoesDownload}
         aoBaixar={aoBaixar}
         motivoIndisponivel={motivoIndisponivel}
+        simulando={simulacao.ativo}
+        simulacaoRodando={simulacao.ativo && simulacao.rodando}
+        motivoSimulacaoIndisponivel={motivoSimulacaoIndisponivel}
+        aoAlternarSimulacao={aoAlternarSimulacao}
+        aoAlternarExecucaoSimulacao={aoAlternarExecucaoSimulacao}
+        aoPassoSimulacao={aoPassoSimulacao}
+        aoReiniciarSimulacao={aoReiniciarSimulacao}
+        marchas={MARCHAS_SIMULACAO}
+        marchaAtual={simulacao.ativo ? simulacao.marchaId : MARCHA_SIMULACAO_PADRAO}
+        aoEscolherMarcha={aoEscolherMarchaSimulacao}
         painelVariaveisAberto={painelVariaveisAberto}
         aoAlternarPainelVariaveis={() => setPainelVariaveisAberto((atual) => !atual)}
         painelInferiorAberto={consoleAberto}
@@ -625,6 +900,8 @@ export default function App() {
           compilando={compilando}
           erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
           aoRecusar={recusar}
+          congelado={simulacao.ativo}
+          simulacao={simulacao.ativo ? { energizacao: simulacao.estado.energizacao } : null}
         />
 
         {projeto.linguagem === 'ld' && (
@@ -635,7 +912,14 @@ export default function App() {
             larguraMax={PAINEL_VARIAVEIS_LARGURA_MAX}
             aoRedimensionar={setPainelVariaveisLargura}
           >
-            <PainelVariaveis diagrama={projeto.diagrama} aoMudar={(diagrama) => setProjeto({ ...projeto, diagrama })} aoRecusar={recusar} />
+            <PainelVariaveis
+              diagrama={projeto.diagrama}
+              aoMudar={(diagrama) => setProjeto({ ...projeto, diagrama })}
+              aoRecusar={recusar}
+              valores={simulacao.ativo ? simulacao.estado.variaveis : undefined}
+              aoAcionar={simulacao.ativo ? aoAcionarEntradaSimulacao : undefined}
+              ciclo={simulacao.ativo ? simulacao.estado.ciclo : undefined}
+            />
           </PainelLateral>
         )}
       </div>

@@ -93,6 +93,25 @@
  * componente continua marcando a célula recusada com `aria-invalid` (sem
  * `aria-describedby`, já que não há mais parágrafo para apontar) e a prévia
  * inválida com a mesma cor de perigo — só a exposição em texto visível saiu.
+ *
+ * **Energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/CA-10):** prop
+ * opcional `energizacao` (`simulacao.ts#EnergizacaoDegrau`). **Ausente/null =
+ * desenho idêntico ao de hoje** — nenhuma leitura de `energizacao` acontece,
+ * nenhum atributo novo aparece. Com ela presente:
+ * - cada trecho de fio (o antigo traço único por linha virou um traço por
+ *   coluna, `estiloTraco`/`celulaEnergizada`) e o trilho esquerdo mostram
+ *   `nos`/`celulas` do contrato;
+ * - cada elemento (contato, bobina, e a entrada CU do CTU — nunca a caixa
+ *   inteira, ver `SimboloCtu.tsx`) mostra `elementos[id]`;
+ * - os conectores verticais de um ramo mostram o nó de entrada/saída daquele
+ *   ramo (`nos["${ramo.linha}:${coluna}"]`).
+ * A distinção é **redundante** (RF-14): cor (`ide-energizado`, token novo em
+ * `index.css`) **e** espessura do traço — nunca só a cor. O selo de problema
+ * (`SeloProblema`) continua no canto da célula, atributo (`data-problema`)
+ * inteiramente separado do traço — os dois nunca disputam o mesmo lugar
+ * (CA-10). O `aria-label` da célula ganha o sufixo ", energizado"/",
+ * desenergizado" só quando `energizacao` está presente (`rotuloCelula`) —
+ * sem simulação, o rótulo não muda uma letra.
  */
 import {
   useEffect,
@@ -120,6 +139,7 @@ import {
 } from '../../ladder/modelo'
 import { PV_PADRAO } from '../../ladder/ctu'
 import type { Problema } from '../../ladder/validacao'
+import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
 import SimboloCtu from './SimboloCtu'
 
@@ -231,6 +251,10 @@ export interface GradeDegrauProps {
   /** Botão "Remover degrau" no cabeçalho (tarefa #10); a recusa (ex.: único
    * degrau) é decidida e mostrada por `EditorLadder`, não aqui. */
   aoRemoverDegrau?: () => void
+  /** Energização deste degrau (spec 004, tarefa #10), ou `null`/ausente fora
+   * de simulação — nesse caso o desenho é exatamente o de hoje. Ver nota no
+   * cabeçalho do arquivo. */
+  energizacao?: EnergizacaoDegrau | null
 }
 
 const LARGURA_CELULA_MIN = 56
@@ -240,6 +264,10 @@ const MARGEM_ESQUERDA = 32
 const MARGEM_DIREITA = 32
 const MARGEM_TOPO = 24
 const RAIO_ALCA = 7
+const LARGURA_TRILHO = 5
+/** Espessura do trilho esquerdo energizado (spec 004, tarefa #10) —
+ * incremento sobre `LARGURA_TRILHO`, redundante com a cor (RF-14). */
+const LARGURA_TRILHO_ENERGIZADO = 6
 
 /** Largura disponível padrão, usada até a primeira medição do
  * `ResizeObserver` e sempre que ele não existe no ambiente (jsdom nos
@@ -281,6 +309,50 @@ function celulaIgual(a: Celula, b: Celula): boolean {
   return a.linha === b.linha && a.coluna === b.coluna
 }
 
+// ---------------------------------------------------------------------------
+// Energização (spec 004, tarefa #10): leitura do contrato publicado por
+// `simulacao.ts#EnergizacaoDegrau` — só leitura de chave, nenhuma lógica de
+// propagação (essa é do núcleo, RF-7). `chaveNo`/`chaveCelula` reproduzem o
+// formato documentado no próprio tipo (`${linha}:${no}` / `${linha}:${coluna}`).
+// ---------------------------------------------------------------------------
+
+function chaveNo(linha: number, no: number): string {
+  return `${linha}:${no}`
+}
+
+function chaveCelulaEnergizacao(linha: number, coluna: number): string {
+  return `${linha}:${coluna}`
+}
+
+/** O nó `(linha, no)` está energizado, segundo o contrato — `false` sem
+ * simulação (`energizacao` ausente) ou sem entrada para essa chave. */
+function noEnergizado(energizacao: EnergizacaoDegrau | null | undefined, linha: number, no: number): boolean {
+  return energizacao?.nos[chaveNo(linha, no)] ?? false
+}
+
+/** O trecho de fio da célula `(linha, coluna)` está energizado — usado só
+ * para células **sem** elemento (fio) ou como pano de fundo sob um elemento;
+ * a energização do próprio elemento é `elementos[id]` (ver `celulaGrade`). */
+function celulaEnergizada(energizacao: EnergizacaoDegrau | null | undefined, linha: number, coluna: number): boolean {
+  return energizacao?.celulas[chaveCelulaEnergizacao(linha, coluna)] ?? false
+}
+
+/** Cor e espessura de um traço (fio de célula, trilho ou conector de ramo),
+ * com a mesma precedência de `Simbolos.tsx`: `invalido` (perigo) >
+ * `fantasma` > `energizado` > `marcado` (seleção) > normal. Redundância
+ * cor+espessura (RF-14, D-12) só se aplica ao ramo `energizado`; os demais
+ * estados mantêm a espessura normal de hoje. */
+function estiloTraco(
+  energizado: boolean,
+  opts: { fantasma?: boolean; marcado?: boolean; invalido?: boolean } = {},
+): { classe: string; largura: number } {
+  if (opts.invalido) return { classe: 'stroke-ide-perigo/60', largura: 2 }
+  if (opts.fantasma) return { classe: 'stroke-ide-previa opacity-60', largura: 2 }
+  if (energizado) return { classe: 'stroke-ide-energizado', largura: 3 }
+  if (opts.marcado) return { classe: 'stroke-ide-destaque', largura: 2 }
+  return { classe: 'stroke-ide-fio', largura: 2 }
+}
+
 function rotuloTipo(tipo: TipoContato | TipoBobina | 'ctu'): string {
   switch (tipo) {
     case 'contato_na':
@@ -312,6 +384,10 @@ function rotuloCelula(
   elemento: Elemento | undefined,
   problema?: ResumoProblema | null,
   ehLinhaReset?: boolean,
+  /** `undefined` fora de simulação — nenhum sufixo. `true`/`false` em
+   * simulação — sufixo ", energizado"/", desenergizado" (spec 004, tarefa
+   * #10). */
+  energizado?: boolean,
 ): string {
   const base =
     linha === 0
@@ -320,8 +396,9 @@ function rotuloCelula(
         ? `Degrau ${indiceDegrau + 1}, reset do contador, coluna ${coluna + 1}`
         : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
   const conteudo = !elemento ? `${base}, vazia` : `${base}, ${rotuloTipo(elemento.tipo)} ${variavelDoElemento(elemento) ?? 'sem variável'}`
-  if (!problema) return conteudo
-  return `${conteudo}, ${problema.severidade}: ${problema.mensagem}`
+  const comProblema = !problema ? conteudo : `${conteudo}, ${problema.severidade}: ${problema.mensagem}`
+  if (energizado === undefined) return comProblema
+  return `${comProblema}, ${energizado ? 'energizado' : 'desenergizado'}`
 }
 
 /** Endereço da variável vinculada a `nome`, ou `null` (interna ou sem vínculo). */
@@ -408,6 +485,7 @@ export default function GradeDegrau({
   problemas,
   aoInserirDegrauAbaixo,
   aoRemoverDegrau,
+  energizacao,
 }: GradeDegrauProps) {
   const problemaRung = problemaDoRung(problemas)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -457,6 +535,10 @@ export default function GradeDegrau({
   }
 
   const previaRamoCriar = previa?.tipo === 'ramo-criar' ? previa.ramo : undefined
+  // Terminal do degrau (bobina/SET/RESET/CTU), se houver — usado pelo fio de
+  // fundo da coluna terminal (spec 004, correção pós-verificação em Chromium
+  // real, ver nota em `estadoFioColuna` abaixo).
+  const terminalDoRung = rung.elementos.find((e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL)
   // CTU (tarefa #18): a linha de reset (real, do próprio rung, ou prevista
   // por uma prévia de inserir/mover um CTU ainda não aplicada) também conta
   // para a maior linha em uso — a altura do degrau precisa caber a caixa
@@ -513,13 +595,21 @@ export default function GradeDegrau({
     const cursorInvalido = previaAqui?.tipo === 'invalida'
     const endereco = enderecoDaVariavel(variaveis, elemento ? variavelDoElemento(elemento) : null)
     const problemaAqui = problemaDaCelula(problemas, elemento?.id)
+    // Energização (spec 004, tarefa #10): `undefined` sem simulação — nada
+    // muda. Com elemento, é `elementos[id]` (estado próprio do elemento,
+    // inclusive o CU do CTU); sem elemento, é o trecho de fio da célula.
+    const estadoEnergizado: boolean | undefined = !energizacao
+      ? undefined
+      : elemento
+        ? (energizacao.elementos[elemento.id] ?? false)
+        : celulaEnergizada(energizacao, linha, coluna)
 
     return (
       <g
         key={`${linha}:${coluna}`}
         tabIndex={0}
         role="button"
-        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui, ehLinhaReset)}
+        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui, ehLinhaReset, estadoEnergizado)}
         aria-selected={ativo}
         aria-invalid={recusada ? 'true' : undefined}
         data-terminal={ehTerminal ? 'true' : undefined}
@@ -547,19 +637,59 @@ export default function GradeDegrau({
           className={classeRetangulo(previaAqui, recusada, ativo)}
         />
         {elemento?.tipo === 'contato_na' && (
-          <ContatoNA cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+          <ContatoNA
+            cx={centroX}
+            cy={y}
+            variavel={elemento.variavel}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+            energizado={estadoEnergizado}
+          />
         )}
         {elemento?.tipo === 'contato_nf' && (
-          <ContatoNF cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+          <ContatoNF
+            cx={centroX}
+            cy={y}
+            variavel={elemento.variavel}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+            energizado={estadoEnergizado}
+          />
         )}
         {elemento?.tipo === 'bobina' && (
-          <Bobina cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+          <Bobina
+            cx={centroX}
+            cy={y}
+            variavel={elemento.variavel}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+            energizado={estadoEnergizado}
+          />
         )}
         {elemento?.tipo === 'bobina_set' && (
-          <BobinaSet cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+          <BobinaSet
+            cx={centroX}
+            cy={y}
+            variavel={elemento.variavel}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+            energizado={estadoEnergizado}
+          />
         )}
         {elemento?.tipo === 'bobina_reset' && (
-          <BobinaReset cx={centroX} cy={y} variavel={elemento.variavel} endereco={endereco} selecionado={ativo} perigo={ehRemocaoAqui} />
+          <BobinaReset
+            cx={centroX}
+            cy={y}
+            variavel={elemento.variavel}
+            endereco={endereco}
+            selecionado={ativo}
+            perigo={ehRemocaoAqui}
+            energizado={estadoEnergizado}
+          />
         )}
         {elemento?.tipo === 'ctu' && (
           <SimboloCtu
@@ -575,6 +705,7 @@ export default function GradeDegrau({
             endereco={endereco}
             selecionado={ativo}
             perigo={ehRemocaoAqui}
+            cuEnergizado={estadoEnergizado}
           />
         )}
         {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
@@ -612,24 +743,41 @@ export default function GradeDegrau({
     )
   }
 
-  /** Linha horizontal + conectores verticais de um ramo real ou fantasma
-   * (D-14). `fantasma`/`marcado` controlam só a cor (tokens `ide-*`). */
+  /** Conectores verticais + traço horizontal de um ramo real ou fantasma
+   * (D-14). `fantasma`/`marcado`/`invalido` controlam a cor (tokens `ide-*`)
+   * quando não há energização a mostrar. **Energização (spec 004, tarefa
+   * #10):** com `energizacao` presente e o ramo **não** fantasma, cada
+   * conector reflete o nó da sua própria ponta
+   * (`nos["${ramo.linha}:${coluna}"]`) e o traço horizontal vira um
+   * segmento por coluna — cada um lido de `celulas`, exatamente como a linha
+   * 0 (`fioLinha`). Um ramo fantasma (prévia) nunca lê `energizacao`: não
+   * existe no diagrama real, não tem chave no contrato. */
   function tracoRamo(ramo: { linha: number; colunaInicio: number; colunaFim: number }, opts: { fantasma?: boolean; marcado?: boolean; invalido?: boolean }) {
     const y = yDaLinha(ramo.linha)
     const xIni = xDaColuna(ramo.colunaInicio)
     const xFim = xDaColuna(ramo.colunaFim) + larguraCelula
-    const classe = opts.invalido
-      ? 'stroke-ide-perigo/60'
-      : opts.fantasma
-        ? 'stroke-ide-previa opacity-60'
-        : opts.marcado
-          ? 'stroke-ide-destaque'
-          : 'stroke-ide-fio'
+    const usaEnergizacao = !opts.fantasma && energizacao != null
+    const conectorEsq = estiloTraco(usaEnergizacao ? noEnergizado(energizacao, ramo.linha, ramo.colunaInicio) : false, opts)
+    const conectorDir = estiloTraco(usaEnergizacao ? noEnergizado(energizacao, ramo.linha, ramo.colunaFim + 1) : false, opts)
     return (
       <g aria-hidden="true" data-ramo-fantasma={opts.fantasma ? `${ramo.linha}:${ramo.colunaInicio}:${ramo.colunaFim}` : undefined}>
-        <line x1={xIni} y1={y0} x2={xIni} y2={y} strokeWidth={2} className={classe} />
-        <line x1={xFim} y1={y0} x2={xFim} y2={y} strokeWidth={2} className={classe} />
-        <line x1={xIni} y1={y} x2={xFim} y2={y} strokeWidth={2} className={classe} />
+        <line x1={xIni} y1={y0} x2={xIni} y2={y} strokeWidth={conectorEsq.largura} className={conectorEsq.classe} />
+        <line x1={xFim} y1={y0} x2={xFim} y2={y} strokeWidth={conectorDir.largura} className={conectorDir.classe} />
+        {Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) => {
+          const coluna = ramo.colunaInicio + i
+          const seg = estiloTraco(usaEnergizacao ? celulaEnergizada(energizacao, ramo.linha, coluna) : false, opts)
+          return (
+            <line
+              key={`seg-${coluna}`}
+              x1={xDaColuna(coluna)}
+              y1={y}
+              x2={xDaColuna(coluna) + larguraCelula}
+              y2={y}
+              strokeWidth={seg.largura}
+              className={seg.classe}
+            />
+          )
+        })}
       </g>
     )
   }
@@ -727,29 +875,82 @@ export default function GradeDegrau({
           {/* trilhos de energia esquerdo e direito, mais espessos que o fio —
            * do topo ao fim do bloco (não só ao redor da linha 0), para que,
            * sem espaço vertical entre os blocos de cada degrau, os trilhos se
-           * emendem visualmente numa escada única (tarefa #25). */}
-          <line x1={xEsquerda} y1={0} x2={xEsquerda} y2={altura} strokeWidth={5} className="stroke-ide-trilho" />
-          <line x1={xDireita} y1={0} x2={xDireita} y2={altura} strokeWidth={5} className="stroke-ide-trilho" />
-          {/* fio horizontal atravessando as células vazias */}
-          <line x1={xEsquerda} y1={y0} x2={xDireita} y2={y0} strokeWidth={2} className="stroke-ide-fio" />
+           * emendem visualmente numa escada única (tarefa #25).
+           *
+           * Energização (spec 004, tarefa #10): só o trilho **esquerdo**
+           * reflete o estado da simulação — é o único com semântica elétrica
+           * de "sempre vivo" (`nos["0:0"]` é sempre `true` no contrato). O
+           * direito é o retorno/fronteira de desenho, sem nó correspondente;
+           * fica como sempre foi. */}
+          <line
+            x1={xEsquerda}
+            y1={0}
+            x2={xEsquerda}
+            y2={altura}
+            strokeWidth={energizacao != null ? LARGURA_TRILHO_ENERGIZADO : LARGURA_TRILHO}
+            className={energizacao != null ? 'stroke-ide-energizado' : 'stroke-ide-trilho'}
+          />
+          <line x1={xDireita} y1={0} x2={xDireita} y2={altura} strokeWidth={LARGURA_TRILHO} className="stroke-ide-trilho" />
+          {/* fio horizontal atravessando as células vazias — um segmento por
+           * coluna (spec 004, tarefa #10), para que cada um possa mostrar o
+           * estado de `energizacao.celulas` independente dos vizinhos; sem
+           * simulação todos caem no mesmo `stroke-ide-fio`/2px de sempre, sem
+           * gap entre eles (visualmente idêntico à linha única de antes).
+           *
+           * **Correção (verificação em Chromium real, spec 004):** na coluna
+           * terminal, `celulas` não serve — o contrato define
+           * `celulas[linha:coluna] = entra energizado E conduz`, e uma bobina
+           * (ou o CU do CTU) é carga, não conduz para a direita: a chave
+           * daria sempre `false`, mesmo com a bobina energizada, e o fio de
+           * fundo mostraria "desenergizado" bem atrás de um símbolo laranja
+           * — dois estados contraditórios na mesma célula. Ali o fio segue
+           * `energizacao.elementos[terminalDoRung.id]` (o próprio estado do
+           * terminal — "a energia chegou até aqui"), igual ao que o símbolo
+           * já mostra. O núcleo não muda; só a leitura do desenho aqui. */}
+          {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => {
+            const estado =
+              coluna === COLUNA_TERMINAL && terminalDoRung !== undefined
+                ? (energizacao?.elementos[terminalDoRung.id] ?? false)
+                : celulaEnergizada(energizacao, 0, coluna)
+            const seg = estiloTraco(estado)
+            return (
+              <line
+                key={`fio-0-${coluna}`}
+                x1={xDaColuna(coluna)}
+                y1={y0}
+                x2={xDaColuna(coluna) + larguraCelula}
+                y2={y0}
+                strokeWidth={seg.largura}
+                className={seg.classe}
+                aria-hidden="true"
+              />
+            )
+          })}
 
           {/* Linha de reset do CTU (tarefa #18, D-19): um traço reto do
            * trilho esquerdo até a borda da caixa do contador — sem os
            * conectores verticais de `tracoRamo`, de propósito: essa linha não
            * é um ramo em paralelo com a linha 0 (não faz sentido elétrico
            * "juntar-se" a ela), é um caminho independente que só alimenta a
-           * entrada R do bloco de função. */}
-          {ctuDoRung && (
-            <line
-              x1={xEsquerda}
-              y1={yDaLinha(ctuDoRung.linhaReset)}
-              x2={xDaColuna(COLUNA_TERMINAL)}
-              y2={yDaLinha(ctuDoRung.linhaReset)}
-              strokeWidth={2}
-              aria-hidden="true"
-              className="stroke-ide-fio"
-            />
-          )}
+           * entrada R do bloco de função. Também vira um segmento por coluna
+           * (mesma razão da linha 0), lido de `energizacao.celulas` na linha
+           * de reset. */}
+          {ctuDoRung &&
+            Array.from({ length: COLUNA_TERMINAL }, (_, coluna) => {
+              const seg = estiloTraco(celulaEnergizada(energizacao, ctuDoRung.linhaReset, coluna))
+              return (
+                <line
+                  key={`fio-reset-${coluna}`}
+                  x1={xDaColuna(coluna)}
+                  y1={yDaLinha(ctuDoRung.linhaReset)}
+                  x2={xDaColuna(coluna) + larguraCelula}
+                  y2={yDaLinha(ctuDoRung.linhaReset)}
+                  strokeWidth={seg.largura}
+                  aria-hidden="true"
+                  className={seg.classe}
+                />
+              )
+            })}
 
           {rung.ramos.map((ramo) => {
             const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined

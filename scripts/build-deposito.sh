@@ -156,6 +156,12 @@ REQUIRED_FILES=(
   "frontend/src/components/ladder/SimboloCtu.tsx"
   "frontend/src/ladder/persistencia.ts"
   "frontend/src/ladder/serializador.ts"
+  # Motor de simulacao do ciclo de varredura (spec 004, tarefa #14). O
+  # `simulacao-cli.ts` e o mesmo motor sem interface: o ponto de entrada
+  # pelo qual ele e executado fora do navegador, para a medicao
+  # simulador x runtime. Ambos autorais, ambos parte do programa.
+  "frontend/src/ladder/simulacao.ts"
+  "frontend/src/ladder/simulacao-cli.ts"
   "frontend/src/projeto/projeto.ts"
   "frontend/src/components/ide/ListaProblemas.tsx"
 )
