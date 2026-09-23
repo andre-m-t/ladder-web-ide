@@ -47,6 +47,111 @@ export const IO_ESPELHO: Diagrama = {
 }
 
 /**
+ * `io_espelho_8.st` (fixture de bancada, revisão aditiva 2026-09-21):
+ * espelha os 16 pinos localizados de uma vez — `saidaN := entradaN` para
+ * n = 0..7, um degrau por par, contato NA na coluna 0 e bobina na coluna
+ * `COLUNA_TERMINAL`, como `IO_ESPELHO` repetido oito vezes.
+ *
+ * Motivo: `ENTRADAS_LOCALIZADAS`/`SAIDAS_LOCALIZADAS` (`enderecos.ts`) têm
+ * 8 pinos cada desde a revisão 2026-09-17 da pinagem, mas nenhuma fixture de
+ * referência até aqui exercitava além de `%IX0.0`/`%IX0.1` e
+ * `%QX0.0`/`%QX0.1` — os doze pinos restantes nunca foram gravados nem
+ * medidos em hardware físico (ver
+ * `docs/validacao/limites-da-validacao-sem-hardware.md`). Esta fixture dá ao
+ * passo "entradas e saídas contra tabela-verdade" do Dia do Hardware um
+ * programa de referência que toca os 16 pinos, com gabarito medido (não
+ * escrito à mão) em `backend/tests/diferencial/fixtures/serializador/
+ * io_espelho_8.toml`.
+ */
+export const IO_ESPELHO_8: Diagrama = {
+  versao: 1,
+  variaveis: [
+    { nome: 'entrada0', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'entrada1', tipo: 'BOOL', endereco: '%IX0.1' },
+    { nome: 'entrada2', tipo: 'BOOL', endereco: '%IX0.2' },
+    { nome: 'entrada3', tipo: 'BOOL', endereco: '%IX0.3' },
+    { nome: 'entrada4', tipo: 'BOOL', endereco: '%IX0.4' },
+    { nome: 'entrada5', tipo: 'BOOL', endereco: '%IX0.5' },
+    { nome: 'entrada6', tipo: 'BOOL', endereco: '%IX0.6' },
+    { nome: 'entrada7', tipo: 'BOOL', endereco: '%IX0.7' },
+    { nome: 'saida0', tipo: 'BOOL', endereco: '%QX0.0' },
+    { nome: 'saida1', tipo: 'BOOL', endereco: '%QX0.1' },
+    { nome: 'saida2', tipo: 'BOOL', endereco: '%QX0.2' },
+    { nome: 'saida3', tipo: 'BOOL', endereco: '%QX0.3' },
+    { nome: 'saida4', tipo: 'BOOL', endereco: '%QX0.4' },
+    { nome: 'saida5', tipo: 'BOOL', endereco: '%QX0.5' },
+    { nome: 'saida6', tipo: 'BOOL', endereco: '%QX0.6' },
+    { nome: 'saida7', tipo: 'BOOL', endereco: '%QX0.7' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada0' },
+        { id: 'e2', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida0' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r2',
+      elementos: [
+        { id: 'e3', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada1' },
+        { id: 'e4', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida1' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r3',
+      elementos: [
+        { id: 'e5', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada2' },
+        { id: 'e6', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida2' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r4',
+      elementos: [
+        { id: 'e7', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada3' },
+        { id: 'e8', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida3' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r5',
+      elementos: [
+        { id: 'e9', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada4' },
+        { id: 'e10', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida4' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r6',
+      elementos: [
+        { id: 'e11', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada5' },
+        { id: 'e12', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida5' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r7',
+      elementos: [
+        { id: 'e13', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada6' },
+        { id: 'e14', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida6' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r8',
+      elementos: [
+        { id: 'e15', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada7' },
+        { id: 'e16', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida7' },
+      ],
+      ramos: [],
+    },
+  ],
+}
+
+/**
  * `ramo_ou.st` (spec 003, tarefa #2): `q := a OR b;`. Contato NA `a` no
  * trilho principal, coluna 0; ramo na linha 1, coluna 0, com contato NA `b`;
  * bobina `q`. Semântica de "ou" clássica de dois contatos em paralelo.

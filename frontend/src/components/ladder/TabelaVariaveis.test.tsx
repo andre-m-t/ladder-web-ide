@@ -32,13 +32,33 @@ describe('TabelaVariaveis — tabela de largura inteira (tarefa #26)', () => {
     expect(tabela).toHaveClass('w-full')
   })
 
-  it('mostra as colunas Nome, Tipo, Uso, Pino, Valor e uma coluna de ações (oculta) no cabeçalho', () => {
+  it('mostra as colunas Nome, Valor, Tipo, Uso, Pino e uma coluna de ações (oculta) no cabeçalho', () => {
     renderizar([])
 
     const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
     const cabecalhos = within(tabela).getAllByRole('columnheader').map((th) => th.textContent)
 
-    expect(cabecalhos).toEqual(['Nome', 'Tipo', 'Uso', 'Pino', 'Valor', 'Ações'])
+    expect(cabecalhos).toEqual(['Nome', 'Valor', 'Tipo', 'Uso', 'Pino', 'Ações'])
+  })
+})
+
+describe('TabelaVariaveis — ordem das colunas (revisão aditiva RF-13, 2026-09-21)', () => {
+  it('"Valor" vem imediatamente depois de "Nome" no cabeçalho e nas duas linhas de corpo', () => {
+    renderizar([variavel('x')], { valores: { x: true } })
+
+    const tabela = screen.getByRole('table', { name: 'Variáveis declaradas' })
+    const cabecalhos = within(tabela).getAllByRole('columnheader').map((th) => th.textContent)
+    expect(cabecalhos[0]).toBe('Nome')
+    expect(cabecalhos[1]).toBe('Valor')
+
+    const linhaVariavel = screen.getByLabelText('Nome da variável x').closest('tr') as HTMLElement
+    const celulasVariavel = within(linhaVariavel).getAllByRole('cell')
+    expect(celulasVariavel[1]).toHaveTextContent('TRUE')
+
+    const linhaAdicionar = screen.getByLabelText('Nome da nova variável').closest('tr') as HTMLElement
+    const celulasAdicionar = within(linhaAdicionar).getAllByRole('cell')
+    expect(celulasAdicionar[1]).toHaveTextContent('—')
+    expect(celulasAdicionar[2]).toHaveTextContent('BOOL')
   })
 })
 

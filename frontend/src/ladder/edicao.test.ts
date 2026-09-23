@@ -57,7 +57,7 @@ describe('celulaDeSoltura', () => {
   it('bobina solta numa linha com ramo de saída vai para a coluna terminal dessa linha', () => {
     const rung = {
       id: 'r1',
-      elementos: [{ id: 'b1', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'a' }],
+      elementos: [{ id: 'b1', tipo: 'bobina' as const, celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'a' }],
       ramos: [{ id: 'rs1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL }],
     }
     expect(celulaDeSoltura('bobina', { linha: 1, coluna: COLUNA_TERMINAL }, rung)).toEqual({ linha: 1, coluna: COLUNA_TERMINAL })

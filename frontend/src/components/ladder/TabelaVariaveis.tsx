@@ -499,13 +499,6 @@ function LinhaVariavel({
           className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto disabled:cursor-not-allowed disabled:opacity-60"
         />
       </td>
-      <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">BOOL</td>
-      <td className="py-1.5 pr-2 align-top">
-        <UsoCelula variavel={variavel} />
-      </td>
-      <td className="py-1.5 pr-2 align-top">
-        <PinoCelula variavel={variavel} variaveis={variaveis} aoAtualizar={aoAtualizar} simulacaoAtiva={simulacaoAtiva} />
-      </td>
       <td className="py-1.5 pr-2 align-top">
         <ValorCelula
           nome={variavel.nome}
@@ -514,6 +507,13 @@ function LinhaVariavel({
           tituloBloqueio={bloqueadaPelaPlanta ? motivoBloqueioPlanta : undefined}
           aoAcionar={aoAcionar ? (nivel) => aoAcionar(variavel.nome, nivel) : undefined}
         />
+      </td>
+      <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">BOOL</td>
+      <td className="py-1.5 pr-2 align-top">
+        <UsoCelula variavel={variavel} />
+      </td>
+      <td className="py-1.5 pr-2 align-top">
+        <PinoCelula variavel={variavel} variaveis={variaveis} aoAtualizar={aoAtualizar} simulacaoAtiva={simulacaoAtiva} />
       </td>
       <td className="py-1.5 pr-4 align-top text-right">
         <button
@@ -601,6 +601,7 @@ function LinhaAdicionar({
           className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto placeholder:text-ide-suave disabled:cursor-not-allowed disabled:opacity-60"
         />
       </td>
+      <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">—</td>
       <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">BOOL</td>
       <td className="py-1.5 pr-2 align-top">
         <SeletorClasse valor={classe} aoMudar={setClasse} desabilitado={simulacaoAtiva} motivoBloqueio={MOTIVO_SIMULACAO_CRIAR} />
@@ -635,7 +636,6 @@ function LinhaAdicionar({
           </p>
         )}
       </td>
-      <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">—</td>
       <td className="py-1.5 pr-4 align-top text-right">
         <button
           type="button"
@@ -794,6 +794,9 @@ export default function TabelaVariaveis({
                 Nome
               </th>
               <th scope="col" className="py-2 pr-2 font-medium">
+                Valor
+              </th>
+              <th scope="col" className="py-2 pr-2 font-medium">
                 Tipo
               </th>
               <th scope="col" className="py-2 pr-2 font-medium">
@@ -801,9 +804,6 @@ export default function TabelaVariaveis({
               </th>
               <th scope="col" className="py-2 pr-2 font-medium">
                 Pino
-              </th>
-              <th scope="col" className="py-2 pr-2 font-medium">
-                Valor
               </th>
               <th scope="col" className="py-2 pr-4 font-medium">
                 <span className="sr-only">Ações</span>

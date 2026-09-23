@@ -152,6 +152,17 @@ compara ciclo a ciclo, ponto a ponto. O número que sai daí é resultado do TCC
   (RF-1). Variáveis de saída e internas mostram o estado, mas não são acionáveis.
 - **RF-13.** O sistema deve mostrar o estado ao vivo de **todas** as variáveis
   declaradas, e a contagem de ciclos decorridos.
+
+  > **Revisão aditiva de 2026-09-21.** "Mostrar o estado ao vivo" passa a
+  > exigir que o **nome** e o **valor** da variável sejam legíveis ao mesmo
+  > tempo, na largura padrão do painel. Na entrega da Fatia 2 a coluna "Valor"
+  > era a quinta de seis, numa tabela de largura mínima de 600 px com rolagem
+  > horizontal própria (herdada da revisão pós-#26 da spec 002): no painel
+  > estreito não dava para ver os dois juntos, e o laço central da feature —
+  > acionar a entrada e ver o valor mudar (RF-12) — ficava prejudicado. A
+  > ordem das colunas passa a ser **Nome | Valor | Tipo | Uso | Pino**, o que
+  > resolve em qualquer largura e em qualquer modo, sem mexer no layout do
+  > painel.
 - **RF-14.** O estado energizado deve ser distinguível do desenergizado por
   **mais de um atributo visual** (cor **e** espessura do traço), de modo a ser
   legível nos temas claro e escuro e por quem não distingue as cores usadas. A
@@ -160,6 +171,16 @@ compara ciclo a ciclo, ponto a ponto. O número que sai daí é resultado do TCC
 - **RF-15.** A simulação e a edição são **mutuamente exclusivas**. Entrar em
   simulação congela a edição do diagrama e deixa **Compilar** e **Gravar**
   indisponíveis, com o motivo visível; sair devolve os três.
+
+  > **Revisão aditiva de 2026-09-21.** Acrescenta-se ao congelamento um
+  > requisito de **affordance**: enquanto a edição está congelada, a interface
+  > não deve convidar o gesto que vai recusar. É o mesmo diagnóstico da fatia 1
+  > da spec 002 — o problema não é a falta de mensagem, é a aparência de
+  > arrastável sobre algo inerte. Preventivo primeiro (paleta esmaecida e não
+  > interativa, ponteiro de recusa sobre a grade, estado de simulação visível
+  > na faixa de simulação); mensagem depois, como complemento para quem
+  > insistir. A nota de 2026-09-23 sobre `BarraSimulacao` fixa que o destaque
+  > do modo ativo fica nessa faixa, não num chip na barra superior.
 - **RF-16.** Em projeto de Texto Estruturado o controle de simulação deve
   aparecer **indisponível, com o motivo visível** — não escondido.
 - **RF-17.** O estado da simulação é **volátil**: não sobrevive a recarregar a
@@ -209,6 +230,21 @@ compara ciclo a ciclo, ponto a ponto. O número que sai daí é resultado do TCC
 - **CA-8 (RF-15).** Dada uma simulação em andamento, quando o usuário tenta
   editar o diagrama, compilar ou gravar, então as três ações estão indisponíveis
   com o motivo visível; ao sair da simulação, as três voltam.
+
+  > **Revisão aditiva de 2026-09-21.** O texto acima não muda. Acrescenta-se que
+  > "motivo visível" vale também para a **edição**, não só para Compilar e
+  > Gravar. Na entrega da Fatia 2 o congelamento era silencioso: a paleta e a
+  > grade seguiam com aparência arrastável e o gesto não produzia nada — sem
+  > cursor de recusa, sem mensagem. Isso satisfazia a letra do RF-15 (a ação
+  > está indisponível) e contrariava a intenção do CA-8 (o motivo está
+  > visível), além da norma do projeto, fixada em #25 e #27 da spec 002, de que
+  > **recusa se percebe**. A partir desta revisão o CA-8 exige que, com a
+  > simulação em andamento: a paleta se apresente inerte, o ponteiro sobre a
+  > grade indique recusa, o estado de simulação esteja visível na faixa
+  > `BarraSimulacao`, e uma tentativa de editar mesmo assim produza mensagem —
+  > pela mesma via de toasts do RF-5 da spec 002 (#27). O critério anterior,
+  > de que nenhuma realimentação aparecia, fica **revogado por esta revisão**,
+  > e com ele a asserção correspondente do e2e.
 - **CA-9 (RF-12, RF-13).** Dado um diagrama com entradas, saídas e memórias,
   quando a simulação roda, então o estado ao vivo de todas aparece, as entradas
   são acionáveis e as demais não.

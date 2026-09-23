@@ -27,13 +27,21 @@
  *     de vezes que falta para alcançar o ciclo alvo — determinístico
  *     independente de quantos ciclos o laço de `requestAnimationFrame` (D-8)
  *     já tiver executado sozinho antes do primeiro `Pausar`.
- *   - **CA-8** (RF-15): com a simulação ativa, Compilar e Gravar ficam
- *     desabilitados com o motivo (no `title` do botão), e um arrasto real de
- *     mouse (paleta → célula vazia) não altera o diagrama — nenhuma
- *     realimentação visual nenhuma (sem prévia fantasma, sem toast, sem
- *     seleção da célula), o que este arquivo documenta com uma captura no
- *     meio do gesto. Ao sair da simulação, Compilar volta a ficar disponível
- *     e o mesmo arrasto volta a inserir o elemento.
+ *   - **CA-8** (RF-15), na redação **revista em 2026-09-21**: com a simulação
+ *     ativa, Compilar e Gravar ficam desabilitados com o motivo (no `title` do
+ *     botão) e o congelamento **se anuncia**, em vez de ser silencioso — chip
+ *     de simulação no cabeçalho, paleta esmaecida e `aria-disabled`, e o
+ *     cadastro de variáveis inerte (Q-7, revisão de 2026-09-22), com a coluna
+ *     Valor ainda acionável. Um arrasto real de mouse (paleta → célula vazia)
+ *     não altera o diagrama e, por decisão do autor, **não** gera toast: a
+ *     paleta é inerte, e o toast nasce em cima dela (cobria o item de que
+ *     falava). Quem anuncia a recusa é uma tentativa de editar **pela grade**.
+ *     Ao sair da simulação, Compilar volta e o mesmo arrasto volta a inserir.
+ *
+ *     O critério anterior — "nenhuma realimentação visual nenhuma, sem toast"
+ *     — está **revogado** pela revisão aditiva de 2026-09-21 no `spec.md`, e
+ *     com ele a asserção `getByRole('status')).toHaveCount(0)` que este bloco
+ *     mantinha.
  *   - **CA-13** (RF-17): recarregar a página com a simulação ativa volta ao
  *     modo de edição — diagrama preservado em `localStorage`, sem "Ciclo N"
  *     no painel e sem o estado ao vivo das variáveis.
@@ -253,6 +261,24 @@ test.describe('CA-8 (RF-15) — simulação ativa congela a edição e desabilit
     await expect(botaoGravar).toBeDisabled()
     await expect(botaoGravar).toHaveAttribute('title', motivo)
 
+    // Preventivo (revisão de 2026-09-21, ajuste 2026-09-23): o congelamento se
+    // anuncia — estado de simulação visível na faixa `BarraSimulacao` (destaque
+    // visual), não num chip na barra superior; paleta inerte antes de qualquer gesto.
+    const faixaSimulacao = page.getByRole('toolbar', { name: 'Simulação' })
+    await expect(faixaSimulacao).toHaveClass(/bg-ide-destaque/)
+    const itemPaleta = page.getByRole('button', { name: 'Contato NA', exact: true })
+    await expect(itemPaleta).toHaveAttribute('aria-disabled', 'true')
+
+    // Cadastro de variáveis inerte (Q-7, revisão de 2026-09-22) — mas a coluna
+    // Valor segue acionável, que é o laço central da feature (RF-12).
+    await expect(page.getByRole('button', { name: /remover variável entrada/i })).toBeDisabled()
+    await expect(page.getByRole('textbox', { name: /nome da variável entrada/i })).toBeDisabled()
+    await expect(page.getByRole('textbox', { name: /nome da variável entrada/i })).toHaveAttribute(
+      'title',
+      'Saia da simulação para editar variáveis',
+    )
+    await expect(page.getByRole('switch', { name: /acionar entrada/i })).toBeEnabled()
+
     // Arrasto real de mouse, paleta -> célula vazia (coluna 2, livre entre o
     // contato na coluna 1 e a bobina na coluna terminal): `EditorLadder`
     // (dono do congelamento, D-9) sai sem armar o arrasto quando `congelado`
@@ -278,7 +304,11 @@ test.describe('CA-8 (RF-15) — simulação ativa congela a edição e desabilit
     await page.screenshot({ path: 'test-results/simular-06-congelado-arrasto-em-curso.png', fullPage: true })
     await page.mouse.up()
 
-    // Nada mudou: a célula continua vazia, sem seleção, sem diálogo, sem toast.
+    // Nada mudou: a célula continua vazia, sem seleção, sem diálogo. E **sem
+    // toast**, agora por decisão explícita e não por omissão: a paleta é
+    // inerte, e o toast nasce no canto superior esquerdo, exatamente sobre os
+    // primeiros itens dela — anunciaria a recusa cobrindo o item de que fala.
+    // Quem anuncia é a grade, conferido logo abaixo.
     await expect(celulaVazia).toBeVisible()
     await expect(celulaVazia).toHaveAttribute('aria-selected', 'false')
     await expect(page.getByRole('dialog')).toHaveCount(0)
@@ -292,6 +322,16 @@ test.describe('CA-8 (RF-15) — simulação ativa congela a edição e desabilit
     const celulaContato = page.getByRole('button', { name: /Degrau 1, coluna 1, contato NA entrada/ })
     await celulaContato.click()
     await expect(celulaContato).toHaveAttribute('aria-selected', 'false')
+
+    // ...mas, diferente da paleta, a grade ANUNCIA a recusa (revisão de
+    // 2026-09-21): é onde a pessoa ainda consegue tentar, e onde o toast não
+    // cobre o alvo do gesto.
+    await expect(page.getByRole('status')).toContainText('Edição congelada durante a simulação')
+    // Fecha logo: o toast dura 5 s e este teste demora — se esperar até sair
+    // da simulação, ele some antes do clique em "Fechar notificação".
+    await page.getByRole('button', { name: 'Fechar notificação' }).click()
+    await expect(page.getByRole('status')).toHaveCount(0)
+
     await celulaContato.dblclick()
     await expect(page.getByRole('dialog')).toHaveCount(0)
 

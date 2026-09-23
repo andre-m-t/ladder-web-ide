@@ -902,3 +902,51 @@ describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/C
     expect(linhaCu?.getAttribute('class')).not.toContain('stroke-ide-energizado')
   })
 })
+
+describe('GradeDegrau — congelado durante a simulação (spec 004, RF-15, D-20)', () => {
+  const rungComRamo = { id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }
+
+  it('sem congelado, o cursor da célula segue a regra de hoje (cursor-pointer numa célula vazia)', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 2, vazia' })
+    expect(celula.getAttribute('class')).toContain('cursor-pointer')
+    expect(celula.getAttribute('class')).not.toContain('cursor-not-allowed')
+  })
+
+  it('congelado: a célula vira cursor-not-allowed mesmo com elemento (que seria cursor-grab)', () => {
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} congelado={true} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })
+    expect(celula.getAttribute('class')).toContain('cursor-not-allowed')
+    expect(celula.getAttribute('class')).not.toContain('cursor-grab')
+  })
+
+  it('sem congelado, a alça do ramo mantém cursor-ew-resize', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} />)
+
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
+    expect(alca.getAttribute('class')).toContain('cursor-ew-resize')
+  })
+
+  it('congelado: a alça do ramo vira cursor-not-allowed', () => {
+    render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} congelado={true} />)
+
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
+    expect(alca.getAttribute('class')).toContain('cursor-not-allowed')
+    expect(alca.getAttribute('class')).not.toContain('cursor-ew-resize')
+  })
+
+  it('congelado: pointerdown na célula ainda encaminha (EditorLadder decide a recusa)', () => {
+    const aoIniciarArrastoPonteiro = vi.fn()
+    const rung = IO_ESPELHO.rungs[0]
+    render(<GradeDegrau rung={rung} indice={0} {...propsBase()} congelado={true} aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiro} />)
+
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA entrada' })
+    fireEvent.pointerDown(celula, { pointerId: 1, clientX: 10, clientY: 10 })
+
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledTimes(1)
+  })
+})

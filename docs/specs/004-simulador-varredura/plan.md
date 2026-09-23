@@ -226,6 +226,41 @@ teste do servidor** (`node`, Q-8a) — ver D-10.
   marcha lenta).
 - **Requisito atendido:** RF-14, CA-10.
 
+### D-20: o congelamento se anuncia — preventivo antes de mensagem (2026-09-21)
+
+> Decisão aditiva desta rodada de fechamento, sobre a revisão aditiva de
+> RF-13/RF-15/CA-8 da spec. Não substitui a D-9: o congelamento continua sendo
+> checado no `EditorLadder`, que segue dono da regra.
+
+- **Escolha:** `congelado` deixa de ser exclusivo do `EditorLadder` e passa a ser
+  **repassado** a `Paleta` e a `GradeDegrau`, que hoje não o recebem e por isso
+  continuam desenhando os afetos de "arrastável". Em ordem de importância:
+  1. **preventivo** — paleta esmaecida, não interativa e `aria-disabled`; cursor
+     `not-allowed` sobre a grade e sobre a alça de ramo; **estado de simulação
+     visível no cabeçalho**, como chip ao lado do chip de linguagem, e não apenas
+     como `aria-pressed` no botão Simular;
+  2. **complementar** — os manipuladores que hoje fazem `if (congelado) return`
+     passam a emitir a recusa antes de sair, pela via já existente
+     (`App.tsx: recusar` -> `aoRecusar` -> `lib/toasts.ts`). Nenhum componente
+     novo, nenhuma dependência nova; `adicionarToast` já deduplica repetição
+     consecutiva, então insistir no gesto não empilha.
+- **Alternativa descartada:** só o toast, sem o preventivo. Foi o diagnóstico do
+  autor: o problema não é a falta de mensagem, é a interface **convidar** uma
+  ação que vai recusar — mesmo caso de affordance da fatia 1 da spec 002.
+- **O que não muda:** `simulacao.ts` não é tocado. O núcleo está medido contra o
+  runtime, e questão de desenho não ajusta núcleo medido — a mesma regra que
+  valeu para o achado do fio da célula terminal. `PainelVariaveis` também não
+  congela (decisão registrada no próprio arquivo): declarar, renomear e remover
+  variável seguem liberados durante a simulação, o que permanece **limitação
+  declarada**, não defeito.
+- **Ordem das colunas (RF-13):** em `TabelaVariaveis`, "Valor" passa para logo
+  depois de "Nome" — **Nome | Valor | Tipo | Uso | Pino | Ações**. Mudam juntos o
+  `colgroup`, o `thead` e as duas linhas de corpo (`LinhaVariavel` e
+  `LinhaAdicionar`); as larguras acompanham a coluna, não a posição. O
+  `min-w-[600px]` **permanece**: a correção é de ordem, não de largura.
+- **Requisitos atendidos:** RF-13, RF-15, CA-8 (todos na redação revisada de
+  2026-09-21).
+
 ## 5. Contratos
 
 ### 5.1 Núcleo — `frontend/src/ladder/simulacao.ts`

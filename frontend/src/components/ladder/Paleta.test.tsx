@@ -221,6 +221,78 @@ describe('Paleta — lixeira', () => {
   })
 })
 
+describe('Paleta — congelado durante a simulação (spec 004, RF-15, D-20)', () => {
+  it('sem congelado, o desenho do item é idêntico ao de hoje (cursor-grab, sem aria-disabled)', () => {
+    render(<Paleta {...propsBase()} />)
+
+    const item = screen.getByRole('button', { name: 'Contato NA' })
+    expect(item.className).toContain('cursor-grab')
+    expect(item.className).not.toContain('cursor-not-allowed')
+    expect(item.className).not.toContain('opacity-50')
+    expect(item).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('congelado: cada item vira cursor-not-allowed, opacity-50 e aria-disabled', () => {
+    render(<Paleta {...propsBase()} congelado={true} />)
+
+    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador']) {
+      const item = screen.getByRole('button', { name: nome })
+      expect(item.className).toContain('cursor-not-allowed')
+      expect(item.className).toContain('opacity-50')
+      expect(item).toHaveAttribute('aria-disabled', 'true')
+    }
+  })
+
+  it('congelado: a lixeira fica desabilitada mesmo com algo marcado', () => {
+    render(<Paleta {...propsBase()} congelado={true} marcado={true} />)
+
+    expect(screen.getByRole('button', { name: /lixeira/i })).toBeDisabled()
+  })
+
+  it('congelado: o pointerdown CONTINUA sendo encaminhado — é quem chama preventDefault (correção de 2026-09-22)', () => {
+    // Regressão da regressão. A tentativa de 2026-09-21 de deixar a paleta
+    // inerte cortou o encaminhamento do `pointerdown`; com isso o
+    // `preventDefault` de `EditorLadder` deixou de rodar, o navegador passou a
+    // iniciar seleção nativa, e o arrasto SEGUINTE (ao sair da simulação)
+    // morria em `pointercancel` — o mesmo defeito da #22, por caminho novo.
+    // Quem recusa o gesto é `EditorLadder` (D-9), não a ausência do handler.
+    const aoIniciarArrastoPonteiro = vi.fn()
+    render(<Paleta {...propsBase()} congelado={true} aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiro} />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Bobina' }), { pointerId: 1, clientX: 5, clientY: 5 })
+
+    expect(aoIniciarArrastoPonteiro).toHaveBeenCalledTimes(1)
+  })
+
+  it('congelado: o item some do Tab (tabIndex -1) — sem gesto possível, não há o que recusar', () => {
+    render(<Paleta {...propsBase()} congelado={true} />)
+
+    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador']) {
+      expect(screen.getByRole('button', { name: nome })).toHaveAttribute('tabIndex', '-1')
+    }
+  })
+
+  it('sem congelado, o item continua alcançável por Tab (tabIndex 0)', () => {
+    render(<Paleta {...propsBase()} />)
+
+    expect(screen.getByRole('button', { name: 'Contato NA' })).toHaveAttribute('tabIndex', '0')
+  })
+
+  it('congelado: a classe do item NÃO leva pointer-events-none — senão o preventDefault não roda (correção de 2026-09-22)', () => {
+    // Guarda explícita contra reintroduzir o defeito pela terceira vez:
+    // `pointer-events-none` impediria o item de receber o `pointerdown`, e com
+    // ele o `preventDefault` que protege o arrasto seguinte. A inércia visível
+    // vem de `opacity-50` + `cursor-not-allowed` + `aria-disabled` + tabIndex.
+    render(<Paleta {...propsBase()} congelado={true} />)
+
+    const item = screen.getByRole('button', { name: 'Contato NA' })
+    expect(item.className).not.toContain('pointer-events-none')
+    expect(item.className).toContain('cursor-not-allowed')
+    expect(item.className).toContain('opacity-50')
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+  })
+})
+
 describe('Paleta — barra de ferramentas compacta (D-14)', () => {
   it('não tem mais o rótulo visível "Paleta"', () => {
     render(<Paleta {...propsBase()} />)

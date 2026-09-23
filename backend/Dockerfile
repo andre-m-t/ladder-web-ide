@@ -58,7 +58,17 @@ ENV MATIEC_IEC2C_PATH=/usr/local/bin/iec2c \
 
 # Diretorio de trabalho das compilacoes; no compose recebe um volume nomeado
 # para que o build do ESP-IDF seja incremental entre requisicoes (ver Q-6).
-RUN mkdir -p "$ESP_BUILD_ROOT"
+#
+# chmod 0777: esta imagem roda tanto como root (compose/producao) quanto com
+# `--user <uid>:<gid>` arbitrario e nao mapeado no /etc/passwd da imagem
+# (suite `slow` da Regra 5 do CLAUDE.md, e `frontend/e2e/rodar.sh`). Um UID
+# desconhecido nao pertence a nenhum grupo declarado aqui, entao nem `chown`
+# nem `chmod g+rwX` bastam -- soltar "outros" e o unico jeito de garantir
+# escrita para um UID que so existe em tempo de execucao, fora do nosso
+# controle. Diretorio de cache de build, sem segredo algum dentro; o preco de
+# 0777 e aceitavel pelo mesmo raciocinio do resto deste Dockerfile (imagem de
+# build/teste, nao a superficie exposta do produto).
+RUN mkdir -p "$ESP_BUILD_ROOT" && chmod 0777 "$ESP_BUILD_ROOT"
 
 # QEMU da Espressif (target xtensa/esp32), para dar boot no firmware sem
 # hardware (validacao sem ESP32 fisico — ver docs/validacao/). Ferramenta

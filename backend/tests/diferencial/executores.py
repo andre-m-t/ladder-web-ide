@@ -82,9 +82,7 @@ class Executor(Protocol):
 
 
 # Diretório do alvo de build para host (`make` compila o driver a partir daqui).
-_HOST_MAKEFILE_DIR = (
-    Path(__file__).resolve().parents[2] / "firmware" / "esp32-template" / "host"
-)
+_HOST_MAKEFILE_DIR = Path(__file__).resolve().parents[2] / "firmware" / "esp32-template" / "host"
 
 # Memoiza o build sob demanda: uma sessão de pytest compila o driver uma vez só.
 _binario_construido: Path | None = None
@@ -187,9 +185,7 @@ class HostRunnerExecutor:
 
     def disponivel(self) -> bool:
         return (
-            self.caminho is not None
-            and self.caminho.is_file()
-            and os.access(self.caminho, os.X_OK)
+            self.caminho is not None and self.caminho.is_file() and os.access(self.caminho, os.X_OK)
         )
 
     def executar(self, st_path: Path, entradas: list[dict[str, bool]]) -> ResultadoExecucao:
@@ -216,9 +212,7 @@ class HostRunnerExecutor:
             )
 
         linhas = [linha for linha in processo.stdout.splitlines() if linha.strip()]
-        ciclos = [
-            _parsear_linha_saida(linha, indice + 1) for indice, linha in enumerate(linhas)
-        ]
+        ciclos = [_parsear_linha_saida(linha, indice + 1) for indice, linha in enumerate(linhas)]
         return ResultadoExecucao(
             ciclos=ciclos, stderr=processo.stderr, returncode=processo.returncode
         )

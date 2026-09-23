@@ -259,6 +259,8 @@ export interface GradeDegrauProps {
    * de simulação — nesse caso o desenho é exatamente o de hoje. Ver nota no
    * cabeçalho do arquivo. */
   energizacao?: EnergizacaoDegrau | null
+  /** Simulação ativa (spec 004, RF-15, D-20): cursor de recusa na célula e na alça. */
+  congelado?: boolean
 }
 
 const LARGURA_CELULA_MIN = 56
@@ -490,6 +492,7 @@ export default function GradeDegrau({
   aoInserirDegrauAbaixo,
   aoRemoverDegrau,
   energizacao,
+  congelado,
 }: GradeDegrauProps) {
   const problemaRung = problemaDoRung(problemas)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -635,7 +638,7 @@ export default function GradeDegrau({
         onPointerLeave={() => aoSairDaCelula()}
         onFocus={() => aoEntrarNaCelula(celula)}
         onBlur={() => aoSairDaCelula()}
-        className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
+        className={`select-none touch-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${congelado ? 'cursor-not-allowed' : cursorInvalido ? 'cursor-not-allowed' : elemento ? 'cursor-grab' : 'cursor-pointer'}`}
       >
         <rect
           x={cx}
@@ -838,7 +841,7 @@ export default function GradeDegrau({
         onDragStart={(evento) => evento.preventDefault()}
         onPointerDown={(evento) => iniciarAlca(evento, ramo.id, ponta)}
         onKeyDown={(evento) => aoTeclarNaAlca?.(evento, rung.id, ramo.id, ponta)}
-        className="cursor-ew-resize touch-none select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+        className={`touch-none select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque ${congelado ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
       >
         <circle cx={x} cy={y} r={RAIO_ALCA} strokeWidth={2} className={classeAlca} />
       </g>

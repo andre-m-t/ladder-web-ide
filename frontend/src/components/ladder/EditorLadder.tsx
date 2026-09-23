@@ -189,6 +189,9 @@ const LIMIAR_ARRASTO_PX = 4
 /** Quanto a célula recusada fica marcada antes de a marca sumir (#26). */
 const DURACAO_MARCA_RECUSA_MS = 3000
 
+/** Recusa complementar (D-20, RF-15/CA-8) quando o gesto parte da grade ou do teclado. */
+const MOTIVO_CONGELADO = 'Edição congelada durante a simulação — saia da simulação para editar'
+
 const NOME_TIPO: Record<Elemento['tipo'], string> = {
   contato_na: 'contato NA',
   contato_nf: 'contato NF',
@@ -457,6 +460,14 @@ export default function EditorLadder({
   }, [aoRecusar])
   useEffect(() => {
     congeladoRef.current = congelado
+  }, [congelado])
+
+  useEffect(() => {
+    try {
+      window.getSelection?.()?.removeAllRanges()
+    } catch {
+      // jsdom pode não expor seleção — sem efeito prático.
+    }
   }, [congelado])
 
   function atualizarArrasto(novo: EstadoArrasto | null) {
@@ -733,19 +744,36 @@ export default function EditorLadder({
   }
 
   function aoIniciarArrastoPonteiroPaleta(tipo: TipoPaleta, evento: ReactPointerEvent<HTMLDivElement>) {
-    if (congelado) return
+    if (congelado) {
+      evento.preventDefault()
+      try {
+        window.getSelection?.()?.removeAllRanges()
+      } catch {
+        /* vazio */
+      }
+      return
+    }
     armarPonteiro({ de: 'paleta', tipo }, evento)
   }
 
   function aoIniciarArrastoPonteiroCelula(evento: ReactPointerEvent<SVGGElement>, rungId: string, celula: Celula) {
-    if (congelado) return
+    if (congelado) {
+      evento.preventDefault()
+      reportarRecusa({ rungId, celula, motivo: MOTIVO_CONGELADO })
+      return
+    }
     const elemento = elementoNaCelula(diagrama, rungId, celula)
     if (!elemento) return
     armarPonteiro({ de: 'celula', elementoId: elemento.id }, evento)
   }
 
   function iniciarArrastoTeclado(origem: OrigemArrasto) {
-    if (congelado) return
+    if (congelado) {
+      const rungId = diagrama.rungs[0]?.id ?? ''
+      const celula = { linha: 0, coluna: 0 }
+      reportarRecusa({ rungId, celula, motivo: MOTIVO_CONGELADO })
+      return
+    }
     const alvoInicial: AlvoArrasto =
       origem.de === 'paleta'
         ? { rungId: diagrama.rungs[0].id, celula: { linha: 0, coluna: 0 } }
@@ -1237,6 +1265,7 @@ export default function EditorLadder({
         marcado={marcado !== null || ramoMarcado !== null}
         emArrasto={arrasto !== null}
         sobreLixeira={arrasto !== null && arrasto.alvo === 'lixeira'}
+        congelado={congelado}
         aoIniciarArrastoPonteiro={aoIniciarArrastoPonteiroPaleta}
         aoIniciarArrastoTeclado={(tipo) => iniciarArrastoTeclado({ de: 'paleta', tipo })}
         aoPassarLixeira={aoPassarLixeira}
@@ -1292,6 +1321,7 @@ export default function EditorLadder({
               aoInserirDegrauAbaixo={() => aoInserirDegrauAbaixoDe(rung.id)}
               aoRemoverDegrau={() => aoRemoverDegrauHandler(rung.id)}
               energizacao={simulacao?.energizacao[rung.id] ?? null}
+              congelado={congelado}
             />
           )
         })}

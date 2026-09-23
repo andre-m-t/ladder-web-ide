@@ -165,15 +165,21 @@ precisam ser mantidos separadamente, incluindo o risco comum de duplicação —
 um bug corrigido em um pode não ser corrigido no outro. O projeto aceita esse
 custo porque o valor da medição depende dele.
 
-### 10. Declarar, renomear e remover variável seguem liberados durante a simulação
+### 10. ~~Declarar, renomear e remover variável seguem liberados durante a simulação~~ (revogada em 2026-09-23)
 
-**Causa:** a spec 004 não previu nem testou o comportamento de editar
-variáveis (declarar uma nova, renomear ou remover) enquanto uma simulação
-está em curso. Nenhum critério de aceite cobre esse cruzamento.
+**Revogação (revisão aditiva de 2026-09-23):** a tabela de variáveis passou a
+respeitar o modo exclusivo da simulação (spec 004, Q-7): com `simulacaoAtiva`,
+criar, renomear, trocar classe/pino e remover ficam desabilitados com o motivo
+no `title`, enquanto a leitura e a coluna "Valor" ao vivo permanecem. A
+limitação abaixo descrevia o comportamento **antes** dessa correção; não vale
+mais.
 
-**Impacto:** é possível, por exemplo, renomear uma variável em uso no meio de
-uma simulação ativa sem que exista um comportamento definido e testado para
-esse caso — situação sem cobertura, não necessariamente incorreta.
+**Causa (histórico):** a spec 004 não previu nem testou o comportamento de
+editar variáveis enquanto uma simulação estava em curso.
+
+**Impacto (histórico):** era possível renomear uma variável em uso no meio da
+simulação sem comportamento definido — assimetria corrigida na revisão de
+2026-09-23 (spec 002) e registrada no `.claude/state.md` na F9.
 
 ### 11. Compilação síncrona com exclusão mútua, sem fila
 

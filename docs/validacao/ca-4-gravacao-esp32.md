@@ -124,6 +124,14 @@ Com `backend/tests/fixtures/blink.st` gravado (Q-1):
     `"%s <-> GPIO%d (%s%s)"`, por exemplo
     `plc: __IX0_0 <-> GPIO0 (entrada, ativo em nivel baixo)` e
     `plc: __QX0_0 <-> GPIO2 (saida)`;
+
+  > **Correção de 2026-09-21.** As duas linhas de exemplo acima trazem o
+  > prefixo `plc:`, que **não é o que o firmware emite**. A tag do `ESP_LOG` em
+  > `backend/firmware/esp32-template/main/plc_hal_esp32.c` é `"plc_hal"`, então
+  > a linha real é `plc_hal: __IX0_0 <-> GPIO0 (entrada, ativo em nivel baixo)`.
+  > O formato e os campos não mudam — só o prefixo. Registrado aqui em vez de
+  > reescrito acima, porque quem for procurar a string no log da bancada precisa
+  > do valor certo, e o roteiro de `dia-do-hardware.md` já usa o correto.
   - aviso de endereço localizado sem pino no mapa desta placa —
     `"%s nao tem pino no mapa desta placa; sera ignorado"`.
 

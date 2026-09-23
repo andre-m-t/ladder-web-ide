@@ -31,6 +31,9 @@ como processo separado.
 | FastAPI | MIT | Dependência de pacote (back-end). |
 | Uvicorn | BSD-3-Clause | Dependência de pacote (servidor ASGI do back-end). |
 | Pydantic / pydantic-settings | MIT | Dependência de pacote (back-end). |
+| pytest | MIT | Dependência de pacote usada só nos testes do back-end; não entra no programa entregue. |
+| ruff | MIT | Dependência de pacote usada só nos testes do back-end; não entra no programa entregue. |
+| httpx2 | BSD-3-Clause | Dependência de pacote usada só nos testes do back-end; não entra no programa entregue. Sucessor do `httpx` (`pydantic/httpx2`), exigido pelo Starlette 1.6.0 instalado na imagem; usado pelo `TestClient` do Starlette/FastAPI. Em `backend/requirements-dev.txt`. |
 
 Imagens base de contêiner utilizadas na construção do ambiente:
 `debian:bookworm-slim`, `espressif/idf` e `node:22-bookworm-slim`, com as

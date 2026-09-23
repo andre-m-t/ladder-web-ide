@@ -114,9 +114,7 @@ def _parsear(linha: str) -> dict[str, str]:
 
 
 @toolchain_disponivel
-def test_ordem_leitura_resolucao_escrita_multiciclo(
-    plc_host_runner: Path, tmp_path: Path
-) -> None:
+def test_ordem_leitura_resolucao_escrita_multiciclo(plc_host_runner: Path, tmp_path: Path) -> None:
     """io_espelho.st e `saida := entrada;`: sem esse pipeline na ordem certa
     (ler ANTES de resolver, resolver ANTES de escrever, tudo no MESMO ciclo),
     a saida ficaria atrasada em um ciclo ou nunca mudaria. Sequencia

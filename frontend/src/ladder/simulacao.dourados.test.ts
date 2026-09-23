@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BLINK, IO_ESPELHO, MINIMAL, PORTAO, RAMO_OU, SAIDAS_PARALELAS, SELO, SET_RESET } from './fixtures'
+import { BLINK, IO_ESPELHO, IO_ESPELHO_8, MINIMAL, PORTAO, RAMO_OU, SAIDAS_PARALELAS, SELO, SET_RESET } from './fixtures'
 
 // Caminho relativo ao próprio arquivo de teste — mesmo motivo de
 // `serializador.dourados.test.ts`: evita `node:path`/`node:url` (para não
@@ -34,6 +34,7 @@ function caminhoDourado(nome: string): string {
 describe('arquivos dourados (D-11) — diagrama TS -> JSON para o pytest', () => {
   it.each([
     ['io_espelho', IO_ESPELHO],
+    ['io_espelho_8', IO_ESPELHO_8],
     ['minimal', MINIMAL],
     ['ramo_ou', RAMO_OU],
     ['set_reset', SET_RESET],

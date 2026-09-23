@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-23 (indicador **SOBE** do motor na `CenaPortao` com a mesma cor verde do DESCE quando ativo) · **Branch ativa:** `main`
+**Última atualização:** 2026-09-23 (retomada da rodada de fechamento do stash de 2026-09-21: CA-8, coluna Valor, `IO_ESPELHO_8`, Passo funcional, pytest não-root, documentação) · **Branch ativa:** `main`
 
 ## Legenda
 
@@ -278,8 +278,8 @@ registrada como desvio deliberado da prática corrente; Q-7: CTU destacável).
 - Verificação: `tsc` limpo, 269 testes vitest, `vite build`; imagem reconstruída; pytest completo com `slow` 70 passed (rodado como root — ver pendência) e `not slow` 63 passed; depósito ok; Chromium com back-end real em rede isolada: layout 1280/1920 sem rolagem, segundo clique, variáveis `%IX0.7`/`%QX0.7` com GPIO 33/13 no mapa, alternância de tema, divisor e recolher, compilação real de `blink.st` (70 s, imagens no console) e ST inválido com diagnóstico no console e no painel de erro
 
 **Pendências registradas na #23**
-- Suíte `slow` falha com `--user` não-root: `ESP_BUILD_ROOT` na imagem é de root. Decidir entre `chown` no `Dockerfile` ou rodar como root
-- `ruff format --check` aponta 3 arquivos antigos (`tests/diferencial/executores.py`, `tests/test_deposito.py`, `tests/test_plc_runtime_host.py`)
+- ~~Suíte `slow` falha com `--user` não-root~~ — **resolvido em 2026-09-21/23** (`chmod 0777` no `ESP_BUILD_ROOT` no `Dockerfile`; ver retomada da rodada de fechamento)
+- ~~`ruff format` em 3 arquivos de teste do back-end~~ — **resolvido na mesma rodada** nos arquivos tocados
 
 **Concluído — #24: degrau responsivo, variáveis por pino, ícones e ramo paralelo (plano §14, D-14, 2026-09-17)**
 - Degrau ocupa a largura do contêiner e acompanha redimensionamento e painel recolhido (célula mínima 56 px)
@@ -575,13 +575,16 @@ O fio da **célula terminal** era desenhado desenergizado atravessando a bobina 
 
 ### Pendências e limitações registradas
 
-- **Congelamento sem retorno ao usuário.** Com a simulação ativa, a paleta e a grade continuam com aparência arrastável (cursor `grab`, bordas tracejadas) e uma tentativa de arrastar **não produz nada**: sem toast, sem cursor `not-allowed`, sem prévia. Funcionalmente correto, mas indistinguível de um defeito até a pessoa reparar que nada mudou — e contraria a norma do projeto (#25/#27) de que recusa se percebe. **Aguardando decisão do autor.**
-- **Coluna "Valor" fora de vista no painel estreito.** A tabela de variáveis tem largura mínima de 600 px com rolagem horizontal própria (herdado da revisão pós-#26); no painel na largura padrão não dá para ver o **nome** e o **valor ao vivo** ao mesmo tempo. O laço central da feature (acionar entrada → ver valor) fica prejudicado sem arrastar a rolagem ou alargar o painel. **Aguardando decisão do autor.**
-- **Marcha lenta em 500 ms/ciclo** foi escolhida sem validação com o autor; a spec só exigia "ao menos uma".
-- **`Passo` com o laço rodando:** `aoPassoSimulacao` lê o estado por ref e grava sem atualização funcional; com a simulação em execução há corrida teórica com o laço. Na prática o usuário pausa antes; o e2e pausa de propósito. Correção é pequena e não foi feita nesta rodada.
-- **`preventDefault` ausente no congelamento:** com a edição congelada o `pointerdown` da paleta não chama `preventDefault` (quem chamava era o caminho de arrasto, que não roda). Sem efeito observado hoje, porque a paleta usa `select-none`/`draggable={false}`; fica registrado como divergência de comportamento entre os dois modos.
-- **Tabela de variáveis na simulação (resolvido 2026-09-23):** declarar, renomear, trocar classe/pino e remover na `TabelaVariaveis` ficam desabilitados com `simulacaoAtiva` (via `PainelVariaveis`/`App.tsx`), com `title` "Saia da simulação para criar/editar/remover variáveis" — simétrico ao contrato de E/S do ambiente; leitura e coluna "Valor" ao vivo permanecem. Spec 002 revisão aditiva; testes em `TabelaVariaveis.test.tsx` e `PainelVariaveis.test.tsx`.
+- **Marcha lenta em 500 ms/ciclo** foi escolhida sem validação com o autor; a spec só exigia "ao menos uma". Registrada como **Q-9** em "Decisões em aberto".
 - **Achado técnico:** `declare module 'node:fs'` não funciona sem `@types/node` (o TypeScript o trata como *augmentation* de um módulo inexistente, TS2664). O shim usa `import()` com especificador não-literal. Nenhuma dependência nova entrou.
+
+**Fechado na retomada da rodada de fechamento (2026-09-23, stash de 2026-09-21):**
+- **CA-8 / affordance do congelamento:** paleta esmaecida e inerte sem `pointer-events-none` (preserva `preventDefault`); grade com `cursor-not-allowed`; toast ao insistir pela grade/teclado; seleção do documento limpa ao entrar/sair da simulação; e2e CA-8 com controle negativo. Destaque do modo simulação na `BarraSimulacao` — **sem** chip SIMULANDO na barra superior (decisão do autor na retomada).
+- **Coluna "Valor"** imediatamente após **Nome** (RF-13, revisão 2026-09-21).
+- **`Passo` em rajada:** `aoPassoSimulacao` com `setSimulacao` funcional (inclui passo da planta do ambiente); teste em `App.test.tsx`.
+- **`IO_ESPELHO_8`:** fixture dos 16 pinos em `fixtures.ts`, dourados e diferencial `io_espelho_8` no pytest.
+- **Dívida técnica triada:** `chmod 0777` no `ESP_BUILD_ROOT` no `Dockerfile` — suíte completa como não-root; `ruff format` nos arquivos tocados.
+- **Tabela na simulação** já estava fechada em 2026-09-23 (`simulacaoAtiva`); limitação §10 de `docs/limitacoes-declaradas.md` revogada.
 
 ## F11 — Ambientes de simulação ✅
 
@@ -652,22 +655,25 @@ Planta visual acoplada ao ciclo de varredura (F9): um passo de física por `exec
 
 | ID | Questão | Impacto | Quando decidir |
 |---|---|---|---|
-| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | Após a fatia vertical fechar — **parcialmente decidida para o editor** pela spec 002: contador crescente (CTU) entra no escopo de F7, temporizadores (TON/TOF) e contador decrescente (CTD) seguem fora. **F8 decidida em 2026-09-19:** o CTU é serializado (RF-13 da spec 003). **F9 decidida em 2026-09-20** (spec 004): o CTU entra no escopo do simulador, TON/TOF/CTD seguem fora. **Questão encerrada — nenhuma decisão em aberto no projeto.** |
+| **Q-9** | **Cadência da marcha lenta do simulador.** Está em **500 ms/ciclo**, escolhida na spec 004 sem validação do autor (a spec só exigia "ao menos uma marcha lenta"). Dado concreto: a 500 ms, **meia piscada do `BLINK` (25 ciclos) leva 12,5 s** — lento demais para observar o laço sem impaciência. A alternativa prevista no plano original é **duas velocidades, 200 ms e 1 s**. | F9, usabilidade do simulador. Só interface; o núcleo medido não muda. | **Depois de testar na ferramenta.** Registrada em 2026-09-21 a pedido do autor, que decidiu não alterar o valor sem usar antes. |
+| — | Temporizadores e contadores no escopo da PoC | F8, F9, cobertura IEC | **Encerrada:** CTU no editor/serializador/simulador; TON/TOF/CTD fora. |
+
+---
+
+## Estado final do software
+
+O software do TCC está **completo até onde é possível sem ESP32 físico**: F1–F9 e F11 entregues; F5/F3/F10 com lacunas só de hardware ou de medição sistemática. A fatia vertical editar → simular (diagrama + ambiente) → compilar → tentar gravar está fechada. A rodada de fechamento de 2026-09-21 (interrompida antes da verificação final) foi **retomada em 2026-09-23** a partir do stash: defeitos de UX da F9, `IO_ESPELHO_8`, pytest como não-root, documentação alinhada e roteiro `docs/validacao/dia-do-hardware.md`. **Nenhuma pendência de código** resta da F9 além da decisão de produto **Q-9** (marcha lenta).
 
 ---
 
 ## Próximos passos, em ordem
 
-**Não há mais feature de código pendente.** A F9 era a última; o que resta é decisão, medição e escrita.
+**Não há mais feature de código pendente.** O que resta é decisão (Q-9), medição (F10), hardware e escrita do TCC.
 
-1. **Decidir os dois pontos abertos da F9** (ver "Pendências e limitações" no F9): congelamento sem retorno ao usuário e coluna "Valor" fora de vista no painel estreito.
-2. **Coleta sistemática de métricas (F10).** O instrumento está completo pela primeira vez: dois executores independentes rodando o mesmo programa. As métricas que não dependem de hardware podem ser fechadas agora — cobertura de elementos IEC 61131-3 e a comparação de pré-requisitos com o OpenPLC seguem ⬜.
-3. **Demonstração ao orientador.** Agora o caminho é editar → **simular** → compilar → gravar, com os três programas de referência saindo de diagramas montados no editor.
-4. Pendências menores:
-   - suíte `slow` com `--user` não-root (#23);
-   - `ruff format` em 3 arquivos antigos (#23) — conferido nesta rodada: continuam fora de formato, e a alteração aditiva da spec 004 não os tocou;
-   - desenho de ramos cruzados;
-   - `Passo` com o laço rodando e o `preventDefault` do congelamento (F9).
+1. **Decidir a Q-9** (marcha lenta) usando a ferramenta.
+2. **Coleta sistemática de métricas (F10).** O instrumento está completo: dois executores independentes. Métricas sem hardware podem ser fechadas — cobertura IEC e comparação com OpenPLC seguem ⬜.
+3. **Demonstração ao orientador** e **Dia do Hardware** quando houver ESP32 (`docs/validacao/dia-do-hardware.md`).
+4. Pendências menores: desenho de ramos cruzados (limitação declarada §1); `tsc` em `edicao.test.ts` (pré-existente).
 
 ## Bloqueado aguardando hardware
 
@@ -729,4 +735,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-23 | Correção física do FC superior do portão (spec 005, revisão aditiva) | O autor corrigiu a rodada anterior no mesmo dia (linha acima do FC): o FC1/superior, no portão de enrolar (folha e tambor no topo), detecta a **lona passando** pelo ponto fixo junto ao tambor — fica ligado fechado/entreaberto e só desliga perto do totalmente aberto; a leitura simétrica ao FC inferior, confirmada horas antes, era fisicamente errada para este sensor (o FC inferior continua correto, não foi questionado). Corrigido só na planta: `nivelFcSuperior` em `portao.ts` inverte o limiar (`abertura < ABERTURA_MAX - MARGEM_FC`); `CenaPortao.tsx` não muda (já mirrorava o booleano bruto sem inversão). Para o programa de referência `PORTAO` continuar parando o motor no batente e acendendo a lâmpada certa com o sinal do sensor invertido, os contatos de `fc_superior` nos degraus 1, 3 e 5 trocaram NF↔NA; dourados `portao.st`/`portao.json` regenerados pelo vitest e `portao.toml` com `%IX0.3` ajustado ao valor fisicamente coerente (saídas esperadas inalteradas). Testes que hardcoded a convenção antiga corrigidos: `portao.test.ts` e 2 dos 3 casos de `CenaPortao.test.tsx`. Nota datada na spec 005 explicando a física do tambor e cada degrau trocado, sem apagar a nota anterior (histórico aditivo). Verificação: `tsc --noEmit` sem erro novo; vitest completo 872 passed (403 isolados em `src/ambientes`+`src/ladder`+`App.test.tsx`+`CenaPortao.test.tsx`; um falso-negativo de `App.test.tsx` na corrida paralela completa não se repetiu isolado nem numa segunda corrida completa — flake de contenção, não regressão); pytest no backend via `docker run ladderflow-backend:dev` — 26 passed nos dois arquivos diferenciais do portão, 89 passed/7 deselected na suíte `not slow` completa. Pendência registrada para o autor: a correção não toca a lógica livre que o usuário monta na IDE para o ambiente interativo, só a planta e o programa de referência/medição |
 | 2026-09-23 | Tabela de variáveis bloqueada na simulação (spec 002, revisão aditiva) | Decisão do autor após a criação de variáveis pelo contrato de E/S (que já bloqueava na simulação): a **tabela** no painel lateral também desabilita criar, renomear, trocar classe/pino e remover enquanto `simulacao.ativo`, com os mesmos motivos no `title`; leitura e valores ao vivo permanecem. Implementação já estava no disco (`TabelaVariaveis.tsx`, `PainelVariaveis.tsx`, `App.tsx`); esta rodada fechou spec 002, `state.md` (pendência F9) e verificação final. Testes: `TabelaVariaveis.test.tsx`, `PainelVariaveis.test.tsx` |
 | 2026-09-23 | Botão Ambiente oculto com painel aberto (spec 005) | O autor pediu para não mostrar o botão **Ambiente** na `BarraSimulacao` enquanto o painel lateral de ambiente está aberto; fechar só pelo **Fechar ambiente** do `PainelAmbiente`. Teste em `BarraSimulacao.test.tsx` |
+| 2026-09-23 | Retomada da rodada de fechamento (stash 2026-09-21) | Port manual do stash sobre `b4a7bcd`: CA-8 (paleta sem `pointer-events-none`, grade `not-allowed`, toast, e2e 10/10), coluna Valor após Nome, `aoPassoSimulacao` funcional + teste rajada, `IO_ESPELHO_8` + diferencial, `Dockerfile`/`ESP_BUILD_ROOT` para pytest não-root, README/arquitetura/THIRD_PARTY/limitações/dia-do-hardware, spec 004 revisões 2026-09-21; chip SIMULANDO **não** reaplicado (`BarraSimulacao`). Verificação completa na mesma rodada |
 | 2026-09-21 | Spec 005 revisão — redesign do portão | Modal de escolha (`ModalAmbiente`); cena SVG redesenhada; mapa `%IX`/`%QX` alinhado à referência; nome **Portão**; correção do × na janela flutuante; `PORTAO` com NF; dourados/`portao.toml` regenerados; e2e atualizado; depósito com componentes de UI do ambiente |

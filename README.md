@@ -4,7 +4,7 @@
 
 Integra, em um único fluxo executado no navegador e sem instalação local, o ciclo completo de **edição visual → simulação → gravação** de lógica Ladder conforme a IEC 61131-3.
 
-![Status](https://img.shields.io/badge/status-em%20desenvolvimento-yellow)
+![Status](https://img.shields.io/badge/status-prova%20de%20conceito%20funcional-brightgreen)
 ![Front-end](https://img.shields.io/badge/frontend-React%20%7C%20Vite%20%7C%20Tailwind-61DAFB)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-009688)
 ![Hardware](https://img.shields.io/badge/hardware-ESP32-E7352C)
@@ -20,7 +20,6 @@ Integra, em um único fluxo executado no navegador e sem instalação local, o c
 - [Requisitos](#requisitos)
 - [Instalação e execução](#instalação-e-execução)
 - [Estrutura do repositório](#estrutura-do-repositório)
-- [Roadmap](#roadmap)
 - [Escopo e limitações](#escopo-e-limitações)
 - [Licença e propriedade intelectual](#licença-e-propriedade-intelectual)
 - [Créditos e referências](#créditos-e-referências)
@@ -35,11 +34,14 @@ O LadderFlow elimina esses pré-requisitos ao executar a edição e a simulaçã
 
 ## Funcionalidades
 
-- **Editor visual Ladder** — construção de diagramas de contatos e bobinas em canvas interativo, executado no navegador.
-- **Serialização para Structured Text** — conversão do diagrama para ST, formato canônico definido pela IEC 61131-3.
-- **Simulador de ciclo de varredura** — validação da lógica no cliente, antes da gravação em hardware.
+- **Editor visual Ladder** — construção de diagramas em grade, no navegador, com os seguintes elementos da IEC 61131-3: contato NA, contato NF, bobina simples, bobina SET, bobina RESET, ramo paralelo (OU) e contador crescente (CTU). Suporta até 8 entradas e 8 saídas digitais, mapeadas para GPIO do ESP32.
+- **Serialização para Structured Text** — conversão contínua do diagrama para ST, formato canônico definido pela IEC 61131-3, atualizada a cada edição.
+- **Simulador de ciclo de varredura** — executa a lógica do diagrama no navegador (lê entradas → resolve os degraus → escreve saídas), com controles Executar/Pausar, Passo e Reiniciar, e valores de variáveis ao vivo. É um segundo executor independente do serializador: os dois nunca compartilham a leitura de topologia do diagrama, para que a comparação entre eles tenha valor de medição (ver `docs/limitacoes-declaradas.md`, item 9).
+- **Download do projeto** — o diagrama Ladder como `.json` (para reabrir depois) e o Structured Text gerado como `.st`, ambos processados no cliente, sem ida ao servidor.
+- **Persistência local** — o projeto em edição é salvo no `localStorage` do navegador e recarregado na abertura seguinte.
 - **Compilação remota** — geração de firmware a partir do código ST, sem toolchain na máquina do usuário.
-- **Gravação via navegador** — transferência do firmware ao ESP32 pela Web Serial API, sem drivers ou instaladores.
+- **Gravação via navegador** — transferência do firmware ao ESP32 pela Web Serial API, sem drivers ou instaladores. **O transporte Web Serial nunca foi exercitado contra um ESP32 físico**: o fluxo foi verificado até a tentativa de conexão (inclusive em Chromium automatizado) e a gravação do mesmo pacote foi comprovada por linha de comando (`esptool`) contra um ESP32 emulado em QEMU, mas nenhum dispositivo real foi gravado. Detalhe em `docs/limitacoes-declaradas.md`.
+- **Temas claro e escuro** na interface.
 
 ## Arquitetura
 
@@ -48,9 +50,10 @@ Arquitetura cliente-servidor. O cliente executa integralmente no navegador; ao s
 ```mermaid
 flowchart LR
     subgraph Cliente["Navegador — sem instalação"]
-        A[Editor visual Ladder] --> B[Serializador Ladder → ST]
-        B --> C[Simulador de ciclo de varredura]
-        C --> D[Gravação via Web Serial API]
+        A[Editor visual Ladder]
+        A --> B[Serializador Ladder → ST]
+        A --> C[Simulador de ciclo de varredura]
+        D[Gravação via Web Serial API]
     end
 
     subgraph Servidor["Serviço de compilação"]
@@ -68,10 +71,15 @@ flowchart LR
 **Fluxo de execução**
 
 1. O usuário constrói a lógica no editor Ladder.
-2. O diagrama é serializado para Structured Text.
-3. A lógica é validada no simulador de ciclo de varredura.
-4. O código ST é compilado no servidor, gerando o firmware.
-5. O binário é gravado no ESP32 pelo navegador.
+2. A partir do mesmo diagrama, dois caminhos independentes rodam em paralelo
+   no navegador: o **serializador** o traduz para Structured Text de forma
+   contínua (a cada edição), e o **simulador** o executa ciclo a ciclo para
+   validar a lógica antes da gravação. O simulador lê o diagrama diretamente
+   — não reaproveita a leitura de topologia do serializador, por decisão de
+   projeto que sustenta a comparação entre os dois (ver
+   `docs/limitacoes-declaradas.md`, item 9).
+3. O código ST é compilado no servidor, gerando o firmware.
+4. O binário é gravado no ESP32 pelo navegador.
 
 ## Tecnologias
 
@@ -98,11 +106,18 @@ cp .env.example .env
 docker compose up --build
 ```
 
-| Serviço | Endereço |
+| Serviço | Endereço padrão |
 |---|---|
 | Aplicação | `http://localhost:5173` |
 | API | `http://localhost:8000` |
 | Documentação da API | `http://localhost:8000/docs` |
+
+As portas são configuráveis por `BACKEND_PORT` e `FRONTEND_PORT` no `.env`
+(padrão 8000 e 5173, respectivamente) — útil quando essas portas já estão em
+uso por outro serviço na máquina. Ao mudar `BACKEND_PORT`, ajuste também
+`VITE_API_URL` e `CORS_ORIGINS` no mesmo `.env` para apontarem para a nova
+porta — eles não a seguem automaticamente. Veja `.env.example` para a lista
+completa de variáveis.
 
 Nenhuma instalação manual de toolchain é necessária: o contêiner do serviço de compilação traz as duas etapas prontas — o MATIEC construído a partir do fonte e o ESP-IDF, vindo da imagem oficial da Espressif. A primeira construção da imagem baixa alguns gigabytes e demora; as seguintes usam o cache do Docker.
 
@@ -132,23 +147,17 @@ docker compose run --rm backend pytest -v -m "not slow"   # sem a geração de f
 O desenvolvimento segue o método de *Spec-Driven Development* descrito em
 [`docs/README.md`](docs/README.md).
 
-## Roadmap
-
-- [x] Ambiente de build containerizado com MATIEC e toolchain ESP32
-- [ ] Pipeline completo de compilação e gravação (fatia vertical mínima)
-- [ ] Editor visual Ladder — contatos, bobinas e serialização para ST
-- [ ] Simulador de ciclo de varredura
-- [ ] Integração do ciclo completo e tratamento de erros
-- [ ] Validação funcional em bancada e coleta de métricas
-- [ ] Ampliação da cobertura de elementos da IEC 61131-3
-
 ## Escopo e limitações
 
 - Validação em nível lógico (3,3 V, GPIO). Interface para I/O industrial de campo e requisitos de segurança funcional estão fora do escopo.
-- Contempla-se um subconjunto dos elementos da IEC 61131-3, não a totalidade da norma.
 - A gravação requer navegador com suporte à Web Serial API (Chromium e derivados).
 - O alvo é o ESP32 clássico; demais variantes da família não são validadas.
 - Prova de conceito de caráter acadêmico e educacional; não constitui substituto de ferramenta industrial certificada.
+
+A lista completa e detalhada de limitações conhecidas — cobertura parcial da
+norma, comportamentos deliberados do editor e do simulador, e o que depende
+exclusivamente de hardware ainda não disponível — está em
+[`docs/limitacoes-declaradas.md`](docs/limitacoes-declaradas.md).
 
 ## Licença e propriedade intelectual
 

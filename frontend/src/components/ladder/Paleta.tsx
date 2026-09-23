@@ -40,6 +40,43 @@
  * (`pointercancel`) no meio — ver o comentário de `armarPonteiro` em
  * `EditorLadder.tsx`, que é quem também limpa a seleção e chama
  * `preventDefault` no `pointerdown`.
+ *
+ * **`congelado` (spec 004, RF-15, D-20):** ausente/`false` desenha
+ * exatamente como hoje (mesma regra que a Fatia 2 já usou para
+ * `energizacao`). `true` (simulação ativa) esmaece cada item e a lixeira
+ * (`opacity-50`, `cursor-not-allowed`, `aria-disabled` nos itens — a lixeira
+ * é um `<button>` de verdade, então usa `disabled` nativo em vez de
+ * `aria-disabled`).
+ *
+ * **Correção de 2026-09-21 (achado em Chromium real, revisão aditiva de
+ * CA-8):** até esta correção, o `pointerdown` de um item congelado era
+ * respondido por `EditorLadder` com um toast — e o toast nasce no canto
+ * superior esquerdo, embaixo do cabeçalho, exatamente onde ficam os dois
+ * primeiros itens ("Contato NA"/"Contato NF"): o aviso cobria o item de que
+ * estava falando, e ainda interceptava o ponteiro do arrasto seguinte ao sair
+ * da simulação. Decisão do autor: a paleta é **inerte** e não anuncia recusa —
+ * sem gesto possível, não há o que anunciar. `EditorLadder` só continua
+ * emitindo toast para tentativas que partem da **grade** ou do **teclado**.
+ *
+ * **Correção de 2026-09-22 (o remédio que virou doença):** a tentativa
+ * anterior de tornar a paleta inerte usou `pointer-events-none` na classe e
+ * deixou de passar o `onPointerDown` quando congelado. Isso **suprimia o
+ * `preventDefault`** — e é ele que impede o navegador de tratar o toque como
+ * início de seleção nativa. Sem ele, a seleção residual fazia o arrasto
+ * **seguinte** virar drag nativo e morrer em `pointercancel`: exatamente o bug
+ * que a #22 já havia corrigido, reintroduzido por um caminho novo (o e2e do
+ * CA-8 falhava ao arrastar da paleta depois de sair da simulação).
+ *
+ * Por isso, e **não** por descuido: o `onPointerDown` é encaminhado *sempre*,
+ * inclusive congelado, e a classe congelada **não** leva `pointer-events-none`.
+ * Congelado, `EditorLadder` responde com `preventDefault` e sai — sem iniciar
+ * arrasto e sem toast. Quem for "simplificar" isto de volta para
+ * `pointer-events-none` vai reintroduzir o defeito pela terceira vez.
+ *
+ * O que sustenta a inércia visível continua: `opacity-50`, `cursor-not-allowed`,
+ * `aria-disabled` e `tabIndex={-1}` (não alcançável por Tab). Espaço no item
+ * ainda encaminha a `iniciarArrastoTeclado`, sem efeito prático porque o item
+ * não recebe foco — quem decide (D-9) continua sendo `EditorLadder`.
  */
 import { GitFork, Trash2 } from 'lucide-react'
 import type { KeyboardEvent, PointerEvent } from 'react'
@@ -55,6 +92,12 @@ export interface PaletaProps {
   emArrasto: boolean
   /** O alvo do arrasto em curso é a lixeira (destaque visual). */
   sobreLixeira: boolean
+  /** Simulação em andamento (spec 004, RF-15, D-20) — ausente/`false`:
+   * desenho idêntico ao de hoje (mesma regra que `energizacao` usou na
+   * Fatia 2). `true`: cada item vira `cursor-not-allowed`, `opacity-50` e
+   * `aria-disabled`, e a lixeira acompanha — o gesto ainda é encaminhado a
+   * `EditorLadder` (dono da regra, D-9), que decide recusar. */
+  congelado?: boolean
   /** pointerdown num item: início do arrasto por ponteiro (armado; só vira
    * arrasto de fato ao passar do limiar de 4px — decisão de `EditorLadder`). */
   aoIniciarArrastoPonteiro: (tipo: TipoPaleta, evento: PointerEvent<HTMLDivElement>) => void
@@ -89,6 +132,7 @@ export default function Paleta({
   marcado,
   emArrasto,
   sobreLixeira,
+  congelado,
   aoIniciarArrastoPonteiro,
   aoIniciarArrastoTeclado,
   aoPassarLixeira,
@@ -102,7 +146,10 @@ export default function Paleta({
     }
   }
 
-  const lixeiraDesabilitada = !marcado && !emArrasto
+  // Congelado tem prioridade: com simulação ativa a lixeira é inerte mesmo
+  // que `marcado` tenha sobrevivido de antes de entrar em simulação (nada
+  // limpa a marcação ao congelar — só o próprio gesto de editar é recusado).
+  const lixeiraDesabilitada = Boolean(congelado) || (!marcado && !emArrasto)
 
   return (
     <section
@@ -115,15 +162,26 @@ export default function Paleta({
           <div key={item.tipo} className="flex flex-col items-center gap-1">
             <div
               role="button"
-              tabIndex={0}
+              tabIndex={congelado ? -1 : 0}
               aria-roledescription="item arrastável"
               aria-describedby={idInstrucao}
+              aria-disabled={congelado ? true : undefined}
               data-tipo-paleta={item.tipo}
               draggable={false}
               onDragStart={(evento) => evento.preventDefault()}
+              // O handler é encaminhado **sempre**, inclusive congelado
+              // (correção de 2026-09-22): é ele que chama `preventDefault`, e
+              // sem isso o navegador inicia seleção nativa e cancela o arrasto
+              // seguinte. Congelado, `EditorLadder` só faz `preventDefault` e
+              // sai — sem arrasto e sem toast. Não há guarda equivalente em
+              // `onKeyDown`: o item não é alcançável por Tab, basta o `tabIndex`.
               onPointerDown={(evento) => aoIniciarArrastoPonteiro(item.tipo, evento)}
               onKeyDown={(evento) => aoTeclarNoItem(evento, item.tipo)}
-              className="inline-flex cursor-grab touch-none select-none items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
+              className={
+                congelado
+                  ? 'inline-flex cursor-not-allowed touch-none select-none items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto opacity-50 outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque'
+                  : 'inline-flex cursor-grab touch-none select-none items-center gap-1.5 rounded-lg border border-dashed border-ide-borda bg-ide-elevado px-3 py-1.5 text-sm font-medium text-ide-texto outline-none active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque'
+              }
             >
               {item.glifo ? (
                 <span aria-hidden="true" className="font-mono text-[11px] text-ide-suave">
@@ -165,9 +223,11 @@ export default function Paleta({
         Lixeira
       </button>
       <p id={ID_AJUDA_LIXEIRA} className="sr-only">
-        {lixeiraDesabilitada
-          ? 'Marque um elemento ou ramo no degrau para habilitar a lixeira, ou arraste um item da grade até aqui.'
-          : 'Solta remove o elemento ou ramo marcado, ou o item que estiver sendo arrastado até aqui.'}
+        {congelado
+          ? 'Edição congelada durante a simulação — a lixeira fica indisponível até sair da simulação.'
+          : lixeiraDesabilitada
+            ? 'Marque um elemento ou ramo no degrau para habilitar a lixeira, ou arraste um item da grade até aqui.'
+            : 'Solta remove o elemento ou ramo marcado, ou o item que estiver sendo arrastado até aqui.'}
       </p>
     </section>
   )

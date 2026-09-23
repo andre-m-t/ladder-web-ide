@@ -97,6 +97,9 @@ _CENARIOS_SEM_CONTADOR = [
     ("selo", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("portao", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("saidas_paralelas", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
+    # Fixture de bancada (revisao aditiva 2026-09-21): espelha os 16 pinos
+    # localizados de uma vez (frontend/src/ladder/fixtures.ts, IO_ESPELHO_8).
+    ("io_espelho_8", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
 ]
 
 

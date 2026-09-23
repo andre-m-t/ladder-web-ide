@@ -70,9 +70,7 @@ def test_verificar_passa_no_repositorio_real() -> None:
         timeout=60,
     )
 
-    assert resultado.returncode == 0, (
-        f"stdout:\n{resultado.stdout}\nstderr:\n{resultado.stderr}"
-    )
+    assert resultado.returncode == 0, f"stdout:\n{resultado.stdout}\nstderr:\n{resultado.stderr}"
 
 
 @ferramentas_disponiveis

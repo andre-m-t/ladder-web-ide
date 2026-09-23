@@ -854,15 +854,16 @@ export default function App() {
   /** Passo (CA-6): exatamente um ciclo, com a simulação rodando ou pausada —
    * não depende do laço de `requestAnimationFrame` abaixo. */
   function aoPassoSimulacao() {
-    const atual = simulacaoRef.current
-    if (!atual.ativo) return
     const diagrama = diagramaLd(projetoRef.current)
     if (!diagrama) return
     const ambienteOn = painelAmbienteAbertoRef.current && ambienteIdRef.current === AMBIENTE_PORTAO.id
-    const resultado = executarCicloComAmbiente(diagrama, atual.estado, plantaPortaoRef.current, AMBIENTE_PORTAO, ambienteOn)
-    if (resultado.falha) registrarFalhaPlanta(resultado.falha)
-    setPlantaPortao(resultado.planta)
-    setSimulacao({ ...atual, estado: resultado.estado })
+    setSimulacao((atual) => {
+      if (!atual.ativo) return atual
+      const resultado = executarCicloComAmbiente(diagrama, atual.estado, plantaPortaoRef.current, AMBIENTE_PORTAO, ambienteOn)
+      if (resultado.falha) registrarFalhaPlanta(resultado.falha)
+      setPlantaPortao(resultado.planta)
+      return { ...atual, estado: resultado.estado }
+    })
   }
 
   /** Reiniciar (CA-6): volta ao estado inicial completo (`reiniciar` = o

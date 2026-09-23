@@ -751,6 +751,26 @@ describe('App — modo simulação (spec 004, tarefa #11)', () => {
     expect(screen.getByText('Ciclo 0')).toBeInTheDocument()
   })
 
+  it('Passo em rajada avança um ciclo por clique — sem perder ciclo para a corrida com o laço (correção de 2026-09-22)', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    await usuario.click(screen.getByRole('button', { name: 'Pausar simulação' }))
+    expect(screen.getByText('Ciclo 0')).toBeInTheDocument()
+
+    const passo = screen.getByRole('button', { name: 'Avançar um ciclo' })
+    act(() => {
+      fireEvent.click(passo)
+      fireEvent.click(passo)
+      fireEvent.click(passo)
+    })
+
+    expect(screen.getByText('Ciclo 3')).toBeInTheDocument()
+  })
+
   it('CA-8: simulação ativa congela a edição (Inserir degrau desabilitado) e deixa Compilar/Gravar indisponíveis com o motivo; sair devolve os três', async () => {
     window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
     const usuario = userEvent.setup()
