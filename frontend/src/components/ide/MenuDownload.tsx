@@ -19,7 +19,7 @@ import { Download } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
 export interface OpcaoDownload {
-  id: 'ld' | 'st'
+  id: 'ld' | 'st' | 'plcopen'
   /** Ex.: "Ladder (.json)", "Structured Text (.st)". */
   rotulo: string
   /** Definida, a opção fica desabilitada e mostra o motivo (visível e no `title`). */

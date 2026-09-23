@@ -1,0 +1,28 @@
+# Fixture diferencial de saidas_paralelas.st (revisão aditiva 2026-09-22).
+# Um degrau, uma condição, duas bobinas na coluna terminal (linhas 0 e 1).
+
+st = "saidas_paralelas.st"
+descricao = "entrada NA aciona saida_a e saida_b com a mesma expressão."
+ciclos = 3
+
+[[entradas]]
+de = 1
+ate = 2
+valores = { "%IX0.0" = false }
+
+[[entradas]]
+de = 3
+ate = 3
+valores = { "%IX0.0" = true }
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = { "%QX0.0" = false, "%QX0.1" = false }
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = { "%QX0.0" = false, "%QX0.1" = false }
+
+[[saidas_esperadas]]
+ciclo = 3
+valores = { "%QX0.0" = true, "%QX0.1" = true }

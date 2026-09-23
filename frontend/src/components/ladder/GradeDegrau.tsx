@@ -128,6 +128,7 @@ import {
   COLUNAS_POR_DEGRAU,
   COLUNA_TERMINAL,
   ehCtu,
+  ehRamoDeSaida,
   variavelDoElemento,
   type Celula,
   type Elemento,
@@ -192,8 +193,11 @@ export type Previa =
 /** Prévia de redimensionamento da alça de um ramo (D-14): calculada por
  * `EditorLadder` chamando `redimensionarRamo` sem aplicar, a cada posição
  * (ponteiro) ou tecla (←/→) reportada por este componente. */
+export type PontaAlcaRamo = 'inicio' | 'fim'
+
 export interface PreviaAlca {
   ramoId: string
+  colunaInicio: number
   colunaFim: number
   valido: boolean
 }
@@ -232,13 +236,13 @@ export interface GradeDegrauProps {
   aoIniciarArrastoAlca?: (evento: ReactPointerEvent<SVGGElement>, rungId: string, ramoId: string) => void
   /** Reporta, a cada `pointermove` com o botão pressionado sobre a alça, a
    * coluna sob o ponteiro (geometria deste componente — validade é do núcleo). */
-  aoArrastarAlca?: (rungId: string, ramoId: string, coluna: number) => void
+  aoArrastarAlca?: (rungId: string, ramoId: string, coluna: number, ponta: PontaAlcaRamo) => void
   /** `pointerup` com a alça em arrasto: coluna final sob o ponteiro. */
-  aoSoltarAlca?: (rungId: string, ramoId: string, coluna: number) => void
+  aoSoltarAlca?: (rungId: string, ramoId: string, coluna: number, ponta: PontaAlcaRamo) => void
   /** `pointercancel` com a alça em arrasto. */
   aoCancelarAlca?: () => void
   /** Evento de teclado bruto na alça: `EditorLadder` decide Espaço/setas/Esc. */
-  aoTeclarNaAlca?: (evento: KeyboardEvent<SVGGElement>, rungId: string, ramoId: string) => void
+  aoTeclarNaAlca?: (evento: KeyboardEvent<SVGGElement>, rungId: string, ramoId: string, ponta: PontaAlcaRamo) => void
   /** Prévia de redimensionamento da alça em curso (D-14), ou null/ausente. */
   previaAlca?: PreviaAlca | null
   /** Problemas deste degrau (`validarDiagrama`, já filtrados por `rungId`
@@ -493,7 +497,7 @@ export default function GradeDegrau({
   const larguraDisponivel = useLarguraDisponivel(wrapperRef)
   const larguraCelula = Math.max(LARGURA_CELULA_MIN, (larguraDisponivel - MARGEM_ESQUERDA - MARGEM_DIREITA) / COLUNAS_POR_DEGRAU)
 
-  const alcaArrastoRef = useRef<{ rungId: string; ramoId: string; pointerId: number } | null>(null)
+  const alcaArrastoRef = useRef<{ rungId: string; ramoId: string; pointerId: number; ponta: PontaAlcaRamo } | null>(null)
 
   // Arrasto geométrico da alça (D-14): só traduz clientX em número de coluna
   // usando o retângulo do próprio `<svg>` — a validade de cada coluna é
@@ -506,13 +510,13 @@ export default function GradeDegrau({
     function mover(evento: PointerEvent) {
       const pendente = alcaArrastoRef.current
       if (!pendente || evento.pointerId !== pendente.pointerId) return
-      aoArrastarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX))
+      aoArrastarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX), pendente.ponta)
     }
     function soltar(evento: PointerEvent) {
       const pendente = alcaArrastoRef.current
       if (!pendente || evento.pointerId !== pendente.pointerId) return
       alcaArrastoRef.current = null
-      aoSoltarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX))
+      aoSoltarAlca?.(pendente.rungId, pendente.ramoId, coluna(evento.clientX), pendente.ponta)
     }
     function cancelar(evento: PointerEvent) {
       const pendente = alcaArrastoRef.current
@@ -568,9 +572,9 @@ export default function GradeDegrau({
     aoPassarCelula?.(rung.id, null)
   }
 
-  function iniciarAlca(evento: ReactPointerEvent<SVGGElement>, ramoId: string) {
+  function iniciarAlca(evento: ReactPointerEvent<SVGGElement>, ramoId: string, ponta: PontaAlcaRamo) {
     evento.preventDefault()
-    alcaArrastoRef.current = { rungId: rung.id, ramoId, pointerId: evento.pointerId }
+    alcaArrastoRef.current = { rungId: rung.id, ramoId, pointerId: evento.pointerId, ponta }
     aoIniciarArrastoAlca?.(evento, rung.id, ramoId)
   }
 
@@ -578,7 +582,13 @@ export default function GradeDegrau({
    * compartilhada pelos três desenhos. `ehLinhaReset` (tarefa #18) só afeta o
    * rótulo acessível ("reset do contador" em vez de "ramo L") — a célula em
    * si funciona igual às de ramo (focável, soltável, marca elemento). */
-  function celulaGrade(linha: number, coluna: number, ehTerminal: boolean, ramoId?: string, ehLinhaReset?: boolean) {
+  function celulaGrade(
+    linha: number,
+    coluna: number,
+    ehTerminal: boolean,
+    ramoId?: string,
+    ehLinhaReset?: boolean,
+  ) {
     const celula: Celula = { linha, coluna }
     const elemento = encontrarElemento(rung, celula)
     const cx = xDaColuna(coluna)
@@ -757,15 +767,27 @@ export default function GradeDegrau({
     const xIni = xDaColuna(ramo.colunaInicio)
     const xFim = xDaColuna(ramo.colunaFim) + larguraCelula
     const usaEnergizacao = !opts.fantasma && energizacao != null
-    const conectorEsq = estiloTraco(usaEnergizacao ? noEnergizado(energizacao, ramo.linha, ramo.colunaInicio) : false, opts)
-    const conectorDir = estiloTraco(usaEnergizacao ? noEnergizado(energizacao, ramo.linha, ramo.colunaFim + 1) : false, opts)
+    const ramoSaida = ramo.colunaInicio === COLUNA_TERMINAL && ramo.colunaFim === COLUNA_TERMINAL
+    const energiaRamoSaida =
+      ramoSaida && terminalDoRung !== undefined ? (energizacao?.elementos[terminalDoRung.id] ?? false) : undefined
+    const conectorEsq = estiloTraco(
+      usaEnergizacao ? (energiaRamoSaida ?? noEnergizado(energizacao, ramo.linha, ramo.colunaInicio)) : false,
+      opts,
+    )
+    const conectorDir = estiloTraco(
+      usaEnergizacao ? (energiaRamoSaida ?? noEnergizado(energizacao, ramo.linha, ramo.colunaFim + 1)) : false,
+      opts,
+    )
     return (
       <g aria-hidden="true" data-ramo-fantasma={opts.fantasma ? `${ramo.linha}:${ramo.colunaInicio}:${ramo.colunaFim}` : undefined}>
         <line x1={xIni} y1={y0} x2={xIni} y2={y} strokeWidth={conectorEsq.largura} className={conectorEsq.classe} />
         <line x1={xFim} y1={y0} x2={xFim} y2={y} strokeWidth={conectorDir.largura} className={conectorDir.classe} />
         {Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) => {
           const coluna = ramo.colunaInicio + i
-          const seg = estiloTraco(usaEnergizacao ? celulaEnergizada(energizacao, ramo.linha, coluna) : false, opts)
+          const seg = estiloTraco(
+            usaEnergizacao ? (energiaRamoSaida ?? celulaEnergizada(energizacao, ramo.linha, coluna)) : false,
+            opts,
+          )
           return (
             <line
               key={`seg-${coluna}`}
@@ -782,11 +804,13 @@ export default function GradeDegrau({
     )
   }
 
-  function alcaDoRamo(ramo: Ramo) {
+  function alcaDoRamo(ramo: Ramo, ponta: PontaAlcaRamo) {
     const y = yDaLinha(ramo.linha)
-    const x = xDaColuna(ramo.colunaFim) + larguraCelula
-    const marcadoAqui = ramoMarcado === ramo.id
     const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined
+    const colunaInicio = previaAqui?.colunaInicio ?? ramo.colunaInicio
+    const colunaFim = previaAqui?.colunaFim ?? ramo.colunaFim
+    const x = ponta === 'inicio' ? xDaColuna(colunaInicio) : xDaColuna(colunaFim) + larguraCelula
+    const marcadoAqui = ramoMarcado === ramo.id
     const classeAlca = previaAqui
       ? previaAqui.valido
         ? 'fill-ide-previa stroke-ide-previa'
@@ -794,20 +818,26 @@ export default function GradeDegrau({
       : marcadoAqui
         ? 'fill-ide-destaque stroke-ide-destaque'
         : 'fill-ide-elevado stroke-ide-fio'
+    const ariaLabel =
+      ponta === 'inicio'
+        ? `Encolher ou estender início do ramo ${ramo.linha}`
+        : `Estender ou encolher fim do ramo ${ramo.linha}`
+    const valorAgora = ponta === 'inicio' ? colunaInicio + 1 : colunaFim + 1
 
     return (
       <g
-        key={`alca-${ramo.id}`}
+        key={`alca-${ramo.id}-${ponta}`}
         role="slider"
         tabIndex={0}
-        aria-label={`Estender ramo ${ramo.linha}`}
-        aria-valuenow={ramo.colunaFim + 1}
-        aria-valuemin={ramo.colunaInicio + 1}
+        aria-label={ariaLabel}
+        aria-valuenow={valorAgora}
+        aria-valuemin={colunaInicio + 1}
         aria-valuemax={COLUNA_TERMINAL}
         data-alca-ramo={ramo.id}
+        data-alca-ponta={ponta}
         onDragStart={(evento) => evento.preventDefault()}
-        onPointerDown={(evento) => iniciarAlca(evento, ramo.id)}
-        onKeyDown={(evento) => aoTeclarNaAlca?.(evento, rung.id, ramo.id)}
+        onPointerDown={(evento) => iniciarAlca(evento, ramo.id, ponta)}
+        onKeyDown={(evento) => aoTeclarNaAlca?.(evento, rung.id, ramo.id, ponta)}
         className="cursor-ew-resize touch-none select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ide-destaque"
       >
         <circle cx={x} cy={y} r={RAIO_ALCA} strokeWidth={2} className={classeAlca} />
@@ -954,7 +984,9 @@ export default function GradeDegrau({
 
           {rung.ramos.map((ramo) => {
             const previaAqui = previaAlca && previaAlca.ramoId === ramo.id ? previaAlca : undefined
-            const ramoDesenhado = previaAqui ? { ...ramo, colunaFim: previaAqui.colunaFim } : ramo
+            const ramoDesenhado = previaAqui
+              ? { ...ramo, colunaInicio: previaAqui.colunaInicio, colunaFim: previaAqui.colunaFim }
+              : ramo
             return (
               <g key={`traco-${ramo.id}`}>
                 {tracoRamo(ramoDesenhado, previaAqui ? { invalido: !previaAqui.valido } : { marcado: ramoMarcado === ramo.id })}
@@ -966,7 +998,11 @@ export default function GradeDegrau({
           {Array.from({ length: COLUNAS_POR_DEGRAU }, (_, coluna) => celulaGrade(0, coluna, coluna === COLUNA_TERMINAL))}
 
           {rung.ramos.map((ramo) =>
-            Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) => celulaGrade(ramo.linha, ramo.colunaInicio + i, false, ramo.id)),
+            ehRamoDeSaida(ramo)
+              ? celulaGrade(ramo.linha, COLUNA_TERMINAL, true, ramo.id)
+              : Array.from({ length: ramo.colunaFim - ramo.colunaInicio + 1 }, (_, i) =>
+                  celulaGrade(ramo.linha, ramo.colunaInicio + i, false, ramo.id),
+                ),
           )}
 
           {/* Células da linha de reset (tarefa #18): colunas de contato,
@@ -977,7 +1013,9 @@ export default function GradeDegrau({
           {ctuDoRung &&
             Array.from({ length: COLUNA_TERMINAL }, (_, coluna) => celulaGrade(ctuDoRung.linhaReset, coluna, false, undefined, true))}
 
-          {rung.ramos.map((ramo) => alcaDoRamo(ramo))}
+          {rung.ramos
+            .filter((ramo) => !ehRamoDeSaida(ramo))
+            .flatMap((ramo) => [alcaDoRamo(ramo, 'inicio'), alcaDoRamo(ramo, 'fim')])}
         </svg>
       </div>
     </div>

@@ -34,8 +34,10 @@
 
 import {
   COLUNA_TERMINAL,
+  ehBobina,
   ehContato,
   ehCtu,
+  ehRamoDeSaida,
   ehTerminal,
   variavelDoElemento,
   type Diagrama,
@@ -310,6 +312,7 @@ function construirArestas(rung: Rung): Aresta[] {
     (a, b) => a.colunaInicio - b.colunaInicio || a.linha - b.linha,
   )
   for (const ramo of ramosOrdenados) {
+    if (ehRamoDeSaida(ramo)) continue
     const termosDaSerie: Termo[] = []
     for (let coluna = ramo.colunaInicio; coluna <= ramo.colunaFim; coluna++) {
       termosDaSerie.push(termoDaCelula(rung, ramo.linha, coluna))
@@ -512,11 +515,17 @@ interface DegrauEmitido {
  * partir de um diagrama estruturalmente incompleto, mesmo fora dos dois
  * casos (variável nula/inexistente) que o plano cita explicitamente.
  */
+function bobinasNaColunaTerminal(rung: Rung): Elemento[] {
+  return rung.elementos
+    .filter((e) => e.celula.coluna === COLUNA_TERMINAL && ehBobina(e.tipo))
+    .sort((a, b) => a.celula.linha - b.celula.linha)
+}
+
 function emitirDegrau(rung: Rung, indiceDegrau: number): { ok: true; valor: DegrauEmitido } | { ok: false; motivo: string } {
-  const elementoTerminal = rung.elementos.find(
-    (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL,
+  const elementoPrincipal = rung.elementos.find(
+    (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
   )
-  if (elementoTerminal === undefined || !ehTerminal(elementoTerminal.tipo)) {
+  if (elementoPrincipal === undefined) {
     return {
       ok: false,
       motivo: `degrau ${indiceDegrau + 1} não termina num terminal (bobina ou CTU) — diagrama estruturalmente inválido para serialização`,
@@ -525,9 +534,14 @@ function emitirDegrau(rung: Rung, indiceDegrau: number): { ok: true; valor: Degr
 
   const termo = calcularExpressaoDoDegrau(rung)
   const expressao = renderizarTermo(termo)
-  const linhasDoTerminal = ehCtu(elementoTerminal)
-    ? emitirCtu(rung, elementoTerminal, expressao)
-    : emitirBobina(elementoTerminal.tipo as TipoBobina, variavelDoElemento(elementoTerminal) as string, expressao)
+  let linhasDoTerminal: string[]
+  if (ehCtu(elementoPrincipal)) {
+    linhasDoTerminal = emitirCtu(rung, elementoPrincipal, expressao)
+  } else {
+    linhasDoTerminal = bobinasNaColunaTerminal(rung).flatMap((bobina) =>
+      emitirBobina(bobina.tipo as TipoBobina, variavelDoElemento(bobina) as string, expressao),
+    )
+  }
   const linhas = [`  (* degrau ${indiceDegrau + 1} *)`, ...linhasDoTerminal]
 
   return { ok: true, valor: { linhas, rungId: rung.id } }

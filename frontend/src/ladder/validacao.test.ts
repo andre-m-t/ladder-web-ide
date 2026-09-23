@@ -36,6 +36,16 @@ describe('posicaoValida', () => {
     expect(posicaoValida(rung, 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })).toBe(true)
     expect(posicaoValida(rung, 'bobina', { linha: 0, coluna: 0 })).toBe(false)
     expect(posicaoValida(rung, 'bobina', { linha: 1, coluna: COLUNA_TERMINAL })).toBe(false)
+    expect(posicaoValida(rung, 'bobina', { linha: LINHAS_EXTRAS_MAX + 1, coluna: COLUNA_TERMINAL })).toBe(false)
+
+    const comRamoSaida = {
+      ...rung,
+      ramos: [{ id: 'rs1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL }],
+    }
+    expect(posicaoValida(comRamoSaida, 'bobina', { linha: 1, coluna: COLUNA_TERMINAL })).toBe(true)
+
+    const semTerminal = { id: 'r0', elementos: [], ramos: [] }
+    expect(posicaoValida(semTerminal, 'bobina', { linha: 1, coluna: COLUNA_TERMINAL })).toBe(false)
   })
 
   it('contato em qualquer coluna antes de COLUNA_TERMINAL', () => {
@@ -96,7 +106,7 @@ describe('motivoPosicaoInvalida — explica a regra, sempre 1-based, nunca linha
     const motivo = motivoPosicaoInvalida(0, rung, 'bobina', { linha: 0, coluna: 0 })
     expect(motivo).toMatch(/posição inválida/i)
     expect(motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
-    expect(motivo).toContain('trilho principal')
+    expect(motivo).toContain('última coluna')
     expect(motivo).not.toMatch(/linha=|coluna=/)
   })
 
@@ -235,7 +245,7 @@ describe('validarDiagrama — um código por vez', () => {
     )
     // mensagem explica a regra (bobina só no trilho principal), 1-based, sem linha=/coluna=
     expect(problema?.mensagem).toMatch(/posição inválida/i)
-    expect(problema?.mensagem).toContain('trilho principal')
+    expect(problema?.mensagem).toContain('última coluna')
     expect(problema?.mensagem).not.toMatch(/linha=|coluna=/)
   })
 

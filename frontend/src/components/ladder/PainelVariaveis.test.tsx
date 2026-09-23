@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -61,9 +61,17 @@ const DIAGRAMA_COM_CTU: Diagrama = {
  * de uma operação bem-sucedida (variável nova na lista...). `aoRecusar` é
  * opcional (tarefa #25) — o espião default é um `vi.fn()` descartável para
  * os testes que não olham a recusa. */
-function Wrapper({ inicial, aoRecusar }: { inicial: Diagrama; aoRecusar?: (motivo: string) => void }) {
+function Wrapper({
+  inicial,
+  aoRecusar,
+  simulacaoAtiva,
+}: {
+  inicial: Diagrama
+  aoRecusar?: (motivo: string) => void
+  simulacaoAtiva?: boolean
+}) {
   const [diagrama, setDiagrama] = useState(inicial)
-  return <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} aoRecusar={aoRecusar} />
+  return <PainelVariaveis diagrama={diagrama} aoMudar={setDiagrama} aoRecusar={aoRecusar} simulacaoAtiva={simulacaoAtiva} />
 }
 
 describe('PainelVariaveis — preenche a altura do painel', () => {
@@ -238,7 +246,74 @@ describe('PainelVariaveis — passagem cega de valores/aoAcionar/ciclo (spec 004
 })
 
 describe('PainelVariaveis — tokens de tema', () => {
-  it('não usa classes de cor fixas do Tailwind (slate/sky/red/emerald/amber)', () => {
+  it('não usa classes de cor fixas do Tailwind (slate|sky|red|emerald|amber)', () => {
     expect(codigoFonte).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
+  })
+})
+
+describe('PainelVariaveis — bloqueio durante a simulação (revisão 2026-09-23, simetria com o contrato de E/S do ambiente)', () => {
+  it('sem `simulacaoAtiva`, criar continua funcionando (comportamento de sempre)', async () => {
+    const usuario = userEvent.setup()
+    render(<Wrapper inicial={diagramaVazio()} />)
+
+    await usuario.type(screen.getByLabelText('Nome da nova variável'), 'x')
+    await usuario.click(screen.getByRole('button', { name: 'Adicionar' }))
+
+    expect(screen.getByLabelText('Nome da variável x')).toBeInTheDocument()
+  })
+
+  it('com `simulacaoAtiva`, o botão "Adicionar" fica desabilitado e tentar criar chama aoRecusar sem mudar o diagrama', async () => {
+    const aoRecusar = vi.fn()
+    render(<Wrapper inicial={diagramaVazio()} aoRecusar={aoRecusar} simulacaoAtiva />)
+
+    const nome = screen.getByLabelText('Nome da nova variável')
+    await userEvent.setup().type(nome, 'x')
+    const botao = screen.getByRole('button', { name: 'Adicionar' })
+    expect(botao).toBeDisabled()
+
+    // defesa em profundidade: mesmo que a UI seja contornada, `aoDeclarar` recusa antes do núcleo
+    fireEvent.click(botao)
+    expect(aoRecusar).not.toHaveBeenCalled()
+    expect(screen.queryByLabelText('Nome da variável x')).not.toBeInTheDocument()
+  })
+
+  it('com `simulacaoAtiva`, renomear (Enter) fica bloqueado: o núcleo não é chamado e o nome não muda', async () => {
+    render(<Wrapper inicial={DIAGRAMA_COM_X} simulacaoAtiva />)
+
+    const input = screen.getByLabelText('Nome da variável x')
+    expect(input).toBeDisabled()
+
+    fireEvent.change(input, { target: { value: 'y' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(screen.getByLabelText('Nome da variável x')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Nome da variável y')).not.toBeInTheDocument()
+  })
+
+  it('com `simulacaoAtiva`, "Remover" fica desabilitado e a variável continua', () => {
+    render(<Wrapper inicial={DIAGRAMA_COM_X} simulacaoAtiva />)
+
+    const botaoRemover = screen.getByRole('button', { name: 'Remover variável x' })
+    expect(botaoRemover).toBeDisabled()
+
+    fireEvent.click(botaoRemover)
+    expect(screen.getByLabelText('Nome da variável x')).toBeInTheDocument()
+  })
+
+  it('com `simulacaoAtiva`, "Alterar pino" fica desabilitado — trocar pino/classe fica inalcançável', () => {
+    render(<Wrapper inicial={DIAGRAMA_COM_X} simulacaoAtiva />)
+
+    const botaoPino = screen.getByRole('button', { name: 'Alterar pino de x' })
+    expect(botaoPino).toBeDisabled()
+
+    fireEvent.click(botaoPino)
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+  })
+
+  it('com `simulacaoAtiva`, a leitura continua disponível: a linha da variável aparece normalmente', () => {
+    render(<Wrapper inicial={DIAGRAMA_COM_X} simulacaoAtiva />)
+
+    expect(screen.getByLabelText('Nome da variável x')).toHaveValue('x')
+    expect(screen.getByText('1 declarada')).toBeInTheDocument()
   })
 })

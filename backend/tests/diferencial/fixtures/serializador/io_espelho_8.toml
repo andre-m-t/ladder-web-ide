@@ -1,0 +1,143 @@
+# Fixture diferencial do cenario IO_ESPELHO_8 (fixture de bancada, revisao
+# aditiva 2026-09-21 -- ver o JSDoc de IO_ESPELHO_8 em
+# frontend/src/ladder/fixtures.ts).
+# Ver backend/tests/diferencial/README.md para o formato.
+#
+# io_espelho_8.st e "saidaN := entradaN;" para n = 0..7, todo ciclo -- oito
+# copias independentes de io_espelho.st, uma por par. Sem estado, sem
+# contador: cada %QX0.n tem que seguir %IX0.n NO MESMO ciclo.
+#
+# Motivo desta fixture (nao um exercicio do modelo -- um gabarito de
+# bancada): os doze GPIOs acrescentados na pinagem 8+8 (revisao 2026-09-17,
+# tudo alem de %IX0.0/%IX0.1 e %QX0.0/%QX0.1) nunca foram exercitados por
+# nenhum programa de referencia ate aqui. O passo "entradas e saidas contra
+# tabela-verdade" do Dia do Hardware precisa de um programa que acione os 16
+# pinos e de um gabarito MEDIDO (este arquivo, comparado ciclo a ciclo contra
+# o HostRunnerExecutor), nao de uma tabela-verdade feita a mao.
+#
+# Padrao de entrada: caminhada de 1 bit (um par por vez, do bit 0 ao bit 7),
+# depois todos ligados, depois todos desligados -- cada um dos 8 pares fica
+# distinguivel dos outros 7 em pelo menos um ciclo, e os dois extremos (tudo
+# 0, tudo 1) ficam cobertos.
+#
+# Gabarito denso, ciclo a ciclo (espelho: saida = entrada no mesmo ciclo):
+# ciclo  1: todas as entradas em 0                    -> todas as saidas em 0.
+# ciclo  2: so %IX0.0 em 1 (bit 0)                     -> so %QX0.0 em 1.
+# ciclo  3: so %IX0.1 em 1 (bit 1)                     -> so %QX0.1 em 1.
+# ciclo  4: so %IX0.2 em 1 (bit 2)                     -> so %QX0.2 em 1.
+# ciclo  5: so %IX0.3 em 1 (bit 3)                     -> so %QX0.3 em 1.
+# ciclo  6: so %IX0.4 em 1 (bit 4)                     -> so %QX0.4 em 1.
+# ciclo  7: so %IX0.5 em 1 (bit 5)                     -> so %QX0.5 em 1.
+# ciclo  8: so %IX0.6 em 1 (bit 6)                     -> so %QX0.6 em 1.
+# ciclo  9: so %IX0.7 em 1 (bit 7)                     -> so %QX0.7 em 1.
+# ciclo 10: todas as entradas em 1                     -> todas as saidas em 1.
+# ciclo 11: todas as entradas em 0 (volta a baseline)  -> todas as saidas em 0.
+#
+# saida_exata = true: cada ponto de verificacao lista os 8 %QX0.n -- um
+# executor que acender um pino fora do que o gabarito preve para aquele
+# ciclo (ex.: vazamento entre pares) tambem reprova, nao so a ausencia do
+# pino esperado.
+
+st = "io_espelho_8.st"
+descricao = "saidaN := entradaN para n=0..7 -- espelho dos 16 pinos localizados, caminhada de 1 bit + extremos."
+ciclos = 11
+saida_exata = true
+
+[[entradas]]
+de = 1
+ate = 1
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 2
+ate = 2
+valores = { "%IX0.0" = true, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 3
+ate = 3
+valores = { "%IX0.0" = false, "%IX0.1" = true, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 4
+ate = 4
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = true, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 5
+ate = 5
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = true, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 6
+ate = 6
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = true, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 7
+ate = 7
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = true, "%IX0.6" = false, "%IX0.7" = false }
+
+[[entradas]]
+de = 8
+ate = 8
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = true, "%IX0.7" = false }
+
+[[entradas]]
+de = 9
+ate = 9
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = true }
+
+[[entradas]]
+de = 10
+ate = 10
+valores = { "%IX0.0" = true, "%IX0.1" = true, "%IX0.2" = true, "%IX0.3" = true, "%IX0.4" = true, "%IX0.5" = true, "%IX0.6" = true, "%IX0.7" = true }
+
+[[entradas]]
+de = 11
+ate = 11
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = false, "%IX0.4" = false, "%IX0.5" = false, "%IX0.6" = false, "%IX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 1
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 2
+valores = { "%QX0.0" = true, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 3
+valores = { "%QX0.0" = false, "%QX0.1" = true, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 4
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = true, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 5
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = true, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 6
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = true, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 7
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = true, "%QX0.6" = false, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 8
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = true, "%QX0.7" = false }
+
+[[saidas_esperadas]]
+ciclo = 9
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = true }
+
+[[saidas_esperadas]]
+ciclo = 10
+valores = { "%QX0.0" = true, "%QX0.1" = true, "%QX0.2" = true, "%QX0.3" = true, "%QX0.4" = true, "%QX0.5" = true, "%QX0.6" = true, "%QX0.7" = true }
+
+[[saidas_esperadas]]
+ciclo = 11
+valores = { "%QX0.0" = false, "%QX0.1" = false, "%QX0.2" = false, "%QX0.3" = false, "%QX0.4" = false, "%QX0.5" = false, "%QX0.6" = false, "%QX0.7" = false }

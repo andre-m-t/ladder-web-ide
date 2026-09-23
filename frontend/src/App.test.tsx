@@ -714,7 +714,7 @@ describe('App — modo simulação (spec 004, tarefa #11)', () => {
 
     await usuario.click(botaoSimular)
     expect(screen.queryByRole('button', { name: 'Sair da simulação' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Avançar um ciclo' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Avançar um ciclo' })).toBeDisabled()
   })
 
   it('CA-7 (também via BarraSuperior): projeto ST — "Simular" some do lugar certo? Não: fica visível e desabilitado com o motivo, nunca escondido', async () => {
@@ -871,5 +871,80 @@ describe('App — modo simulação (spec 004, tarefa #11)', () => {
 
     await usuario.selectOptions(seletorMarcha, 'lenta')
     expect(seletorMarcha).toHaveValue('lenta')
+  })
+
+  it('fechar o ambiente encerra a simulação ativa e restaura o painel de variáveis', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    await usuario.click(screen.getByRole('button', { name: /abrir ambiente de simulação/i }))
+    const modal = screen.getByRole('dialog', { name: /^ambiente de simulação$/i })
+    await usuario.click(within(modal).getByRole('button', { name: /^abrir ambiente$/i }))
+    expect(screen.getByRole('complementary', { name: /painel de ambiente/i })).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    expect(screen.getByRole('button', { name: 'Sair da simulação' })).toBeInTheDocument()
+
+    const painelAmbiente = screen.getByRole('complementary', { name: /painel de ambiente/i })
+    await usuario.click(within(painelAmbiente).getByRole('button', { name: /fechar ambiente/i }))
+    expect(screen.queryByRole('complementary', { name: /painel de ambiente/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Simular' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: /painel de variáveis/i })).toBeInTheDocument()
+  })
+
+  async function abrirAmbiente(usuario: UserEvent) {
+    await usuario.click(screen.getByRole('button', { name: /abrir ambiente de simulação/i }))
+    const modal = screen.getByRole('dialog', { name: /^ambiente de simulação$/i })
+    await usuario.click(within(modal).getByRole('button', { name: /^abrir ambiente$/i }))
+    return screen.getByRole('complementary', { name: /painel de ambiente/i })
+  }
+
+  it('cria a variável de um ponto pelo contrato do ambiente, com Desfazer (revisão 2026-09-23)', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const painel = await abrirAmbiente(usuario)
+    await usuario.click(within(painel).getByRole('button', { name: 'Criar variável para Abrir (%IX0.0)' }))
+    const dialogo = screen.getByRole('dialog', { name: 'Nova variável' })
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Criar variável' }))
+
+    expect(within(painel).queryByRole('button', { name: 'Criar variável para Abrir (%IX0.0)' })).not.toBeInTheDocument()
+    expect(within(painel).getByText('abrir')).toBeInTheDocument()
+    const salvo = JSON.parse(window.localStorage.getItem(CHAVE_PROJETO) as string) as Projeto
+    expect(salvo.linguagem === 'ld' && salvo.diagrama.variaveis).toContainEqual({ nome: 'abrir', tipo: 'BOOL', endereco: '%IX0.0' })
+
+    await usuario.click(screen.getByRole('button', { name: 'Desfazer' }))
+    expect(within(painel).getByRole('button', { name: 'Criar variável para Abrir (%IX0.0)' })).toBeInTheDocument()
+  })
+
+  it('"Criar todas" completa o contrato numa única entrada do histórico', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const painel = await abrirAmbiente(usuario)
+    await usuario.click(within(painel).getByRole('button', { name: /criar todas/i }))
+    expect(within(painel).queryByRole('button', { name: /^criar variável para/i })).not.toBeInTheDocument()
+    expect(within(painel).getByText('motor_sobe')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Desfazer' }))
+    expect(within(painel).getAllByRole('button', { name: /^criar variável para/i }).length).toBeGreaterThan(1)
+  })
+
+  it('com a simulação ativa, criar variável pelo contrato fica desabilitado', async () => {
+    window.localStorage.setItem(CHAVE_PROJETO, JSON.stringify(projetoLD(IO_ESPELHO)))
+    const usuario = userEvent.setup()
+    render(<App />)
+    await screen.findByLabelText(/Degrau 1, coluna 1/)
+
+    const painel = await abrirAmbiente(usuario)
+    await usuario.click(screen.getByRole('button', { name: 'Simular' }))
+    expect(within(painel).getByRole('button', { name: 'Criar variável para Abrir (%IX0.0)' })).toBeDisabled()
+    expect(within(painel).getByRole('button', { name: /criar todas/i })).toBeDisabled()
   })
 })

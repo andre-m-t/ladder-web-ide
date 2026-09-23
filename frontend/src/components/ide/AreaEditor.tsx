@@ -22,6 +22,7 @@
 import EditorST from '../EditorST'
 import PainelErro from '../PainelErro'
 import EditorLadder from '../ladder/EditorLadder'
+import type { PontoAmbiente } from '../../ambientes/contrato'
 import type { ErroCompilacao, ErroHttpCompilacao, ErroRedeCompilacao } from '../../lib/api'
 import type { Problema } from '../../ladder/validacao'
 import type { EnergizacaoDegrau } from '../../ladder/simulacao'
@@ -57,6 +58,10 @@ export interface AreaEditorProps {
   /** Energização por degrau da simulação em curso (RF-6, RF-14) — repassada
    * crua a `EditorLadder`; `null`/ausente é "sem simulação". */
   simulacao?: { energizacao: Record<string, EnergizacaoDegrau> } | null
+  /** Pontos do ambiente aberto (spec 005, revisão 2026-09-23) — repassados
+   * crus a `EditorLadder`, que os usa só para sugerir nome e rotular pinos
+   * ao criar variável pelo elemento. */
+  pontosAmbiente?: readonly PontoAmbiente[]
 }
 
 export default function AreaEditor({
@@ -69,6 +74,7 @@ export default function AreaEditor({
   aoRecusar,
   congelado,
   simulacao,
+  pontosAmbiente,
 }: AreaEditorProps) {
   return (
     <div className="min-w-0 flex-1 overflow-auto bg-ide-fundo p-4">
@@ -81,6 +87,7 @@ export default function AreaEditor({
           aoRecusar={aoRecusar}
           congelado={congelado}
           simulacao={simulacao}
+          pontosAmbiente={pontosAmbiente}
         />
       )}
 

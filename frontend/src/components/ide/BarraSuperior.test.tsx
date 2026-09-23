@@ -19,18 +19,6 @@ function propsBase(): BarraSuperiorProps {
       { id: 'st', rotulo: 'Structured Text (.st)' },
     ],
     aoBaixar: vi.fn(),
-    simulando: false,
-    simulacaoRodando: false,
-    aoAlternarSimulacao: vi.fn(),
-    aoAlternarExecucaoSimulacao: vi.fn(),
-    aoPassoSimulacao: vi.fn(),
-    aoReiniciarSimulacao: vi.fn(),
-    marchas: [
-      { id: 'tempo-real', rotulo: 'Tempo real (20 ms/ciclo)' },
-      { id: 'lenta', rotulo: 'Marcha lenta (500 ms/ciclo)' },
-    ],
-    marchaAtual: 'tempo-real',
-    aoEscolherMarcha: vi.fn(),
     painelVariaveisAberto: true,
     aoAlternarPainelVariaveis: vi.fn(),
     painelInferiorAberto: true,
@@ -41,6 +29,11 @@ function propsBase(): BarraSuperiorProps {
 }
 
 describe('BarraSuperior', () => {
+  it('não mostra o rótulo de marca LadderFlow', () => {
+    render(<BarraSuperior {...propsBase()} />)
+    expect(screen.queryByText(/^ladderflow$/i)).not.toBeInTheDocument()
+  })
+
   it('mostra o título do projeto (truncado, com atributo title) e o chip da linguagem', () => {
     render(<BarraSuperior {...propsBase()} titulo="Esteira 1" linguagem="ld" />)
 
@@ -55,6 +48,46 @@ describe('BarraSuperior', () => {
 
     rerender(<BarraSuperior {...propsBase()} linguagem="st" />)
     expect(screen.queryByRole('button', { name: /alternar painel de variáveis/i })).not.toBeInTheDocument()
+  })
+
+  it('desabilita o painel de variáveis quando o ambiente ocupa o painel lateral', () => {
+    render(
+      <BarraSuperior
+        {...propsBase()}
+        motivoPainelVariaveisIndisponivel="Feche o ambiente para ver as variáveis"
+      />,
+    )
+
+    const botao = screen.getByRole('button', { name: /alternar painel de variáveis/i })
+    expect(botao).toBeDisabled()
+    expect(botao).toHaveAttribute('title', 'Feche o ambiente para ver as variáveis')
+  })
+
+  it('botões Desfazer e Refazer na barra chamam os callbacks quando habilitados', async () => {
+    const usuario = userEvent.setup()
+    const aoDesfazer = vi.fn()
+    const aoRefazer = vi.fn()
+    render(
+      <BarraSuperior
+        {...propsBase()}
+        podeDesfazer
+        podeRefazer
+        aoDesfazer={aoDesfazer}
+        aoRefazer={aoRefazer}
+      />,
+    )
+
+    await usuario.click(screen.getByRole('button', { name: 'Desfazer' }))
+    await usuario.click(screen.getByRole('button', { name: 'Refazer' }))
+    expect(aoDesfazer).toHaveBeenCalledTimes(1)
+    expect(aoRefazer).toHaveBeenCalledTimes(1)
+  })
+
+  it('Desfazer e Refazer ficam desabilitados durante simulação (historicoEdicaoDesabilitado)', () => {
+    render(<BarraSuperior {...propsBase()} podeDesfazer podeRefazer historicoEdicaoDesabilitado />)
+
+    expect(screen.getByRole('button', { name: 'Desfazer' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Refazer' })).toBeDisabled()
   })
 
   it('clicar em "Novo projeto" chama aoNovoProjeto', async () => {

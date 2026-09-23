@@ -91,7 +91,8 @@ async function inserirEVincular(page: Page, rotuloItem: string, rotuloCelulaVazi
   await celula.click()
   const dialogo = page.getByRole('dialog')
   await expect(dialogo).toBeVisible()
-  await dialogo.getByRole('button', { name: new RegExp(`^${nomeVariavel} `, 'i') }).click()
+  await dialogo.getByRole('combobox').selectOption(nomeVariavel)
+  await dialogo.getByRole('button', { name: 'Fechar' }).click()
   await expect(dialogo).toHaveCount(0)
 }
 

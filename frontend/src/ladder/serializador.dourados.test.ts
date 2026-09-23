@@ -29,7 +29,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BLINK, IO_ESPELHO, MINIMAL, RAMO_OU, SELO, SET_RESET } from './fixtures'
+import { BLINK, IO_ESPELHO, MINIMAL, PORTAO, RAMO_OU, SAIDAS_PARALELAS, SELO, SET_RESET } from './fixtures'
 import { serializar } from './serializador'
 
 // Caminho relativo ao próprio arquivo de teste — `toMatchFileSnapshot`
@@ -49,6 +49,8 @@ describe('arquivos dourados (D-11) — ponte TS -> pytest', () => {
     ['set_reset', SET_RESET],
     ['selo', SELO],
     ['blink', BLINK],
+    ['portao', PORTAO],
+    ['saidas_paralelas', SAIDAS_PARALELAS],
   ] as const)('%s: o texto serializado bate com o arquivo dourado', async (nome, diagrama) => {
     const resultado = serializar(diagrama)
     expect(resultado.ok).toBe(true)

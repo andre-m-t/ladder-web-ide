@@ -49,6 +49,17 @@
  * recusa do núcleo (nome duplicado, endereço em uso...) é responsabilidade de
  * `PainelVariaveis`, via `aoRecusar`; este componente não sabe nada sobre
  * recusa nenhuma.
+ *
+ * **Bloqueio durante a simulação (spec 002, revisão 2026-09-23 — simetria
+ * com o contrato de E/S do ambiente):** `simulacaoAtiva` desabilita a linha
+ * "Adicionar" inteira, o campo de nome, o botão "Alterar pino" e "Remover"
+ * de cada linha existente — a leitura (nomes, uso, pino, valor, mapa de
+ * pinos) continua sempre disponível, só a mutação é bloqueada. Cada controle
+ * desabilitado leva `title` com o motivo (`MOTIVO_SIMULACAO_*`, exportados
+ * para `PainelVariaveis` reusar na recusa defensiva). Antes desta revisão, a
+ * tabela era a única superfície do app que ainda liberava
+ * criar/renomear/repinar/remover variável durante a simulação — assimetria
+ * registrada em `.claude/state.md` sob a F9.
  */
 import {
   useEffect,
@@ -83,10 +94,25 @@ export interface TabelaVariaveisProps {
   /** Ciclos decorridos da simulação (RF-13) — mostrado no cabeçalho só
    * quando definido (simulação ativa); ausente é o cabeçalho de hoje. */
   ciclo?: number
+  enderecosComandadosPelaPlanta?: readonly string[]
+  motivoEntradaPlanta?: string
   aoDeclarar: (v: { nome: string; endereco?: string }) => void
   aoAtualizar: (nomeAtual: string, v: { nome: string; endereco?: string }) => void
   aoRemover: (nome: string) => void
+  /** Simulação ativa (spec 004, Q-7) — desabilita criar, renomear, trocar
+   * pino e remover (revisão 2026-09-23); ausente/`false` é o comportamento
+   * de sempre. A leitura nunca é bloqueada. */
+  simulacaoAtiva?: boolean
 }
+
+/** Motivos do bloqueio durante a simulação — mesmo padrão de frase do
+ * contrato de E/S do ambiente (`App.tsx`, `MOTIVO_CRIACAO_EM_SIMULACAO`:
+ * "Saia da simulação para criar variáveis"), um por verbo para o `title`
+ * ficar específico da ação bloqueada. Exportados para `PainelVariaveis`
+ * usar na recusa defensiva (`aoRecusar`), sem duplicar o texto. */
+export const MOTIVO_SIMULACAO_CRIAR = 'Saia da simulação para criar variáveis'
+export const MOTIVO_SIMULACAO_EDITAR = 'Saia da simulação para editar variáveis'
+export const MOTIVO_SIMULACAO_REMOVER = 'Saia da simulação para remover variáveis'
 
 type ClasseFiltro = ClasseVariavel | 'todas'
 
@@ -168,6 +194,10 @@ function OpcoesPino({ variaveis, ignorarNome }: { variaveis: Variavel[]; ignorar
 interface SeletorClasseProps {
   valor: ClasseVariavel
   aoMudar: (classe: ClasseVariavel) => void
+  /** Bloqueado durante a simulação (revisão 2026-09-23) — as três opções
+   * ficam com `disabled` e o `title` do motivo, sem sumir do DOM. */
+  desabilitado?: boolean
+  motivoBloqueio?: string
 }
 
 const OPCOES_CLASSE: { valor: ClasseVariavel; rotulo: string }[] = [
@@ -184,7 +214,7 @@ const OPCOES_CLASSE: { valor: ClasseVariavel; rotulo: string }[] = [
  * `flex-wrap` (achado na verificação em Chromium real, painel lateral
  * estreito): sem ele, os três botões vazavam da própria célula da tabela e
  * sobrepunham o `<select>` de Pino ao lado, roubando o clique. */
-function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
+function SeletorClasse({ valor, aoMudar, desabilitado, motivoBloqueio }: SeletorClasseProps) {
   const grupoRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -195,6 +225,7 @@ function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
   }, [valor])
 
   function aoTeclar(evento: KeyboardEvent<HTMLDivElement>) {
+    if (desabilitado) return
     const indiceAtual = OPCOES_CLASSE.findIndex((o) => o.valor === valor)
     if (evento.key === 'ArrowRight' || evento.key === 'ArrowDown') {
       evento.preventDefault()
@@ -210,6 +241,7 @@ function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
       ref={grupoRef}
       role="radiogroup"
       aria-label="Classe da nova variável"
+      aria-disabled={desabilitado || undefined}
       onKeyDown={aoTeclar}
       className="flex flex-wrap gap-1"
     >
@@ -221,12 +253,15 @@ function SeletorClasse({ valor, aoMudar }: SeletorClasseProps) {
             type="button"
             role="radio"
             aria-checked={marcado}
-            tabIndex={marcado ? 0 : -1}
+            disabled={desabilitado}
+            title={desabilitado ? motivoBloqueio : undefined}
+            tabIndex={desabilitado ? -1 : marcado ? 0 : -1}
             onClick={() => aoMudar(opcao.valor)}
             className={
-              marcado
+              (marcado
                 ? 'rounded bg-ide-destaque px-2 py-1 text-[11px] font-medium text-ide-destaque-texto'
-                : 'rounded border border-ide-borda px-2 py-1 text-[11px] font-medium text-ide-suave hover:bg-ide-elevado'
+                : 'rounded border border-ide-borda px-2 py-1 text-[11px] font-medium text-ide-suave hover:bg-ide-elevado') +
+              ' disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent'
             }
           >
             {opcao.rotulo}
@@ -250,6 +285,7 @@ function ValorCelula({
   nome,
   valor,
   acionavel,
+  tituloBloqueio,
   aoAcionar,
 }: {
   nome: string
@@ -257,6 +293,7 @@ function ValorCelula({
   /** Só variáveis de entrada chegam com isto `true` (decidido por quem
    * monta a linha, via `classeDaVariavel`) — RF-12/CA-9. */
   acionavel?: boolean
+  tituloBloqueio?: string
   aoAcionar?: (nivel: boolean) => void
 }) {
   if (valor === undefined) {
@@ -288,7 +325,11 @@ function ValorCelula({
   }
 
   return (
-    <span aria-label={`Valor de ${nome}: ${valor ? 'verdadeiro' : 'falso'}`} className={classeSeloValor(valor)}>
+    <span
+      title={tituloBloqueio}
+      aria-label={`Valor de ${nome}: ${valor ? 'verdadeiro' : 'falso'}`}
+      className={classeSeloValor(valor)}
+    >
       {valor ? 'TRUE' : 'FALSE'}
     </span>
   )
@@ -312,10 +353,12 @@ function PinoCelula({
   variavel,
   variaveis,
   aoAtualizar,
+  simulacaoAtiva,
 }: {
   variavel: Variavel
   variaveis: Variavel[]
   aoAtualizar: TabelaVariaveisProps['aoAtualizar']
+  simulacaoAtiva?: boolean
 }) {
   const [editando, setEditando] = useState(false)
   const selectRef = useRef<HTMLSelectElement>(null)
@@ -357,8 +400,10 @@ function PinoCelula({
     <button
       type="button"
       onClick={() => setEditando(true)}
+      disabled={simulacaoAtiva}
       aria-label={`Alterar pino de ${variavel.nome}`}
-      className="group flex w-full items-center gap-1 rounded px-0.5 py-0.5 text-left hover:bg-ide-elevado focus:bg-ide-elevado focus:outline-none"
+      title={simulacaoAtiva ? MOTIVO_SIMULACAO_EDITAR : undefined}
+      className="group flex w-full items-center gap-1 rounded px-0.5 py-0.5 text-left hover:bg-ide-elevado focus:bg-ide-elevado focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
     >
       {variavel.endereco === undefined ? (
         <span className="text-ide-suave">—</span>
@@ -384,12 +429,27 @@ interface LinhaVariavelProps {
   /** Repassado só para a variável ser de entrada (`ValorCelula` decide o
    * `role="switch"`) — RF-12/CA-9. */
   aoAcionar?: (nome: string, nivel: boolean) => void
+  bloqueadaPelaPlanta?: boolean
+  motivoBloqueioPlanta?: string
   zebra: boolean
   aoAtualizar: TabelaVariaveisProps['aoAtualizar']
   aoRemover: TabelaVariaveisProps['aoRemover']
+  /** Bloqueia renomear, trocar pino e remover (revisão 2026-09-23). */
+  simulacaoAtiva?: boolean
 }
 
-function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualizar, aoRemover }: LinhaVariavelProps) {
+function LinhaVariavel({
+  variavel,
+  variaveis,
+  valor,
+  aoAcionar,
+  bloqueadaPelaPlanta,
+  motivoBloqueioPlanta,
+  zebra,
+  aoAtualizar,
+  aoRemover,
+  simulacaoAtiva,
+}: LinhaVariavelProps) {
   const [nome, setNome] = useState(variavel.nome)
   /** Marca que o próximo `blur` é efeito do `Esc`, não deve confirmar — o
    * `blur` roda no mesmo fechamento (closure) que leu `nome` antes do
@@ -400,6 +460,10 @@ function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualiz
   function confirmarNome() {
     if (ignorarProximoBlur.current) {
       ignorarProximoBlur.current = false
+      return
+    }
+    if (simulacaoAtiva) {
+      setNome(variavel.nome)
       return
     }
     const novoNome = nome.trim()
@@ -430,7 +494,9 @@ function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualiz
           onChange={(evento) => setNome(evento.target.value)}
           onBlur={confirmarNome}
           onKeyDown={aoTeclarNome}
-          className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto"
+          disabled={simulacaoAtiva}
+          title={simulacaoAtiva ? MOTIVO_SIMULACAO_EDITAR : undefined}
+          className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto disabled:cursor-not-allowed disabled:opacity-60"
         />
       </td>
       <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">BOOL</td>
@@ -438,13 +504,14 @@ function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualiz
         <UsoCelula variavel={variavel} />
       </td>
       <td className="py-1.5 pr-2 align-top">
-        <PinoCelula variavel={variavel} variaveis={variaveis} aoAtualizar={aoAtualizar} />
+        <PinoCelula variavel={variavel} variaveis={variaveis} aoAtualizar={aoAtualizar} simulacaoAtiva={simulacaoAtiva} />
       </td>
       <td className="py-1.5 pr-2 align-top">
         <ValorCelula
           nome={variavel.nome}
           valor={valor}
-          acionavel={classeDaVariavel(variavel) === 'entrada'}
+          acionavel={classeDaVariavel(variavel) === 'entrada' && !bloqueadaPelaPlanta}
+          tituloBloqueio={bloqueadaPelaPlanta ? motivoBloqueioPlanta : undefined}
           aoAcionar={aoAcionar ? (nivel) => aoAcionar(variavel.nome, nivel) : undefined}
         />
       </td>
@@ -452,8 +519,10 @@ function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualiz
         <button
           type="button"
           aria-label={`Remover variável ${variavel.nome}`}
+          title={simulacaoAtiva ? MOTIVO_SIMULACAO_REMOVER : undefined}
           onClick={() => aoRemover(variavel.nome)}
-          className="rounded p-1 text-ide-perigo hover:bg-ide-elevado"
+          disabled={simulacaoAtiva}
+          className="rounded p-1 text-ide-perigo hover:bg-ide-elevado disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           <Trash2 aria-hidden="true" size={14} />
         </button>
@@ -472,9 +541,13 @@ function LinhaVariavel({ variavel, variaveis, valor, aoAcionar, zebra, aoAtualiz
 function LinhaAdicionar({
   variaveis,
   aoDeclarar,
+  simulacaoAtiva,
 }: {
   variaveis: Variavel[]
   aoDeclarar: TabelaVariaveisProps['aoDeclarar']
+  /** Bloqueia a linha inteira (revisão 2026-09-23) — mesmo o campo de nome,
+   * para o Enter não escapar do bloqueio do botão. */
+  simulacaoAtiva?: boolean
 }) {
   const idMotivoSemPino = useId()
   const [nome, setNome] = useState('')
@@ -492,6 +565,7 @@ function LinhaAdicionar({
   }, [classe, variaveis])
 
   function submeter() {
+    if (simulacaoAtiva) return
     const nomeLimpo = nome.trim()
     if (nomeLimpo.length === 0) return
     if (temPino) {
@@ -510,7 +584,7 @@ function LinhaAdicionar({
     }
   }
 
-  const desabilitado = nome.trim().length === 0 || semPinoLivre
+  const desabilitado = nome.trim().length === 0 || semPinoLivre || simulacaoAtiva
 
   return (
     <tr className="border-t border-ide-borda bg-ide-elevado/30">
@@ -522,12 +596,14 @@ function LinhaAdicionar({
           value={nome}
           onChange={(evento) => setNome(evento.target.value)}
           onKeyDown={aoTeclarNome}
-          className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto placeholder:text-ide-suave"
+          disabled={simulacaoAtiva}
+          title={simulacaoAtiva ? MOTIVO_SIMULACAO_CRIAR : undefined}
+          className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 text-sm text-ide-texto placeholder:text-ide-suave disabled:cursor-not-allowed disabled:opacity-60"
         />
       </td>
       <td className="py-1.5 pr-2 align-top font-mono text-xs text-ide-suave">BOOL</td>
       <td className="py-1.5 pr-2 align-top">
-        <SeletorClasse valor={classe} aoMudar={setClasse} />
+        <SeletorClasse valor={classe} aoMudar={setClasse} desabilitado={simulacaoAtiva} motivoBloqueio={MOTIVO_SIMULACAO_CRIAR} />
       </td>
       <td className="py-1.5 pr-2 align-top">
         {temPino ? (
@@ -535,7 +611,8 @@ function LinhaAdicionar({
             aria-label="Pino da nova variável"
             value={endereco}
             onChange={(evento) => setEndereco(evento.target.value)}
-            disabled={semPinoLivre}
+            disabled={semPinoLivre || simulacaoAtiva}
+            title={simulacaoAtiva ? MOTIVO_SIMULACAO_CRIAR : undefined}
             aria-describedby={semPinoLivre ? idMotivoSemPino : undefined}
             className="w-full min-w-0 rounded border border-ide-borda bg-ide-painel p-1 font-mono text-xs text-ide-texto disabled:opacity-50"
           >
@@ -564,6 +641,7 @@ function LinhaAdicionar({
           type="button"
           onClick={submeter}
           disabled={desabilitado}
+          title={simulacaoAtiva ? MOTIVO_SIMULACAO_CRIAR : undefined}
           className="inline-flex items-center gap-1 rounded bg-ide-destaque px-2 py-1 text-xs font-medium text-ide-destaque-texto hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus aria-hidden="true" size={12} />
@@ -648,9 +726,12 @@ export default function TabelaVariaveis({
   valores,
   aoAcionar,
   ciclo,
+  enderecosComandadosPelaPlanta,
+  motivoEntradaPlanta,
   aoDeclarar,
   aoAtualizar,
   aoRemover,
+  simulacaoAtiva,
 }: TabelaVariaveisProps) {
   const [filtro, setFiltro] = useState<ClasseFiltro>('todas')
 
@@ -737,9 +818,16 @@ export default function TabelaVariaveis({
                 variaveis={variaveis}
                 valor={valores?.[variavel.nome]}
                 aoAcionar={aoAcionar}
+                bloqueadaPelaPlanta={
+                  variavel.endereco !== undefined &&
+                  enderecosComandadosPelaPlanta !== undefined &&
+                  enderecosComandadosPelaPlanta.includes(variavel.endereco)
+                }
+                motivoBloqueioPlanta={motivoEntradaPlanta}
                 zebra={indice % 2 === 1}
                 aoAtualizar={aoAtualizar}
                 aoRemover={aoRemover}
+                simulacaoAtiva={simulacaoAtiva}
               />
             ))}
 
@@ -751,7 +839,7 @@ export default function TabelaVariaveis({
               </tr>
             )}
 
-            <LinhaAdicionar variaveis={variaveis} aoDeclarar={aoDeclarar} />
+            <LinhaAdicionar variaveis={variaveis} aoDeclarar={aoDeclarar} simulacaoAtiva={simulacaoAtiva} />
           </tbody>
         </table>
 

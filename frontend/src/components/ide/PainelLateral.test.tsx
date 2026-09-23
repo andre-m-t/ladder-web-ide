@@ -6,7 +6,7 @@ import PainelLateral from './PainelLateral'
 describe('PainelLateral', () => {
   it('aberto=false não renderiza conteúdo nem divisor', () => {
     render(
-      <PainelLateral aberto={false} largura={320} larguraMin={288} larguraMax={640} aoRedimensionar={() => {}}>
+      <PainelLateral aberto={false} rotulo="Painel de variáveis" largura={320} larguraMin={288} larguraMax={640} aoRedimensionar={() => {}}>
         <p>conteúdo</p>
       </PainelLateral>,
     )
@@ -15,9 +15,19 @@ describe('PainelLateral', () => {
     expect(screen.queryByRole('separator')).not.toBeInTheDocument()
   })
 
+  it('usa o rotulo no aria-label do painel', () => {
+    render(
+      <PainelLateral aberto={true} rotulo="Painel de ambiente" largura={320} larguraMin={288} larguraMax={640} aoRedimensionar={() => {}}>
+        <p>conteúdo</p>
+      </PainelLateral>,
+    )
+
+    expect(screen.getByRole('complementary', { name: 'Painel de ambiente' })).toBeInTheDocument()
+  })
+
   it('aberto=true renderiza o conteúdo e o divisor', () => {
     render(
-      <PainelLateral aberto={true} largura={320} larguraMin={288} larguraMax={640} aoRedimensionar={() => {}}>
+      <PainelLateral aberto={true} rotulo="Painel de variáveis" largura={320} larguraMin={288} larguraMax={640} aoRedimensionar={() => {}}>
         <p>conteúdo</p>
       </PainelLateral>,
     )
@@ -29,7 +39,7 @@ describe('PainelLateral', () => {
   it('divisor por teclado redimensiona dentro de mín/máx', () => {
     const aoRedimensionar = vi.fn()
     render(
-      <PainelLateral aberto={true} largura={300} larguraMin={288} larguraMax={640} aoRedimensionar={aoRedimensionar}>
+      <PainelLateral aberto={true} rotulo="Painel de ambiente" largura={300} larguraMin={288} larguraMax={640} aoRedimensionar={aoRedimensionar}>
         <p>conteúdo</p>
       </PainelLateral>,
     )

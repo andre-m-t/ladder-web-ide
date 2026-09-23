@@ -143,6 +143,29 @@ export function motivoPosicaoInvalida(
   const motivoCtu = motivoPosicaoCtu(rung, tipo, celula, onde)
   if (motivoCtu !== undefined) return motivoCtu
 
+  if (ehBobina(tipo)) {
+    if (coluna !== COLUNA_TERMINAL) {
+      return `posição inválida: bobina só pode ficar na última coluna (coluna ${colunaTerminal1Based})`
+    }
+    const ctu = rung.elementos.find(ehCtu)
+    if (ctu !== undefined && linha === ctu.linhaReset) {
+      return `posição inválida: ${onde} é a linha de reinício do contador '${ctu.instancia}' — só aceita contatos`
+    }
+    if (linha > 0) {
+      const principal = rung.elementos.some(
+        (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
+      )
+      if (!principal) {
+        return `posição inválida: saída paralela em ${onde} exige um terminal na linha principal (coluna ${colunaTerminal1Based})`
+      }
+      const ramoSaida = rung.ramos.some((ramo) => ramo.linha === linha && ramo.colunaInicio === COLUNA_TERMINAL && ramo.colunaFim === COLUNA_TERMINAL)
+      if (!ramoSaida) {
+        return `posição inválida: saída paralela em ${onde} exige um ramo de saída na coluna terminal`
+      }
+    }
+    return null
+  }
+
   if (linha > 0) {
     const dentroDeRamo = rung.ramos.some(
       (ramo) => ramo.linha === linha && coluna >= ramo.colunaInicio && coluna <= ramo.colunaFim,
@@ -150,10 +173,6 @@ export function motivoPosicaoInvalida(
     if (!dentroDeRamo) {
       return `posição inválida: ${onde} não tem ramo declarado nessa coluna`
     }
-  }
-  if (ehBobina(tipo)) {
-    if (linha === 0 && coluna === COLUNA_TERMINAL) return null
-    return `posição inválida: bobina só pode ficar na última coluna (coluna ${colunaTerminal1Based}) do trilho principal`
   }
   if (ehContato(tipo)) {
     if (coluna < COLUNA_TERMINAL) return null
@@ -164,12 +183,12 @@ export function motivoPosicaoInvalida(
 
 // -- validarDiagrama ------------------------------------------------------
 
-/** True se algum elemento do rung é um terminal — bobina ou CTU (D-7) — em
- * qualquer posição. Onde o código antes testava só bobina como "tem
- * terminal", passa a usar `ehTerminal` (`modelo.ts`) para que o CTU conte
- * como fechamento válido do degrau, igual a uma bobina. */
-function temTerminal(rung: Rung): boolean {
-  return rung.elementos.some((elemento) => ehTerminal(elemento.tipo))
+/** Terminal principal do degrau: bobina ou CTU na coluna terminal da linha 0. */
+function temTerminalNoTrilho(rung: Rung): boolean {
+  return rung.elementos.some(
+    (elemento) =>
+      elemento.celula.linha === 0 && elemento.celula.coluna === COLUNA_TERMINAL && ehTerminal(elemento.tipo),
+  )
 }
 
 /**
@@ -410,7 +429,7 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
       problemas.push(...validarElemento(indiceDegrau, rung, elemento, diagrama))
     }
 
-    if (!rungAindaNaoComecado(rung) && !temTerminal(rung)) {
+    if (!rungAindaNaoComecado(rung) && !temTerminalNoTrilho(rung)) {
       problemas.push({
         codigo: 'rung_incompleto',
         severidade: 'erro',

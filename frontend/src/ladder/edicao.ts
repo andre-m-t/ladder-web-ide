@@ -8,8 +8,17 @@
  * `role="alert"`, sem alterar o diagrama em edição).
  */
 
-import { COLUNA_TERMINAL, LINHAS_EXTRAS_MAX, ehCtu, ehTerminal, variavelDoElemento } from './modelo'
-import type { Celula, Diagrama, Elemento, ElementoCtu, Ramo, Rung, Variavel } from './modelo'
+import {
+  COLUNA_TERMINAL,
+  LINHAS_EXTRAS_MAX,
+  ehBobina,
+  ehContato,
+  ehCtu,
+  ehRamoDeSaida,
+  ehTerminal,
+  variavelDoElemento,
+} from './modelo'
+import type { Celula, Diagrama, Elemento, ElementoCtu, ElementoSimples, Ramo, Rung, Variavel } from './modelo'
 import { descreverCelula, motivoPosicaoInvalida } from './validacao'
 import { enderecoValido } from './enderecos'
 // Ponto de extensão (D-7): criação e limite do CTU vivem em `ctu.ts`, nunca
@@ -134,7 +143,29 @@ function celulaOcupada(rung: Rung, celula: Celula): boolean {
  * O CTU (tarefa #16, D-7) é terminal como a bobina (`ehTerminal`, `modelo.ts`)
  * e solta na mesma célula fixa, pelo mesmo motivo.
  */
-export function celulaDeSoltura(tipo: Elemento['tipo'], celula: Celula): Celula {
+function linhaTemRamoDeSaida(rung: Rung, linha: number): boolean {
+  return rung.ramos.some((ramo) => ehRamoDeSaida(ramo) && ramo.linha === linha)
+}
+
+export function celulaDeSoltura(
+  tipo: Elemento['tipo'],
+  celula: Celula,
+  rung?: Rung,
+  ignorarElementoId?: string,
+): Celula {
+  if (tipo === 'ctu') {
+    return { linha: 0, coluna: COLUNA_TERMINAL }
+  }
+  if (ehBobina(tipo)) {
+    if (rung !== undefined && ignorarElementoId !== undefined) {
+      const movendo = rung.elementos.find((e) => e.id === ignorarElementoId)
+      if (movendo !== undefined && movendo.celula.coluna === COLUNA_TERMINAL) {
+        return { linha: movendo.celula.linha, coluna: COLUNA_TERMINAL }
+      }
+    }
+    const linhaDestino = rung !== undefined && linhaTemRamoDeSaida(rung, celula.linha) ? celula.linha : 0
+    return { linha: linhaDestino, coluna: COLUNA_TERMINAL }
+  }
   if (ehTerminal(tipo)) {
     return { linha: 0, coluna: COLUNA_TERMINAL }
   }
@@ -351,8 +382,8 @@ export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): R
   if (rungOriginal === undefined) return recusa(`degrau '${rungId}' inexistente`)
   const indiceDegrau = indiceDoRung(diagrama, rungId)
 
-  if (coluna < 0 || coluna >= COLUNA_TERMINAL) {
-    return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+  if (coluna < 0 || coluna > COLUNA_TERMINAL) {
+    return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}, ou a coluna terminal para ramo de saída`)
   }
 
   const ctuDoRung = rungOriginal.elementos.find(ehCtu)
@@ -405,18 +436,27 @@ export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): R
   return sucesso(novoDiagrama)
 }
 
-/** Estica ou encolhe um ramo já existente até `colunaFim` (a alça arrastável
- * do plano D-14). `colunaInicio` nunca muda. */
-export function redimensionarRamo(diagrama: Diagrama, ramoId: string, colunaFim: number): ResultadoEdicao {
+export interface ExtremosRamo {
+  colunaInicio: number
+  colunaFim: number
+}
+
+/** Estica ou encolhe um ramo pelas duas pontas (alças esquerda e direita, D-14). */
+export function redimensionarRamo(diagrama: Diagrama, ramoId: string, extremos: ExtremosRamo): ResultadoEdicao {
   const encontrado = encontrarRamo(diagrama, ramoId)
   if (encontrado === undefined) return recusa(`ramo '${ramoId}' inexistente`)
   const { rung, ramo } = encontrado
   const indiceDegrau = indiceDoRung(diagrama, rung.id)
+  const { colunaInicio, colunaFim } = extremos
 
-  if (colunaFim < ramo.colunaInicio) {
+  if (ehRamoDeSaida(ramo)) {
+    return recusa('ramo de saída não pode ser redimensionado')
+  }
+
+  if (colunaFim < colunaInicio) {
     return recusa(`coluna final do ramo '${ramoId}' não pode ficar antes da coluna inicial`)
   }
-  if (colunaFim >= COLUNA_TERMINAL) {
+  if (colunaFim >= COLUNA_TERMINAL || colunaInicio < 0) {
     return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
   }
 
@@ -425,7 +465,7 @@ export function redimensionarRamo(diagrama: Diagrama, ramoId: string, colunaFim:
       outro.id !== ramoId &&
       outro.linha === ramo.linha &&
       outro.colunaInicio <= colunaFim &&
-      ramo.colunaInicio <= outro.colunaFim,
+      colunaInicio <= outro.colunaFim,
   )
   if (sobrepoeOutroRamo) {
     return recusa(`ramo '${ramoId}' se sobreporia a outro ramo na mesma linha do degrau ${indiceDegrau + 1}`)
@@ -434,7 +474,7 @@ export function redimensionarRamo(diagrama: Diagrama, ramoId: string, colunaFim:
   const elementoFora = rung.elementos.find(
     (elemento) =>
       elemento.celula.linha === ramo.linha &&
-      (elemento.celula.coluna < ramo.colunaInicio || elemento.celula.coluna > colunaFim),
+      (elemento.celula.coluna < colunaInicio || elemento.celula.coluna > colunaFim),
   )
   if (elementoFora !== undefined) {
     return recusa(`há contato em ${descreverCelula(indiceDegrau, elementoFora.celula)} fora do novo intervalo`)
@@ -443,6 +483,7 @@ export function redimensionarRamo(diagrama: Diagrama, ramoId: string, colunaFim:
   const novoDiagrama = structuredClone(diagrama)
   const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
   const novoRamo = novoRung.ramos.find((r) => r.id === ramoId) as Ramo
+  novoRamo.colunaInicio = colunaInicio
   novoRamo.colunaFim = colunaFim
 
   return sucesso(novoDiagrama)
@@ -456,6 +497,16 @@ export function removerRamo(diagrama: Diagrama, ramoId: string): ResultadoEdicao
   if (encontrado === undefined) return recusa(`ramo '${ramoId}' inexistente`)
   const { rung, ramo } = encontrado
 
+  if (ehRamoDeSaida(ramo)) {
+    const novoDiagrama = structuredClone(diagrama)
+    const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
+    novoRung.elementos = novoRung.elementos.filter(
+      (elemento) => !(elemento.celula.linha === ramo.linha && elemento.celula.coluna === COLUNA_TERMINAL),
+    )
+    novoRung.ramos = novoRung.ramos.filter((r) => r.id !== ramoId)
+    return sucesso(novoDiagrama)
+  }
+
   if (temElementoNoIntervalo(rung, ramo.linha, ramo.colunaInicio, ramo.colunaFim)) {
     return recusa('remova os contatos do ramo antes')
   }
@@ -463,6 +514,35 @@ export function removerRamo(diagrama: Diagrama, ramoId: string): ResultadoEdicao
   const novoDiagrama = structuredClone(diagrama)
   const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
   novoRung.ramos = novoRung.ramos.filter((r) => r.id !== ramoId)
+
+  return sucesso(novoDiagrama)
+}
+
+/** Troca o tipo de um contato ou bobina, preservando id, célula e variável. */
+export function trocarTipoElemento(diagrama: Diagrama, elementoId: string, novoTipo: Elemento['tipo']): ResultadoEdicao {
+  const encontrado = encontrarElemento(diagrama, elementoId)
+  if (encontrado === undefined) return recusa(`elemento '${elementoId}' inexistente`)
+  const { rung, elemento } = encontrado
+  if (ehCtu(elemento)) return recusa('o tipo do contador não pode ser alterado')
+  if (novoTipo === 'ctu') return recusa('não é possível converter este elemento em contador')
+
+  const deContato = ehContato(elemento.tipo)
+  const paraContato = ehContato(novoTipo)
+  const deBobina = ehBobina(elemento.tipo)
+  const paraBobina = ehBobina(novoTipo)
+  if ((deContato && !paraContato) || (deBobina && !paraBobina)) {
+    return recusa('só é possível trocar entre tipos da mesma família (contato ou bobina)')
+  }
+
+  const indiceDegrau = indiceDoRung(diagrama, rung.id)
+  const motivoPosicao = motivoPosicaoInvalida(indiceDegrau, rung, novoTipo, elemento.celula)
+  if (motivoPosicao !== null) return recusa(motivoPosicao)
+
+  const novoDiagrama = structuredClone(diagrama)
+  const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
+  const alvo = novoRung.elementos.find((e) => e.id === elementoId)
+  if (alvo === undefined || ehCtu(alvo)) return recusa(`elemento '${elementoId}' inexistente`)
+  alvo.tipo = novoTipo as ElementoSimples['tipo']
 
   return sucesso(novoDiagrama)
 }

@@ -350,11 +350,11 @@ describe('GradeDegrau — ramo paralelo, desenho (D-14)', () => {
     expect(screen.queryByRole('button', { name: /ramo 1, coluna 4/i })).not.toBeInTheDocument()
   })
 
-  it('desenha uma alça (role slider) na ponta direita do ramo, com aria-valuenow = colunaFim (1-based)', () => {
+  it('desenha duas alças (início e fim) com aria-valuenow nas colunas do ramo (1-based)', () => {
     render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} />)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
-    expect(alca).toHaveAttribute('aria-valuenow', '3')
+    expect(screen.getByRole('slider', { name: /início do ramo 1/i })).toHaveAttribute('aria-valuenow', '1')
+    expect(screen.getByRole('slider', { name: /fim do ramo 1/i })).toHaveAttribute('aria-valuenow', '3')
   })
 
   it('ramoMarcado destaca todas as células do ramo com aria-selected, mesmo vazias', () => {
@@ -486,31 +486,31 @@ describe('GradeDegrau — alça do ramo, geometria do arrasto por ponteiro (D-14
     const aoArrastarAlca = vi.fn()
     render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoArrastarAlca={aoArrastarAlca} />)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
     fireEvent.pointerMove(window, { pointerId: 9, clientX: 200, clientY: 0 })
 
     // getBoundingClientRect do <svg> é (0,0,0,0) no jsdom; coluna = floor((200-32)/64) = 2
-    expect(aoArrastarAlca).toHaveBeenCalledWith('r1', 'b1', 2)
+    expect(aoArrastarAlca).toHaveBeenCalledWith('r1', 'b1', 2, 'fim')
   })
 
   it('pointerup sobre a alça reporta a coluna final via aoSoltarAlca', () => {
     const aoSoltarAlca = vi.fn()
     render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoSoltarAlca={aoSoltarAlca} />)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
     fireEvent.pointerUp(window, { pointerId: 9, clientX: 300, clientY: 0 })
 
     // coluna = floor((300-32)/64) = 4
-    expect(aoSoltarAlca).toHaveBeenCalledWith('r1', 'b1', 4)
+    expect(aoSoltarAlca).toHaveBeenCalledWith('r1', 'b1', 4, 'fim')
   })
 
   it('pointercancel durante o arrasto da alça chama aoCancelarAlca', () => {
     const aoCancelarAlca = vi.fn()
     render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoCancelarAlca={aoCancelarAlca} />)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 9, clientX: 200, clientY: 0 })
     fireEvent.pointerCancel(window, { pointerId: 9 })
 
@@ -522,17 +522,18 @@ describe('GradeDegrau — alça do ramo, geometria do arrasto por ponteiro (D-14
     const aoTeclarNaAlca = vi.fn()
     render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} aoTeclarNaAlca={aoTeclarNaAlca} />)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     alca.focus()
     await usuario.keyboard(' ')
 
     expect(aoTeclarNaAlca).toHaveBeenCalledTimes(1)
     expect(aoTeclarNaAlca.mock.calls[0][1]).toBe('r1')
     expect(aoTeclarNaAlca.mock.calls[0][2]).toBe('b1')
+    expect(aoTeclarNaAlca.mock.calls[0][3]).toBe('fim')
   })
 
   it('previaAlca inválida colore a alça com o token de perigo (sem cor fixa)', () => {
-    const previaAlca: PreviaAlca = { ramoId: 'b1', colunaFim: 5, valido: false }
+    const previaAlca: PreviaAlca = { ramoId: 'b1', colunaInicio: 0, colunaFim: 5, valido: false }
     const { container } = render(<GradeDegrau rung={rungComRamo} indice={0} {...propsBase()} previaAlca={previaAlca} />)
 
     expect(container.innerHTML).toMatch(/stroke-ide-perigo/)

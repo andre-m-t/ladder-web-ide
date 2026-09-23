@@ -43,12 +43,9 @@
   --ide-fio: #3b4754;
   --ide-trilho: #1f2a36;
   --ide-previa: #2b7fd1;
-  /* Energização da simulação (spec 004, RF-14/D-12): cor redundante com a
-     espessura do traço — nunca a única distinção entre energizado e
-     desenergizado. Laranja saturado, distinto de --ide-aviso (âmbar) e de
-     --ide-perigo (vermelho) nos dois temas, inclusive em captura P&B do TCC
-     (luminância bem diferente de --ide-fio). */
-  --ide-energizado: #c2410c;
+  /* Energização da simulação (spec 004, RF-14/D-12): verde vivo, distinto do
+     teal de --ide-destaque; redundante com a espessura do traço. */
+  --ide-energizado: #16a34a;
   color-scheme: light;
 }
 
@@ -67,7 +64,7 @@
   --ide-fio: #7d8a97;
   --ide-trilho: #b8c4cf;
   --ide-previa: #5aa9ff;
-  --ide-energizado: #ff9248;
+  --ide-energizado: #4ade80;
   color-scheme: dark;
 }
 

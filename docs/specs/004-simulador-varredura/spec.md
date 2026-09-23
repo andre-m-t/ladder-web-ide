@@ -403,6 +403,26 @@ spec. As entradas permanecem visíveis depois de decididas (§8 da Constituiçã
   editor e a serialização já cobrem; nada é antecipado para temporizadores ou
   outros elementos que não existem no modelo.
 
+## Revisão aditiva — 2026-09-22 (escrita por bobina paralela)
+
+- **`calcularFluxoDoRung` / `executarCiclo`:** todas as bobinas na coluna
+  terminal recebem o mesmo `energizadoTerminal` e `aplicarEscritaDoTerminal` em
+  ordem de linha — espelho da emissão do serializador (spec 003).
+
+## Revisão aditiva — 2026-09-22 (ramo de saída fora da topologia de contatos)
+
+- Na propagação de fluxo do degrau, ramos com `ehRamoDeSaida` são ignorados na
+  topologia de contatos (código duplicado em relação ao serializador, conforme
+  RF-7). A escrita por bobina paralela da revisão anterior permanece.
+
+## Revisão aditiva — 2026-09-23 (faixa de simulação acima do editor)
+
+- Controles de simulação (Simular/Sair, Executar/Pausar, Passo, Reiniciar,
+  marcha e contador de ciclo) saem da barra superior e ficam em **`BarraSimulacao`**
+  — faixa sempre visível acima do editor: desabilitados fora do modo simulação,
+  com destaque visual quando ativo. Os `aria-label` dos botões permanecem os
+  mesmos (RF-10, CA-6).
+
 **Tensão registrada:** o RF-7 proíbe reúso de código entre a serialização e a
 simulação — o oposto do reflexo normal de §11. A duplicação é **deliberada e
 necessária**: as duas leituras da topologia são os dois lados de uma medição, e

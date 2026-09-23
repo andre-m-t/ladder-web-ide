@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import AreaEditor, { type FocoLadder } from './components/ide/AreaEditor'
+import BarraSimulacao from './components/ide/BarraSimulacao'
 import BarraSuperior from './components/ide/BarraSuperior'
 import type { OpcaoDownload } from './components/ide/MenuDownload'
 import ModalConfirmarDescarte from './components/ide/ModalConfirmarDescarte'
@@ -9,13 +10,21 @@ import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
 import PainelLateral from './components/ide/PainelLateral'
 import Toasts from './components/ide/Toasts'
+import ModalAmbiente from './components/ambientes/ModalAmbiente'
+import PainelAmbiente from './components/ambientes/PainelAmbiente'
 import PainelVariaveis from './components/ladder/PainelVariaveis'
+import { AMBIENTE_PADRAO_ID, ambientePorId } from './ambientes/catalogo'
+import type { PontoAmbiente } from './ambientes/contrato'
+import { executarCicloComAmbiente } from './ambientes/integracao'
+import { AMBIENTE_PORTAO, criarEstadoPortao, type EstadoPortao } from './ambientes/portao'
+import { declararVariaveisDoContrato, saidasPorEndereco } from './ambientes/vinculo'
+import { declararVariavel } from './ladder/edicao'
 import type { Diagrama } from './ladder/modelo'
+import { exportarPlcopen } from './ladder/plcopen'
 import { degrauDaLinha, serializar, type TrechoDegrau } from './ladder/serializador'
 import {
   acionarEntrada,
   criarEstado,
-  executarCiclo,
   reiniciar,
   INTERVALO_TEMPO_REAL_MS,
   type EstadoSimulacao,
@@ -46,6 +55,15 @@ import {
   type Projeto,
   type ResultadoCargaProjeto,
 } from './projeto/projeto'
+import {
+  criarHistorico,
+  desfazer,
+  podeDesfazer,
+  podeRefazer,
+  refazer,
+  registrar as registrarHistorico,
+  type Historico,
+} from './projeto/historico'
 
 type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
 
@@ -82,7 +100,8 @@ const CHAVE_CONSOLE_ALTURA = 'ladderflow.consoleAltura'
 
 const PAINEL_VARIAVEIS_LARGURA_PADRAO = 320
 const PAINEL_VARIAVEIS_LARGURA_MIN = 288 // 18rem
-const PAINEL_VARIAVEIS_LARGURA_MAX = 640 // 40rem
+const LARGURA_MIN_EDITOR = 320
+const PAINEL_AMBIENTE_LARGURA_MIN = 360
 const CONSOLE_ALTURA_PADRAO = 192
 const CONSOLE_ALTURA_MIN = 96 // 6rem
 
@@ -123,6 +142,8 @@ const MARCHA_SIMULACAO_PADRAO = MARCHAS_SIMULACAO[0].id
  * normal — 1 ciclo a 60 Hz em tempo real).
  */
 const MAX_CICLOS_POR_QUADRO = 10
+
+const MOTIVO_CRIACAO_EM_SIMULACAO = 'Saia da simulação para criar variáveis'
 
 function intervaloDaMarcha(marchaId: string): number {
   return MARCHAS_SIMULACAO.find((m) => m.id === marchaId)?.intervaloMs ?? INTERVALO_TEMPO_REAL_MS
@@ -175,6 +196,13 @@ function lerNumero(chave: string, padrao: number): number {
 function alturaMaximaConsole(): number {
   if (typeof window === 'undefined') return 480
   return Math.round(window.innerHeight * 0.6)
+}
+
+/** Largura máxima do painel lateral: o editor central mantém ao menos
+ * `LARGURA_MIN_EDITOR` px (spec 002, revisão 2026-09-23). */
+function larguraMaximaPainel(): number {
+  if (typeof window === 'undefined') return 640
+  return Math.max(PAINEL_VARIAVEIS_LARGURA_MIN, window.innerWidth - LARGURA_MIN_EDITOR)
 }
 
 /** Carga inicial do projeto (tarefa #26; antes, tarefa #12/#25 para o
@@ -276,6 +304,7 @@ export default function App() {
   // armazenamento" nascem juntos, de uma só leitura).
   const [cargaInicial] = useState<ResultadoCargaProjeto>(() => carregarProjetoInicial())
   const [projeto, setProjeto] = useState<Projeto>(() => cargaInicial.projeto)
+  const [historico, setHistorico] = useState<Historico<Projeto>>(() => criarHistorico(cargaInicial.projeto))
   const [abaInferior, setAbaInferior] = useState<AbaInferior>(() =>
     abaInferiorInicial(cargaInicial.projeto, cargaInicial.veioDoArmazenamento),
   )
@@ -284,9 +313,10 @@ export default function App() {
   const [painelVariaveisAberto, setPainelVariaveisAberto] = useState(() =>
     lerBooleano(CHAVE_PAINEL_VARIAVEIS_ABERTO, true),
   )
+  const [larguraMaxPainel, setLarguraMaxPainel] = useState(() => larguraMaximaPainel())
   const [painelVariaveisLargura, setPainelVariaveisLargura] = useState(() =>
     Math.min(
-      PAINEL_VARIAVEIS_LARGURA_MAX,
+      larguraMaximaPainel(),
       Math.max(PAINEL_VARIAVEIS_LARGURA_MIN, lerNumero(CHAVE_PAINEL_VARIAVEIS_LARGURA, PAINEL_VARIAVEIS_LARGURA_PADRAO)),
     ),
   )
@@ -306,6 +336,12 @@ export default function App() {
    * coisa persistida) nem em nenhuma das chaves de `localStorage` deste
    * arquivo — é assim que RF-17 (volátil) é cumprido, por omissão. */
   const [simulacao, setSimulacao] = useState<EstadoModoSimulacao>({ ativo: false })
+
+  /** Ambiente de simulação (spec 005) — volátil, sem localStorage. */
+  const [painelAmbienteAberto, setPainelAmbienteAberto] = useState(false)
+  const [modalAmbienteAberto, setModalAmbienteAberto] = useState(false)
+  const [ambienteId, setAmbienteId] = useState(AMBIENTE_PADRAO_ID)
+  const [plantaPortao, setPlantaPortao] = useState<EstadoPortao>(() => criarEstadoPortao())
 
   const problemasValidacao = useMemo(() => (projeto.linguagem === 'ld' ? validarDiagrama(projeto.diagrama) : []), [projeto])
 
@@ -357,12 +393,24 @@ export default function App() {
    * `diagramaRef`/`aoMudarRef` em `EditorLadder.tsx`). */
   const projetoRef = useRef(projeto)
   const simulacaoRef = useRef(simulacao)
+  const plantaPortaoRef = useRef(plantaPortao)
+  const painelAmbienteAbertoRef = useRef(painelAmbienteAberto)
+  const ambienteIdRef = useRef(ambienteId)
   useEffect(() => {
     projetoRef.current = projeto
   }, [projeto])
   useEffect(() => {
     simulacaoRef.current = simulacao
   }, [simulacao])
+  useEffect(() => {
+    plantaPortaoRef.current = plantaPortao
+  }, [plantaPortao])
+  useEffect(() => {
+    painelAmbienteAbertoRef.current = painelAmbienteAberto
+  }, [painelAmbienteAberto])
+  useEffect(() => {
+    ambienteIdRef.current = ambienteId
+  }, [ambienteId])
 
   function log(nivel: EntradaConsole['nivel'], mensagem: string) {
     setEntradasConsole((atual) => registrar(atual, nivel, mensagem))
@@ -382,10 +430,102 @@ export default function App() {
     setToasts((atual) => removerToast(atual, id))
   }
 
+  function registrarFalhaPlanta(mensagem: string) {
+    setToasts((atual) => adicionarToast(atual, 'erro', mensagem))
+    log('erro', mensagem)
+    setSimulacao((atual) => (atual.ativo ? { ...atual, rodando: false } : atual))
+  }
+
+  const motivoAmbienteIndisponivel = projeto.linguagem !== 'ld' ? 'Ambiente disponível apenas em projeto Ladder' : undefined
+  const motivoPainelVariaveisIndisponivel = painelAmbienteAberto ? 'Feche o ambiente para ver as variáveis' : undefined
+
+  const ambienteAtivo = painelAmbienteAberto && ambienteId === AMBIENTE_PORTAO.id
+  const enderecosComandadosPelaPlanta = ambienteAtivo ? AMBIENTE_PORTAO.enderecosEntradaComandados() : undefined
+  const motivoEntradaPlanta = ambienteAtivo ? 'Comandada pelo ambiente de simulação' : undefined
+  const pontosAmbienteAberto = painelAmbienteAberto ? ambientePorId(ambienteId)?.pontos : undefined
+
+  const saidasAmbienteMapa = useMemo(() => {
+    const diagrama = diagramaLd(projeto)
+    if (!diagrama || !simulacao.ativo) return {}
+    return saidasPorEndereco(diagrama, simulacao.estado.variaveis)
+  }, [projeto, simulacao])
+
+  useEffect(() => {
+    function aoRedimensionarJanela() {
+      const max = larguraMaximaPainel()
+      setLarguraMaxPainel(max)
+      setPainelVariaveisLargura((atual) => Math.min(max, atual))
+    }
+    window.addEventListener('resize', aoRedimensionarJanela)
+    return () => window.removeEventListener('resize', aoRedimensionarJanela)
+  }, [])
+
+  function aoMudarProjeto(novo: Projeto) {
+    setHistorico((h) => registrarHistorico(h, novo))
+    setProjeto(novo)
+  }
+
+  function aoDesfazerProjeto() {
+    if (simulacao.ativo) return
+    setHistorico((h) => {
+      const prox = desfazer(h)
+      if (!prox) return h
+      setProjeto(prox.presente)
+      return prox
+    })
+  }
+
+  function aoRefazerProjeto() {
+    if (simulacao.ativo) return
+    setHistorico((h) => {
+      const prox = refazer(h)
+      if (!prox) return h
+      setProjeto(prox.presente)
+      return prox
+    })
+  }
+
+  const historicoRef = useRef(historico)
+  const simulacaoAtivaRef = useRef(simulacao.ativo)
+  historicoRef.current = historico
+  simulacaoAtivaRef.current = simulacao.ativo
+
+  useEffect(() => {
+    function aoTeclarDesfazer(evento: KeyboardEvent) {
+      if (simulacaoAtivaRef.current) return
+      if (!(evento.ctrlKey || evento.metaKey)) return
+      const alvo = evento.target
+      if (alvo instanceof HTMLElement) {
+        const tag = alvo.tagName
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+        if (alvo.closest('#editor-st')) return
+      }
+      if (evento.key === 'z' && !evento.shiftKey) {
+        evento.preventDefault()
+        const prox = desfazer(historicoRef.current)
+        if (!prox) return
+        historicoRef.current = prox
+        setHistorico(prox)
+        setProjeto(prox.presente)
+        return
+      }
+      if (evento.key === 'y' || (evento.key === 'z' && evento.shiftKey)) {
+        evento.preventDefault()
+        const prox = refazer(historicoRef.current)
+        if (!prox) return
+        historicoRef.current = prox
+        setHistorico(prox)
+        setProjeto(prox.presente)
+      }
+    }
+    window.addEventListener('keydown', aoTeclarDesfazer)
+    return () => window.removeEventListener('keydown', aoTeclarDesfazer)
+  }, [])
+
   useEffect(() => {
     if (cargaInicialRegistrada.current) return
     cargaInicialRegistrada.current = true
-    document.title = '🔧 LadderFlow'
+    document.title = 'LadderFlow'
     log('info', 'LadderFlow iniciado.')
     if (cargaInicial.aviso) log('aviso', cargaInicial.aviso)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -534,6 +674,7 @@ export default function App() {
     return [
       { id: 'ld', rotulo: 'Ladder (.json)' },
       { id: 'st', rotulo: 'Structured Text (.st)', desabilitadaMotivo: motivoIndisponivel },
+      { id: 'plcopen', rotulo: 'PLCopen XML (.xml)', desabilitadaMotivo: motivoIndisponivel },
     ]
   }, [projeto.linguagem, motivoIndisponivel])
 
@@ -550,6 +691,16 @@ export default function App() {
       if (projeto.linguagem !== 'ld') return
       const nome = nomeDeArquivo(projeto.titulo, 'ladderflow.json')
       baixarTexto(nome, conteudoProjetoJson(projeto), 'application/json')
+      log('info', `Baixado ${nome}.`)
+      return
+    }
+
+    if (id === 'plcopen') {
+      if (projeto.linguagem !== 'ld') return
+      if (stGerado === undefined || !stGerado.ok) return
+      const nome = nomeDeArquivo(projeto.titulo, 'xml')
+      const xml = exportarPlcopen(projeto.diagrama, projeto.titulo)
+      baixarTexto(nome, xml, 'application/xml')
       log('info', `Baixado ${nome}.`)
       return
     }
@@ -707,7 +858,11 @@ export default function App() {
     if (!atual.ativo) return
     const diagrama = diagramaLd(projetoRef.current)
     if (!diagrama) return
-    setSimulacao({ ...atual, estado: executarCiclo(diagrama, atual.estado) })
+    const ambienteOn = painelAmbienteAbertoRef.current && ambienteIdRef.current === AMBIENTE_PORTAO.id
+    const resultado = executarCicloComAmbiente(diagrama, atual.estado, plantaPortaoRef.current, AMBIENTE_PORTAO, ambienteOn)
+    if (resultado.falha) registrarFalhaPlanta(resultado.falha)
+    setPlantaPortao(resultado.planta)
+    setSimulacao({ ...atual, estado: resultado.estado })
   }
 
   /** Reiniciar (CA-6): volta ao estado inicial completo (`reiniciar` = o
@@ -719,10 +874,64 @@ export default function App() {
     const diagrama = diagramaLd(projetoRef.current)
     if (!diagrama) return
     setSimulacao({ ...atual, estado: reiniciar(diagrama) })
+    if (painelAmbienteAbertoRef.current && ambienteIdRef.current === AMBIENTE_PORTAO.id) {
+      setPlantaPortao(criarEstadoPortao())
+    }
+  }
+
+  function aoComandoAmbiente(comando: string, pressionado: boolean) {
+    if (ambienteIdRef.current !== AMBIENTE_PORTAO.id) return
+    setPlantaPortao((p) => AMBIENTE_PORTAO.acionarComando(p, comando, pressionado))
   }
 
   function aoEscolherMarchaSimulacao(marchaId: string) {
     setSimulacao((atual) => (atual.ativo ? { ...atual, marchaId } : atual))
+  }
+
+  function aoFecharAmbiente() {
+    setPainelAmbienteAberto(false)
+    if (simulacaoRef.current.ativo) {
+      setSimulacao({ ativo: false })
+      log('info', 'Simulação encerrada junto com o ambiente.')
+    }
+  }
+
+  function aoAlternarPainelAmbiente() {
+    if (painelAmbienteAberto) aoFecharAmbiente()
+    else setModalAmbienteAberto(true)
+  }
+
+  /** Criação de variável pelo contrato de E/S do ambiente (spec 005, revisão
+   * 2026-09-23): mesmo `declararVariavel` da tabela, pelo mesmo
+   * `aoMudarProjeto` — entra no histórico de Desfazer. A recusa volta para o
+   * modal, que a mostra junto do campo. Congelada durante a simulação, como a
+   * edição do diagrama (spec 004, Q-7). */
+  function aoDeclararVariavelAmbiente(ponto: PontoAmbiente, nome: string): string | null {
+    if (simulacao.ativo) return MOTIVO_CRIACAO_EM_SIMULACAO
+    if (projeto.linguagem !== 'ld') return null
+    const resultado = declararVariavel(projeto.diagrama, { nome, endereco: ponto.endereco })
+    if (!resultado.ok) return resultado.motivo
+    aoMudarProjeto({ ...projeto, diagrama: resultado.diagrama })
+    log('info', `Variável «${nome}» criada em ${ponto.endereco} pelo contrato do ambiente.`)
+    return null
+  }
+
+  /** "Criar todas": uma variável por ponto não conectado, tudo ou nada, numa
+   * única entrada do histórico. Sem modal, a recusa vai ao toast. */
+  function aoDeclararTodasAmbiente() {
+    if (simulacao.ativo || projeto.linguagem !== 'ld') return
+    const definicao = ambientePorId(ambienteId)
+    if (!definicao) return
+    const antes = projeto.diagrama.variaveis.length
+    const resultado = declararVariaveisDoContrato(projeto.diagrama, definicao.pontos)
+    if (!resultado.ok) {
+      recusar(resultado.motivo)
+      return
+    }
+    const criadas = resultado.diagrama.variaveis.length - antes
+    if (criadas === 0) return
+    aoMudarProjeto({ ...projeto, diagrama: resultado.diagrama })
+    log('info', `${criadas} variáve${criadas === 1 ? 'l criada' : 'is criadas'} pelo contrato do ambiente ${definicao.nome}.`)
   }
 
   /** Aciona uma entrada durante a simulação (RF-12): repassado a
@@ -787,8 +996,25 @@ export default function App() {
           setSimulacao((estadoAtual) => {
             if (!estadoAtual.ativo) return estadoAtual
             let estado = estadoAtual.estado
-            for (let i = 0; i < ciclos; i++) estado = executarCiclo(diagramaAtual, estado)
-            return { ...estadoAtual, estado }
+            let planta = plantaPortaoRef.current
+            const ambienteOn =
+              painelAmbienteAbertoRef.current && ambienteIdRef.current === AMBIENTE_PORTAO.id
+            let falha: string | null = null
+            for (let i = 0; i < ciclos; i++) {
+              const passo = executarCicloComAmbiente(diagramaAtual, estado, planta, AMBIENTE_PORTAO, ambienteOn)
+              estado = passo.estado
+              planta = passo.planta
+              if (passo.falha) {
+                falha = passo.falha
+                break
+              }
+            }
+            plantaPortaoRef.current = planta
+            setPlantaPortao(planta)
+            if (falha) {
+              queueMicrotask(() => registrarFalhaPlanta(falha))
+            }
+            return { ...estadoAtual, estado, rodando: falha ? false : estadoAtual.rodando }
           })
         }
       }
@@ -836,6 +1062,7 @@ export default function App() {
    * a busca pelo `aria-label` fixo do próprio botão. */
   function aoCriarProjeto(titulo: string, linguagem: Linguagem) {
     const novo = novoProjeto(titulo, linguagem)
+    setHistorico(criarHistorico(novo))
     setProjeto(novo)
     setCompilacao({ fase: 'ocioso' })
     setGravacao({ fase: 'ocioso' })
@@ -866,22 +1093,18 @@ export default function App() {
         opcoesDownload={opcoesDownload}
         aoBaixar={aoBaixar}
         motivoIndisponivel={motivoIndisponivel}
-        simulando={simulacao.ativo}
-        simulacaoRodando={simulacao.ativo && simulacao.rodando}
-        motivoSimulacaoIndisponivel={motivoSimulacaoIndisponivel}
-        aoAlternarSimulacao={aoAlternarSimulacao}
-        aoAlternarExecucaoSimulacao={aoAlternarExecucaoSimulacao}
-        aoPassoSimulacao={aoPassoSimulacao}
-        aoReiniciarSimulacao={aoReiniciarSimulacao}
-        marchas={MARCHAS_SIMULACAO}
-        marchaAtual={simulacao.ativo ? simulacao.marchaId : MARCHA_SIMULACAO_PADRAO}
-        aoEscolherMarcha={aoEscolherMarchaSimulacao}
         painelVariaveisAberto={painelVariaveisAberto}
         aoAlternarPainelVariaveis={() => setPainelVariaveisAberto((atual) => !atual)}
+        motivoPainelVariaveisIndisponivel={motivoPainelVariaveisIndisponivel}
         painelInferiorAberto={consoleAberto}
         aoAlternarPainelInferior={() => setConsoleAberto((atual) => !atual)}
         tema={tema}
         aoAlternarTema={aoAlternarTema}
+        podeDesfazer={podeDesfazer(historico)}
+        podeRefazer={podeRefazer(historico)}
+        aoDesfazer={aoDesfazerProjeto}
+        aoRefazer={aoRefazerProjeto}
+        historicoEdicaoDesabilitado={simulacao.ativo}
       />
 
       {!webSerialOk && (
@@ -892,37 +1115,87 @@ export default function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <AreaEditor
-          projeto={projeto}
-          aoMudarProjeto={setProjeto}
-          problemas={problemas}
-          foco={foco}
-          compilando={compilando}
-          erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
-          aoRecusar={recusar}
-          congelado={simulacao.ativo}
-          simulacao={simulacao.ativo ? { energizacao: simulacao.estado.energizacao } : null}
-        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <BarraSimulacao
+            simulando={simulacao.ativo}
+            simulacaoRodando={simulacao.ativo && simulacao.rodando}
+            motivoSimulacaoIndisponivel={motivoSimulacaoIndisponivel}
+            aoAlternarSimulacao={aoAlternarSimulacao}
+            aoAlternarExecucaoSimulacao={aoAlternarExecucaoSimulacao}
+            aoPassoSimulacao={aoPassoSimulacao}
+            aoReiniciarSimulacao={aoReiniciarSimulacao}
+            marchas={MARCHAS_SIMULACAO}
+            marchaAtual={simulacao.ativo ? simulacao.marchaId : MARCHA_SIMULACAO_PADRAO}
+            aoEscolherMarcha={aoEscolherMarchaSimulacao}
+            ciclo={simulacao.ativo ? simulacao.estado.ciclo : undefined}
+            painelAmbienteAberto={painelAmbienteAberto}
+            aoAlternarPainelAmbiente={aoAlternarPainelAmbiente}
+            motivoAmbienteIndisponivel={motivoAmbienteIndisponivel}
+          />
+          <AreaEditor
+            projeto={projeto}
+            aoMudarProjeto={aoMudarProjeto}
+            problemas={problemas}
+            foco={foco}
+            compilando={compilando}
+            erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
+            aoRecusar={recusar}
+            congelado={simulacao.ativo}
+            simulacao={simulacao.ativo ? { energizacao: simulacao.estado.energizacao } : null}
+            pontosAmbiente={pontosAmbienteAberto}
+          />
+        </div>
 
-        {projeto.linguagem === 'ld' && (
+        {projeto.linguagem === 'ld' && (painelAmbienteAberto || painelVariaveisAberto) && (
           <PainelLateral
-            aberto={painelVariaveisAberto}
+            aberto
+            rotulo={painelAmbienteAberto ? 'Painel de ambiente' : 'Painel de variáveis'}
             largura={painelVariaveisLargura}
-            larguraMin={PAINEL_VARIAVEIS_LARGURA_MIN}
-            larguraMax={PAINEL_VARIAVEIS_LARGURA_MAX}
+            larguraMin={painelAmbienteAberto ? PAINEL_AMBIENTE_LARGURA_MIN : PAINEL_VARIAVEIS_LARGURA_MIN}
+            larguraMax={larguraMaxPainel}
             aoRedimensionar={setPainelVariaveisLargura}
           >
-            <PainelVariaveis
-              diagrama={projeto.diagrama}
-              aoMudar={(diagrama) => setProjeto({ ...projeto, diagrama })}
-              aoRecusar={recusar}
-              valores={simulacao.ativo ? simulacao.estado.variaveis : undefined}
-              aoAcionar={simulacao.ativo ? aoAcionarEntradaSimulacao : undefined}
-              ciclo={simulacao.ativo ? simulacao.estado.ciclo : undefined}
-            />
+            {painelAmbienteAberto ? (
+              <PainelAmbiente
+                aoFechar={aoFecharAmbiente}
+                ambienteId={ambienteId}
+                diagrama={projeto.diagrama}
+                estadoPlanta={plantaPortao}
+                saidasPorEndereco={saidasAmbienteMapa}
+                simulacaoAtiva={simulacao.ativo}
+                aoComando={aoComandoAmbiente}
+                aoDeclararVariavel={aoDeclararVariavelAmbiente}
+                aoDeclararTodas={aoDeclararTodasAmbiente}
+                motivoCriacaoIndisponivel={simulacao.ativo ? MOTIVO_CRIACAO_EM_SIMULACAO : undefined}
+              />
+            ) : (
+              <PainelVariaveis
+                diagrama={projeto.diagrama}
+                aoMudar={(diagrama) => aoMudarProjeto({ ...projeto, diagrama })}
+                aoRecusar={recusar}
+                valores={simulacao.ativo ? simulacao.estado.variaveis : undefined}
+                aoAcionar={simulacao.ativo ? aoAcionarEntradaSimulacao : undefined}
+                ciclo={simulacao.ativo ? simulacao.estado.ciclo : undefined}
+                enderecosComandadosPelaPlanta={enderecosComandadosPelaPlanta}
+                motivoEntradaPlanta={motivoEntradaPlanta}
+                simulacaoAtiva={simulacao.ativo}
+              />
+            )}
           </PainelLateral>
         )}
       </div>
+
+      {modalAmbienteAberto && (
+        <ModalAmbiente
+          aoCancelar={() => setModalAmbienteAberto(false)}
+          aoConfirmar={(id) => {
+            setAmbienteId(id)
+            setPlantaPortao(criarEstadoPortao())
+            setModalAmbienteAberto(false)
+            setPainelAmbienteAberto(true)
+          }}
+        />
+      )}
 
       <PainelInferior
         aberto={consoleAberto}

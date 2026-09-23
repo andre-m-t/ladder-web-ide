@@ -24,8 +24,11 @@
 
 import {
   COLUNA_TERMINAL,
+  ehBobina,
   ehContato,
   ehCtu,
+  ehRamoDeSaida,
+  ehTerminal,
   variavelDoElemento,
   type Diagrama,
   type Elemento,
@@ -210,6 +213,7 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
     let energizado = anterior && conduzTrilho
 
     for (const ramo of rung.ramos) {
+      if (ehRamoDeSaida(ramo)) continue
       if (ramo.colunaFim + 1 !== coluna) continue
       if (resolverRamo(ramo)) energizado = true
     }
@@ -247,8 +251,20 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
   // ver a nota de semântica no relatório da tarefa #1 sobre por que não é o
   // resultado `Q` (que já aparece no desenho como o contato de quem lê a
   // variável de saída em outro degrau).
-  const terminal = rung.elementos.find((e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL)
-  if (terminal !== undefined) elementos[terminal.id] = energizadoTerminal
+  const principal = rung.elementos.find(
+    (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
+  )
+  if (principal !== undefined) {
+    if (ehCtu(principal)) {
+      elementos[principal.id] = energizadoTerminal
+    } else {
+      for (const bobina of rung.elementos.filter(
+        (e) => e.celula.coluna === COLUNA_TERMINAL && ehBobina(e.tipo),
+      )) {
+        elementos[bobina.id] = energizadoTerminal
+      }
+    }
+  }
 
   return { nos, celulas, elementos, energizadoTerminal, resetConduz }
 }
@@ -364,8 +380,20 @@ export function executarCiclo(diagrama: Diagrama, estado: EstadoSimulacao): Esta
   const energizacao: Record<string, EnergizacaoDegrau> = {}
   for (const rung of diagrama.rungs) {
     const fluxo = calcularFluxoDoRung(rung, variaveis)
-    const terminal = rung.elementos.find((e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL)
-    if (terminal !== undefined) aplicarEscritaDoTerminal(terminal, fluxo, variaveis, contadores)
+    const principal = rung.elementos.find(
+      (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
+    )
+    if (principal !== undefined) {
+      if (ehCtu(principal)) {
+        aplicarEscritaDoTerminal(principal, fluxo, variaveis, contadores)
+      } else {
+        for (const bobina of rung.elementos.filter(
+          (e) => e.celula.coluna === COLUNA_TERMINAL && ehBobina(e.tipo),
+        )) {
+          aplicarEscritaDoTerminal(bobina, fluxo, variaveis, contadores)
+        }
+      }
+    }
     energizacao[rung.id] = energizacaoDoFluxo(fluxo)
   }
 

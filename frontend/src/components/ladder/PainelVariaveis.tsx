@@ -32,14 +32,33 @@
  * e `ciclo` são passagem cega até `TabelaVariaveis` — este componente não
  * decide nada sobre eles, só repassa; `App` (dono do modo/relógio de
  * simulação) decide os valores. Sem simulação ativa, os três ficam
- * ausentes/`undefined` e o comportamento é o de hoje. Este painel **não**
- * congela a declaração/edição/remoção de variáveis durante a simulação —
- * não é um requisito desta fatia (só `EditorLadder`/a grade são, RF-15); ver
- * o relatório da tarefa #11 para a decisão registrada.
+ * ausentes/`undefined` e o comportamento é o de hoje.
+ *
+ * **Bloqueio de mutação durante a simulação (spec 002, revisão 2026-09-23 —
+ * simetria com o contrato de E/S do ambiente e com `EditorLadder`):** até
+ * esta revisão, este painel era a única superfície do app que ainda
+ * liberava criar/renomear/repinar/remover variável com a simulação ativa
+ * (assimetria registrada em `.claude/state.md` sob a F9). `simulacaoAtiva`
+ * fecha essa lacuna: `TabelaVariaveis` desabilita os controles de mutação
+ * (a leitura continua sempre disponível), e `aoDeclarar`/`aoAtualizar`/
+ * `aoRemover` ganham a mesma guarda na origem, por defesa em profundidade —
+ * o mesmo padrão de `aoDeclararVariavelAmbiente`/`aoCriarVariavelNoModal`
+ * (`App.tsx`/`EditorLadder.tsx`), que checam a simulação antes do núcleo,
+ * mesmo com o botão já desabilitado. A recusa vai por `aoRecusar`, como
+ * qualquer outra recusa do núcleo — nenhum diagrama é tocado.
  */
-import { atualizarVariavel, declararVariavel, removerVariavel, type ResultadoEdicao } from '../../ladder/edicao'
+import {
+  atualizarVariavel,
+  declararVariavel,
+  removerVariavel,
+  type ResultadoEdicao,
+} from '../../ladder/edicao'
 import type { Diagrama } from '../../ladder/modelo'
-import TabelaVariaveis from './TabelaVariaveis'
+import TabelaVariaveis, {
+  MOTIVO_SIMULACAO_CRIAR,
+  MOTIVO_SIMULACAO_EDITAR,
+  MOTIVO_SIMULACAO_REMOVER,
+} from './TabelaVariaveis'
 
 export interface PainelVariaveisProps {
   diagrama: Diagrama
@@ -57,9 +76,27 @@ export interface PainelVariaveisProps {
   /** Ciclos decorridos da simulação (RF-13) — presente só com a simulação
    * ativa. */
   ciclo?: number
+  /** Endereços de entrada comandados pela planta (spec 005, RF-8). */
+  enderecosComandadosPelaPlanta?: readonly string[]
+  motivoEntradaPlanta?: string
+  /** Simulação ativa (spec 004, Q-7) — bloqueia criar, renomear, trocar pino
+   * e remover, simétrico ao contrato de E/S do ambiente e ao congelamento do
+   * editor (revisão 2026-09-23). Ausente/`false` é o comportamento de
+   * sempre; a leitura nunca é bloqueada. */
+  simulacaoAtiva?: boolean
 }
 
-export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar, valores, aoAcionar, ciclo }: PainelVariaveisProps) {
+export default function PainelVariaveis({
+  diagrama,
+  aoMudar,
+  aoRecusar,
+  valores,
+  aoAcionar,
+  ciclo,
+  enderecosComandadosPelaPlanta,
+  motivoEntradaPlanta,
+  simulacaoAtiva,
+}: PainelVariaveisProps) {
   function aplicar(resultado: ResultadoEdicao) {
     if (resultado.ok) {
       aoMudar(resultado.diagrama)
@@ -69,14 +106,26 @@ export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar, valores,
   }
 
   function aoDeclarar(variavel: { nome: string; endereco?: string }) {
+    if (simulacaoAtiva) {
+      aoRecusar?.(MOTIVO_SIMULACAO_CRIAR)
+      return
+    }
     aplicar(declararVariavel(diagrama, variavel))
   }
 
   function aoAtualizar(nomeAtual: string, variavel: { nome: string; endereco?: string }) {
+    if (simulacaoAtiva) {
+      aoRecusar?.(MOTIVO_SIMULACAO_EDITAR)
+      return
+    }
     aplicar(atualizarVariavel(diagrama, nomeAtual, variavel))
   }
 
   function aoRemover(nome: string) {
+    if (simulacaoAtiva) {
+      aoRecusar?.(MOTIVO_SIMULACAO_REMOVER)
+      return
+    }
     aplicar(removerVariavel(diagrama, nome))
   }
 
@@ -90,6 +139,9 @@ export default function PainelVariaveis({ diagrama, aoMudar, aoRecusar, valores,
         aoDeclarar={aoDeclarar}
         aoAtualizar={aoAtualizar}
         aoRemover={aoRemover}
+        enderecosComandadosPelaPlanta={enderecosComandadosPelaPlanta}
+        motivoEntradaPlanta={motivoEntradaPlanta}
+        simulacaoAtiva={simulacaoAtiva}
       />
     </div>
   )

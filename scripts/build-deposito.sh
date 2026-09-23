@@ -83,6 +83,7 @@ INCLUDE_FILES=(
   ".env.example"
   "frontend/package.json"
   "frontend/index.html"
+  "frontend/public/favicon.svg"
   "frontend/vite.config.ts"
   "frontend/tsconfig.json"
   "frontend/Dockerfile"
@@ -156,12 +157,24 @@ REQUIRED_FILES=(
   "frontend/src/components/ladder/SimboloCtu.tsx"
   "frontend/src/ladder/persistencia.ts"
   "frontend/src/ladder/serializador.ts"
+  "frontend/src/ladder/plcopen.ts"
+  "frontend/src/projeto/historico.ts"
+  "frontend/src/components/ladder/ModalConfirmarRemocaoDegrau.tsx"
+  "frontend/src/components/ladder/ModalNovaVariavel.tsx"
   # Motor de simulacao do ciclo de varredura (spec 004, tarefa #14). O
   # `simulacao-cli.ts` e o mesmo motor sem interface: o ponto de entrada
   # pelo qual ele e executado fora do navegador, para a medicao
   # simulador x runtime. Ambos autorais, ambos parte do programa.
   "frontend/src/ladder/simulacao.ts"
   "frontend/src/ladder/simulacao-cli.ts"
+  "frontend/src/ambientes/contrato.ts"
+  "frontend/src/ambientes/portao.ts"
+  "frontend/src/ambientes/catalogo.ts"
+  "frontend/src/ambientes/vinculo.ts"
+  "frontend/src/ambientes/integracao.ts"
+  "frontend/src/components/ambientes/CenaPortao.tsx"
+  "frontend/src/components/ambientes/PainelAmbiente.tsx"
+  "frontend/src/components/ambientes/ModalAmbiente.tsx"
   "frontend/src/projeto/projeto.ts"
   "frontend/src/components/ide/ListaProblemas.tsx"
 )

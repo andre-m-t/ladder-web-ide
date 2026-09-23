@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { PONTOS_PORTAO } from '../../ambientes/portao'
 import { PV_MAX, PV_MIN } from '../../ladder/ctu'
 import type { Elemento, ElementoCtu, ElementoSimples, Variavel } from '../../ladder/modelo'
 import ModalVariavel from './ModalVariavel'
@@ -35,7 +36,7 @@ describe('ModalVariavel — estrutura acessível', () => {
     expect(dialogo).toHaveAttribute('aria-modal', 'true')
     const idTitulo = dialogo.getAttribute('aria-labelledby')
     expect(idTitulo).toBeTruthy()
-    expect(document.getElementById(idTitulo as string)).toHaveTextContent(/variável do contato na/i)
+    expect(document.getElementById(idTitulo as string)).toHaveTextContent(/propriedades do elemento/i)
   })
 
   it('sem variáveis declaradas, orienta a criar na tabela', () => {
@@ -46,34 +47,33 @@ describe('ModalVariavel — estrutura acessível', () => {
 })
 
 describe('ModalVariavel — escolher', () => {
-  it('clicar numa variável chama aoEscolher com o nome', async () => {
+  it('mudar o select chama aoEscolher com o nome', async () => {
     const usuario = userEvent.setup()
     const aoEscolher = vi.fn()
     const variaveis = [variavel('entrada', '%IX0.0')]
     render(<ModalVariavel elemento={elemento('contato_na')} variaveis={variaveis} aoEscolher={aoEscolher} aoFechar={vi.fn()} />)
 
-    await usuario.click(screen.getByRole('button', { name: /^entrada/i }))
+    await usuario.selectOptions(screen.getByRole('combobox'), 'entrada')
 
     expect(aoEscolher).toHaveBeenCalledWith('entrada')
   })
 
-  it('clicar em "Sem variável" chama aoEscolher(null)', async () => {
+  it('selecionar "Sem variável" chama aoEscolher(null)', async () => {
     const usuario = userEvent.setup()
     const aoEscolher = vi.fn()
     const variaveis = [variavel('entrada', '%IX0.0')]
     render(<ModalVariavel elemento={elemento('contato_na', 'entrada')} variaveis={variaveis} aoEscolher={aoEscolher} aoFechar={vi.fn()} />)
 
-    await usuario.click(screen.getByRole('button', { name: 'Sem variável' }))
+    await usuario.selectOptions(screen.getByRole('combobox'), '__sem-variavel__')
 
     expect(aoEscolher).toHaveBeenCalledWith(null)
   })
 
-  it('marca a opção vinculada com aria-current', () => {
+  it('o select reflete o vínculo atual', () => {
     const variaveis = [variavel('entrada', '%IX0.0'), variavel('saida', '%QX0.0')]
     render(<ModalVariavel elemento={elemento('contato_na', 'saida')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: /^saida/i })).toHaveAttribute('aria-current', 'true')
-    expect(screen.getByRole('button', { name: 'Sem variável' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('combobox')).toHaveValue('saida')
   })
 })
 
@@ -82,11 +82,10 @@ describe('ModalVariavel — bobina não escreve entrada', () => {
     const variaveis = [variavel('entrada', '%IX0.0'), variavel('saida', '%QX0.0')]
     render(<ModalVariavel elemento={elemento('bobina')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    const botaoEntrada = screen.getByRole('button', { name: /^entrada/i })
+    const botaoEntrada = screen.getByRole('option', { name: /entrada/i })
     expect(botaoEntrada).toBeDisabled()
-    expect(botaoEntrada).toHaveTextContent(/entradas não podem ser escritas por bobina/i)
 
-    const botaoSaida = screen.getByRole('button', { name: /^saida/i })
+    const botaoSaida = screen.getByRole('option', { name: /saida/i })
     expect(botaoSaida).not.toBeDisabled()
   })
 
@@ -94,30 +93,16 @@ describe('ModalVariavel — bobina não escreve entrada', () => {
     const variaveis = [variavel('entrada', '%IX0.0')]
     render(<ModalVariavel elemento={elemento('contato_na')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: /^entrada/i })).not.toBeDisabled()
+    expect(screen.getByRole('option', { name: /entrada/i })).not.toBeDisabled()
   })
 })
 
 describe('ModalVariavel — foco inicial', () => {
-  it('foca a opção vinculada ao montar', () => {
+  it('foca o combobox ao montar', () => {
     const variaveis = [variavel('entrada', '%IX0.0'), variavel('saida', '%QX0.0')]
     render(<ModalVariavel elemento={elemento('contato_na', 'saida')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    expect(screen.getByRole('button', { name: /^saida/i })).toHaveFocus()
-  })
-
-  it('sem vínculo, foca a primeira opção habilitada ("Sem variável")', () => {
-    const variaveis = [variavel('entrada', '%IX0.0')]
-    render(<ModalVariavel elemento={elemento('contato_na')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
-
-    expect(screen.getByRole('button', { name: 'Sem variável' })).toHaveFocus()
-  })
-
-  it('vínculo desabilitado (bobina + entrada) foca a primeira opção habilitada', () => {
-    const variaveis = [variavel('entrada', '%IX0.0')]
-    render(<ModalVariavel elemento={elemento('bobina', 'entrada')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
-
-    expect(screen.getByRole('button', { name: 'Sem variável' })).toHaveFocus()
+    expect(screen.getByRole('combobox')).toHaveFocus()
   })
 })
 
@@ -132,12 +117,12 @@ describe('ModalVariavel — fechar', () => {
     expect(aoFechar).toHaveBeenCalled()
   })
 
-  it('botão Cancelar fecha', async () => {
+  it('botão Fechar fecha', async () => {
     const usuario = userEvent.setup()
     const aoFechar = vi.fn()
     render(<ModalVariavel elemento={elemento('contato_na')} variaveis={[]} aoEscolher={vi.fn()} aoFechar={aoFechar} />)
 
-    await usuario.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await usuario.click(screen.getByRole('button', { name: 'Fechar' }))
 
     expect(aoFechar).toHaveBeenCalled()
   })
@@ -156,52 +141,38 @@ describe('ModalVariavel — fechar', () => {
   })
 })
 
-describe('ModalVariavel — Tab preso no diálogo', () => {
-  it('Tab a partir do último botão volta ao primeiro', async () => {
+describe('ModalVariavel — tipo', () => {
+  it('troca de contato NA para NF chama aoTrocarTipo', async () => {
     const usuario = userEvent.setup()
-    const variaveis = [variavel('entrada', '%IX0.0')]
-    render(<ModalVariavel elemento={elemento('contato_na')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+    const aoTrocarTipo = vi.fn()
+    render(
+      <ModalVariavel elemento={elemento('contato_na')} variaveis={[]} aoEscolher={vi.fn()} aoTrocarTipo={aoTrocarTipo} aoFechar={vi.fn()} />,
+    )
 
-    const cancelar = screen.getByRole('button', { name: 'Cancelar' })
-    cancelar.focus()
-    await usuario.tab()
+    const radios = screen.getAllByRole('radio')
+    await usuario.click(radios[1])
 
-    expect(screen.getByRole('button', { name: 'Sem variável' })).toHaveFocus()
-  })
-
-  it('Shift+Tab a partir do primeiro botão vai para o último', async () => {
-    const usuario = userEvent.setup()
-    const variaveis = [variavel('entrada', '%IX0.0')]
-    render(<ModalVariavel elemento={elemento('contato_na')} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
-
-    const semVariavel = screen.getByRole('button', { name: 'Sem variável' })
-    semVariavel.focus()
-    await usuario.tab({ shift: true })
-
-    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    expect(aoTrocarTipo).toHaveBeenCalledWith('contato_nf')
   })
 })
 
 describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
-  it('título "contador CTU", saída na lista (entradas desabilitadas, como bobina), com o motivo específico do contador', () => {
+  it('CTU: entradas desabilitadas no select, sem seletor de tipo', () => {
     const variaveis = [variavel('entrada', '%IX0.0'), variavel('atingiu')]
     render(<ModalVariavel elemento={elementoCtu()} variaveis={variaveis} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    const dialogo = screen.getByRole('dialog')
-    expect(document.getElementById(dialogo.getAttribute('aria-labelledby') as string)).toHaveTextContent(/contador ctu/i)
-    const botaoEntrada = screen.getByRole('button', { name: /^entrada/i })
-    expect(botaoEntrada).toBeDisabled()
-    expect(botaoEntrada).toHaveTextContent(/entradas não podem ser escritas pelo contador/i)
-    expect(screen.getByRole('button', { name: /^atingiu/i })).not.toBeDisabled()
+    expect(screen.getByRole('option', { name: /entrada/i })).toBeDisabled()
+    expect(screen.getByRole('option', { name: /atingiu/i })).not.toBeDisabled()
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
   })
 
-  it('escolher uma variável na lista vincula a saída (mesmo caminho de aoEscolher)', async () => {
+  it('escolher uma variável no select vincula a saída', async () => {
     const usuario = userEvent.setup()
     const aoEscolher = vi.fn()
     const variaveis = [variavel('atingiu')]
     render(<ModalVariavel elemento={elementoCtu()} variaveis={variaveis} aoEscolher={aoEscolher} aoFechar={vi.fn()} />)
 
-    await usuario.click(screen.getByRole('button', { name: /^atingiu/i }))
+    await usuario.selectOptions(screen.getByRole('combobox'), 'atingiu')
 
     expect(aoEscolher).toHaveBeenCalledWith('atingiu')
   })
@@ -281,6 +252,116 @@ describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
     await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+describe('ModalVariavel — nova variável (revisão 2026-09-23)', () => {
+  it('"Nova variável…" abre o modal de criação e repassa nome e pino escolhidos', async () => {
+    const usuario = userEvent.setup()
+    const aoCriarVariavel = vi.fn(() => null)
+    render(
+      <ModalVariavel
+        elemento={elemento('contato_na')}
+        variaveis={[variavel('ocupado', '%IX0.0')]}
+        aoEscolher={vi.fn()}
+        aoFechar={vi.fn()}
+        aoCriarVariavel={aoCriarVariavel}
+      />,
+    )
+
+    expect(screen.queryByText(/crie variáveis na tabela ao lado/i)).not.toBeInTheDocument()
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    const pino = within(criacao).getByLabelText('Pino')
+    expect(pino).toHaveValue('%IX0.1')
+    expect(within(pino).queryByRole('option', { name: /%IX0\.0/ })).not.toBeInTheDocument()
+
+    await usuario.type(within(criacao).getByLabelText('Nome'), 'botao_liga')
+    await usuario.click(within(criacao).getByRole('button', { name: 'Criar e vincular' }))
+
+    expect(aoCriarVariavel).toHaveBeenCalledWith({ nome: 'botao_liga', endereco: '%IX0.1' })
+    expect(screen.queryByRole('dialog', { name: 'Nova variável' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: /propriedades do elemento/i })).toBeInTheDocument()
+  })
+
+  it('bobina não oferece entradas: começa na primeira saída livre e aceita Memória', async () => {
+    const usuario = userEvent.setup()
+    const aoCriarVariavel = vi.fn(() => null)
+    render(
+      <ModalVariavel elemento={elemento('bobina')} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} aoCriarVariavel={aoCriarVariavel} />,
+    )
+
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    const pino = within(criacao).getByLabelText('Pino')
+    expect(pino).toHaveValue('%QX0.0')
+    expect(within(pino).queryByRole('option', { name: /%IX/ })).not.toBeInTheDocument()
+
+    await usuario.selectOptions(pino, '')
+    await usuario.type(within(criacao).getByLabelText('Nome'), 'memoria')
+    await usuario.click(within(criacao).getByRole('button', { name: 'Criar e vincular' }))
+    expect(aoCriarVariavel).toHaveBeenCalledWith({ nome: 'memoria' })
+  })
+
+  it('com ambiente aberto, o pino mostra o ponto da planta e o nome acompanha o pino até o usuário digitar', async () => {
+    const usuario = userEvent.setup()
+    render(
+      <ModalVariavel
+        elemento={elemento('contato_na')}
+        variaveis={[]}
+        aoEscolher={vi.fn()}
+        aoFechar={vi.fn()}
+        aoCriarVariavel={vi.fn(() => null)}
+        pontosAmbiente={PONTOS_PORTAO}
+      />,
+    )
+
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    const nome = within(criacao).getByLabelText('Nome')
+    const pino = within(criacao).getByLabelText('Pino')
+    expect(nome).toHaveValue('abrir')
+    expect(within(pino).getByRole('option', { name: 'GPIO 0 · %IX0.0 — Abrir' })).toBeInTheDocument()
+
+    await usuario.selectOptions(pino, '%IX0.2')
+    expect(nome).toHaveValue('parar')
+
+    await usuario.clear(nome)
+    await usuario.type(nome, 'meu_nome')
+    await usuario.selectOptions(pino, '%IX0.1')
+    expect(nome).toHaveValue('meu_nome')
+  })
+
+  it('recusa do núcleo aparece no modal de criação, que continua aberto', async () => {
+    const usuario = userEvent.setup()
+    render(
+      <ModalVariavel
+        elemento={elemento('contato_na')}
+        variaveis={[]}
+        aoEscolher={vi.fn()}
+        aoFechar={vi.fn()}
+        aoCriarVariavel={vi.fn(() => "nome de variável inválido: '1x'")}
+      />,
+    )
+
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    await usuario.type(within(criacao).getByLabelText('Nome'), '1x')
+    await usuario.click(within(criacao).getByRole('button', { name: 'Criar e vincular' }))
+    expect(within(criacao).getByText("nome de variável inválido: '1x'")).toBeInTheDocument()
+  })
+
+  it('Esc no modal de criação fecha só ele', async () => {
+    const usuario = userEvent.setup()
+    const aoFechar = vi.fn()
+    render(
+      <ModalVariavel elemento={elemento('contato_na')} variaveis={[]} aoEscolher={vi.fn()} aoFechar={aoFechar} aoCriarVariavel={vi.fn(() => null)} />,
+    )
+
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+    await usuario.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Nova variável' })).not.toBeInTheDocument()
+    expect(aoFechar).not.toHaveBeenCalled()
   })
 })
 

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://www.plcopen.org/xml/tc6_0201">
+  <fileHeader companyName="LadderFlow" productName="LadderFlow" productVersion="1" creationDateTime="2026-09-23T12:00:00.000Z"/>
+  <contentHeader name="blink"/>
+  <types>
+    <dataTypes/>
+    <pous>
+      <pou name="Programa" pouType="program">
+        <interface>
+          <localVars>
+          <variable name="botao">
+            <type><BOOL/></type>
+            <address>%IX0.0</address>
+          </variable>
+          <variable name="led">
+            <type><BOOL/></type>
+            <address>%QX0.0</address>
+          </variable>
+          <variable name="pulso">
+            <type><BOOL/></type>
+          </variable>
+          <variable name="reset_ctu">
+            <type><BOOL/></type>
+          </variable>
+          <variable name="atingiu">
+            <type><BOOL/></type>
+          </variable>
+          <variable name="led_estava_aceso">
+            <type><BOOL/></type>
+          </variable>
+          </localVars>
+        </interface>
+        <body>
+          <LD>
+<leftPowerRail localId="1" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="2" x="400" y="0" width="8" height="48"/>
+<contact localId="3" x="0" y="0" width="48" height="48"><variable>pulso</variable></contact>
+<block localId="4" typeName="CTU" x="336" y="0" width="48" height="48"><inputVariables><variable formalParameter="CU"/><variable formalParameter="R"/><variable formalParameter="PV"/></inputVariables><outputVariables><variable formalParameter="Q"/></outputVariables></block>
+<block localId="5" typeName="CTU" x="336" y="0" width="48" height="48"><inputVariables><variable formalParameter="CU"/><variable formalParameter="R"/><variable formalParameter="PV"/></inputVariables><outputVariables><variable formalParameter="Q"/></outputVariables></block>
+<connection refLocalId="3"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="4"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="5"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="2"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="6" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="7" x="400" y="0" width="8" height="48"/>
+<contact localId="8" x="0" y="0" width="48" height="48"><variable>atingiu</variable></contact>
+<coil localId="9" x="336" y="0" width="48" height="48" storage="reset"><variable>pulso</variable></coil>
+<connection refLocalId="8"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="9"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="7"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="10" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="11" x="400" y="0" width="8" height="48"/>
+<contact localId="12" x="0" y="0" width="48" height="48" negated="true"><variable>pulso</variable></contact>
+<coil localId="13" x="336" y="0" width="48" height="48"><variable>pulso</variable></coil>
+<connection refLocalId="12"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="13"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="11"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="14" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="15" x="400" y="0" width="8" height="48"/>
+<contact localId="16" x="0" y="0" width="48" height="48"><variable>led</variable></contact>
+<coil localId="17" x="336" y="0" width="48" height="48"><variable>led_estava_aceso</variable></coil>
+<connection refLocalId="16"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="17"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="15"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="18" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="19" x="400" y="0" width="8" height="48"/>
+<contact localId="20" x="0" y="0" width="48" height="48"><variable>reset_ctu</variable></contact>
+<contact localId="21" x="48" y="0" width="48" height="48" negated="true"><variable>led_estava_aceso</variable></contact>
+<coil localId="22" x="336" y="0" width="48" height="48" storage="set"><variable>led</variable></coil>
+<connection refLocalId="20"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="21"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="22"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="19"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="23" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="24" x="400" y="0" width="8" height="48"/>
+<contact localId="25" x="0" y="0" width="48" height="48"><variable>reset_ctu</variable></contact>
+<contact localId="26" x="48" y="0" width="48" height="48"><variable>led_estava_aceso</variable></contact>
+<coil localId="27" x="336" y="0" width="48" height="48" storage="reset"><variable>led</variable></coil>
+<connection refLocalId="25"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="26"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="27"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="24"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="28" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="29" x="400" y="0" width="8" height="48"/>
+<contact localId="30" x="0" y="0" width="48" height="48"><variable>atingiu</variable></contact>
+<coil localId="31" x="336" y="0" width="48" height="48"><variable>reset_ctu</variable></coil>
+<connection refLocalId="30"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="31"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="29"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="32" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="33" x="400" y="0" width="8" height="48"/>
+<contact localId="34" x="0" y="0" width="48" height="48"><variable>botao</variable></contact>
+<coil localId="35" x="336" y="0" width="48" height="48" storage="set"><variable>led</variable></coil>
+<connection refLocalId="34"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="35"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="33"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+        </body>
+      </pou>
+    </pous>
+  </types>
+</project>

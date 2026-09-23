@@ -1,0 +1,222 @@
+{
+  "versao": 1,
+  "variaveis": [
+    {
+      "nome": "abrir",
+      "tipo": "BOOL",
+      "endereco": "%IX0.0"
+    },
+    {
+      "nome": "fechar",
+      "tipo": "BOOL",
+      "endereco": "%IX0.1"
+    },
+    {
+      "nome": "parar",
+      "tipo": "BOOL",
+      "endereco": "%IX0.2"
+    },
+    {
+      "nome": "fc_superior",
+      "tipo": "BOOL",
+      "endereco": "%IX0.3"
+    },
+    {
+      "nome": "fc_inferior",
+      "tipo": "BOOL",
+      "endereco": "%IX0.4"
+    },
+    {
+      "nome": "motor_sobe",
+      "tipo": "BOOL",
+      "endereco": "%QX0.0"
+    },
+    {
+      "nome": "motor_desce",
+      "tipo": "BOOL",
+      "endereco": "%QX0.1"
+    },
+    {
+      "nome": "lamp_entreaberto",
+      "tipo": "BOOL",
+      "endereco": "%QX0.2"
+    },
+    {
+      "nome": "lamp_aberto",
+      "tipo": "BOOL",
+      "endereco": "%QX0.3"
+    },
+    {
+      "nome": "lamp_fechado",
+      "tipo": "BOOL",
+      "endereco": "%QX0.4"
+    }
+  ],
+  "rungs": [
+    {
+      "id": "r1",
+      "elementos": [
+        {
+          "id": "e1",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "abrir"
+        },
+        {
+          "id": "e2",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "parar"
+        },
+        {
+          "id": "e3",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 2
+          },
+          "variavel": "fc_superior"
+        },
+        {
+          "id": "e4",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "motor_sobe"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r2",
+      "elementos": [
+        {
+          "id": "e5",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "fechar"
+        },
+        {
+          "id": "e6",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "parar"
+        },
+        {
+          "id": "e7",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 2
+          },
+          "variavel": "fc_inferior"
+        },
+        {
+          "id": "e8",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "motor_desce"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r3",
+      "elementos": [
+        {
+          "id": "e9",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "fc_superior"
+        },
+        {
+          "id": "e10",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "lamp_aberto"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r4",
+      "elementos": [
+        {
+          "id": "e11",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "fc_inferior"
+        },
+        {
+          "id": "e12",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "lamp_fechado"
+        }
+      ],
+      "ramos": []
+    },
+    {
+      "id": "r5",
+      "elementos": [
+        {
+          "id": "e13",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 0,
+            "coluna": 0
+          },
+          "variavel": "fc_superior"
+        },
+        {
+          "id": "e14",
+          "tipo": "contato_nf",
+          "celula": {
+            "linha": 0,
+            "coluna": 1
+          },
+          "variavel": "fc_inferior"
+        },
+        {
+          "id": "e15",
+          "tipo": "bobina",
+          "celula": {
+            "linha": 0,
+            "coluna": 7
+          },
+          "variavel": "lamp_entreaberto"
+        }
+      ],
+      "ramos": []
+    }
+  ]
+}

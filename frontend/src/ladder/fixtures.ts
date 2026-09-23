@@ -261,3 +261,116 @@ export const BLINK: Diagrama = {
     },
   ],
 }
+
+/**
+ * `portao.st` (spec 005): lógica mínima do cenário portão — Abrir aciona motor
+ * sobe e Fechar aciona motor desce, com Parar em NF. Medido no arcabouço
+ * diferencial (RF-11).
+ *
+ * Revisão 2026-09-23 (spec 005, §10): o FC superior (`fc_superior`) é NA,
+ * mas fica **ligado** enquanto a folha estiver fechada ou entreaberta — a
+ * lona ainda passa pelo ponto fixo do sensor junto ao tambor — e só
+ * **desliga** perto do totalmente aberto. É o inverso do FC inferior (que
+ * liga perto do fechado). Por isso `fc_superior` entra em NA onde antes
+ * entrava em NF, e vice-versa, em cada degrau abaixo — a intenção de cada
+ * degrau (parar o motor no batente, acender a lâmpada certa) não muda, só o
+ * tipo de contato que lê `fc_superior` corretamente:
+ * - degrau 1: sobe **enquanto não estiver no batente de cima** — antes lia
+ *   "não `fc_superior`" (NF), agora lê **`fc_superior` (NA)**, porque
+ *   "não estar no batente" passou a ser exatamente quando o sensor está
+ *   ligado (lona ainda passando);
+ * - degrau 3 (`lamp_aberto`): antes acendia com `fc_superior` (NA) — "sensor
+ *   ligado = aberto", que era a leitura simétrica errada. Agora acende com
+ *   **`NOT fc_superior`** (NF): aberto é exatamente quando o sensor
+ *   *desliga*;
+ * - degrau 5 (`lamp_entreaberto`): antes exigia os dois fins de curso
+ *   desligados (`NF` para os dois). Agora, como "entreaberto" é quando o
+ *   FC superior está **ligado** (lona ainda passa) e o FC inferior está
+ *   **desligado** (não chegou ao fundo), o contato de `fc_superior` vira
+ *   **NA**, mantendo o de `fc_inferior` em NF.
+ */
+export const PORTAO: Diagrama = {
+  versao: 1,
+  variaveis: [
+    { nome: 'abrir', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'fechar', tipo: 'BOOL', endereco: '%IX0.1' },
+    { nome: 'parar', tipo: 'BOOL', endereco: '%IX0.2' },
+    { nome: 'fc_superior', tipo: 'BOOL', endereco: '%IX0.3' },
+    { nome: 'fc_inferior', tipo: 'BOOL', endereco: '%IX0.4' },
+    { nome: 'motor_sobe', tipo: 'BOOL', endereco: '%QX0.0' },
+    { nome: 'motor_desce', tipo: 'BOOL', endereco: '%QX0.1' },
+    { nome: 'lamp_entreaberto', tipo: 'BOOL', endereco: '%QX0.2' },
+    { nome: 'lamp_aberto', tipo: 'BOOL', endereco: '%QX0.3' },
+    { nome: 'lamp_fechado', tipo: 'BOOL', endereco: '%QX0.4' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'abrir' },
+        { id: 'e2', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
+        { id: 'e3', tipo: 'contato_na', celula: { linha: 0, coluna: 2 }, variavel: 'fc_superior' },
+        { id: 'e4', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'motor_sobe' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r2',
+      elementos: [
+        { id: 'e5', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'fechar' },
+        { id: 'e6', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
+        { id: 'e7', tipo: 'contato_nf', celula: { linha: 0, coluna: 2 }, variavel: 'fc_inferior' },
+        { id: 'e8', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'motor_desce' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r3',
+      elementos: [
+        { id: 'e9', tipo: 'contato_nf', celula: { linha: 0, coluna: 0 }, variavel: 'fc_superior' },
+        { id: 'e10', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'lamp_aberto' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r4',
+      elementos: [
+        { id: 'e11', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'fc_inferior' },
+        { id: 'e12', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'lamp_fechado' },
+      ],
+      ramos: [],
+    },
+    {
+      id: 'r5',
+      elementos: [
+        { id: 'e13', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'fc_superior' },
+        { id: 'e14', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'fc_inferior' },
+        { id: 'e15', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'lamp_entreaberto' },
+      ],
+      ramos: [],
+    },
+  ],
+}
+
+/**
+ * `saidas_paralelas.st`: uma condição aciona duas bobinas no mesmo degrau (revisão 2026-09-22).
+ */
+export const SAIDAS_PARALELAS: Diagrama = {
+  versao: 1,
+  variaveis: [
+    { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'saida_a', tipo: 'BOOL', endereco: '%QX0.0' },
+    { nome: 'saida_b', tipo: 'BOOL', endereco: '%QX0.1' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'entrada' },
+        { id: 'e2', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'saida_a' },
+        { id: 'e3', tipo: 'bobina', celula: { linha: 1, coluna: COLUNA_TERMINAL }, variavel: 'saida_b' },
+      ],
+      ramos: [{ id: 'b1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL }],
+    },
+  ],
+}

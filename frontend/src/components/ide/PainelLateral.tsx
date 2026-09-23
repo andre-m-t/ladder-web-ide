@@ -12,6 +12,8 @@ import Divisor from './Divisor'
 
 export interface PainelLateralProps {
   aberto: boolean
+  /** Rótulo do painel (aria-label do aside e do divisor). */
+  rotulo: string
   largura: number
   larguraMin: number
   larguraMax: number
@@ -21,6 +23,7 @@ export interface PainelLateralProps {
 
 export default function PainelLateral({
   aberto,
+  rotulo,
   largura,
   larguraMin,
   larguraMax,
@@ -37,10 +40,10 @@ export default function PainelLateral({
         min={larguraMin}
         max={larguraMax}
         aoMudar={aoRedimensionar}
-        rotulo="Redimensionar painel de variáveis"
+        rotulo={`Redimensionar ${rotulo.toLowerCase()}`}
       />
       <aside
-        aria-label="Painel de variáveis"
+        aria-label={rotulo}
         style={{ width: largura }}
         className="h-full shrink-0 overflow-y-auto bg-ide-painel"
       >

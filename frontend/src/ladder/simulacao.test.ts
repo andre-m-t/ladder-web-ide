@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { COLUNA_TERMINAL, type Diagrama, type Elemento, type ElementoCtu, type Ramo, type Rung, type Variavel } from './modelo'
-import { BLINK, IO_ESPELHO, MINIMAL, RAMO_OU } from './fixtures'
+import { BLINK, IO_ESPELHO, MINIMAL, RAMO_OU, SAIDAS_PARALELAS } from './fixtures'
 import { acionarEntrada, criarEstado, executarCiclo, reiniciar, type EstadoSimulacao } from './simulacao'
 
 // -- Ajudantes de teste -------------------------------------------------
@@ -128,6 +128,22 @@ describe('topologia: ramo paralelo', () => {
   it('contato no trilho em paralelo com contato no ramo: OR (fixture RAMO_OU)', () => {
     const rung = RAMO_OU.rungs[0]
     confereTabelaVerdade(rung, RAMO_OU.variaveis, ['a', 'b'], 'q')
+  })
+})
+
+describe('saídas paralelas na coluna terminal', () => {
+  it('fixture SAIDAS_PARALELAS: entrada aciona saida_a e saida_b juntas', () => {
+    let estado = criarEstado(SAIDAS_PARALELAS)
+    let resultado = executarCiclo(SAIDAS_PARALELAS, estado)
+    expect(resultado.variaveis.saida_a).toBe(false)
+    expect(resultado.variaveis.saida_b).toBe(false)
+
+    const acionado = acionarEntrada(SAIDAS_PARALELAS, estado, 'entrada', true)
+    expect(acionado.ok).toBe(true)
+    if (!acionado.ok) return
+    resultado = executarCiclo(SAIDAS_PARALELAS, acionado.estado)
+    expect(resultado.variaveis.saida_a).toBe(true)
+    expect(resultado.variaveis.saida_b).toBe(true)
   })
 })
 

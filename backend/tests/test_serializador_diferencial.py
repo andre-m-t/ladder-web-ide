@@ -81,6 +81,8 @@ _CENARIOS = [
     ("set_reset", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("selo", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
     ("blink", FIXTURES_DIFERENCIAL_DIR),
+    ("portao", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
+    ("saidas_paralelas", FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR),
 ]
 
 # Cenarios com ST de referencia da spec 001 (comparar_execucoes, alem do gabarito).
@@ -200,13 +202,15 @@ def test_toml_do_serializador_existem_e_tem_gabarito_denso() -> None:
     """
     nomes = sorted(caminho.stem for caminho in FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR.glob("*.toml"))
 
-    assert nomes == ["ramo_ou", "selo", "set_reset"]
+    assert nomes == ["io_espelho_8", "portao", "ramo_ou", "saidas_paralelas", "selo", "set_reset"]
+    _GABARITO_DENSO = frozenset({"io_espelho_8", "ramo_ou", "saidas_paralelas", "selo", "set_reset"})
     for nome in nomes:
         caminho = FIXTURES_DIFERENCIAL_SERIALIZADOR_DIR / f"{nome}.toml"
         dados = tomllib.loads(caminho.read_text(encoding="utf-8"))
         assert dados["st"] == f"{nome}.st"
-        # Gabarito denso: um ponto de verificacao por ciclo rodado.
-        assert len(dados.get("saidas_esperadas", [])) == dados["ciclos"]
+        # Gabarito denso: um ponto de verificacao por ciclo rodado (`portao` e esparso).
+        if nome in _GABARITO_DENSO:
+            assert len(dados.get("saidas_esperadas", [])) == dados["ciclos"]
 
 
 def test_toml_do_serializador_nao_entram_no_glob_do_test_diferencial() -> None:

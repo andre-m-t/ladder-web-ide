@@ -429,3 +429,102 @@ data, decisão e justificativa; não apague o enunciado.
 - **§11 (simplicidade e legibilidade):** o subconjunto de elementos (§4) foi
   limitado ao que os três cenários de referência exigem, em vez de antecipar
   cobertura mais ampla da norma "porque pode ser útil depois".
+
+## Revisão aditiva — 2026-09-22 (saídas paralelas na coluna terminal)
+
+- **Posição:** bobinas (e SET/RESET) podem ocupar a coluna terminal nas linhas
+  `0..LINHAS_EXTRAS_MAX`, alimentadas pelo mesmo nó terminal da linha 0 — saída
+  paralela IEC 61131-3. A regra de bobina é avaliada **antes** da checagem de
+  ramo; linha > 0 exige terminal na linha 0.
+- **Soltura:** `celulaDeSoltura` mira a primeira linha livre da coluna terminal;
+  ao mover uma bobina já colocada ali, a linha não muda.
+- **Desenho:** `GradeDegrau` desenha elo vertical, células focáveis e fio por
+  linha de bobina paralela (rótulo "linha N", distinto de ramo).
+
+> **Supersedida** pela revisão aditiva do mesmo dia (ramo de saída), abaixo, quanto
+> à soltura automática na primeira linha livre e ao desenho de linhas paralelas sem
+> ramo.
+
+## Revisão aditiva — 2026-09-22 (ramo de saída, bobina em série, modal de propriedades)
+
+- **Ramo de saída:** `Ramo` com `colunaInicio === colunaFim === COLUNA_TERMINAL`
+  (`ehRamoDeSaida` em `modelo.ts`). Criado ao soltar "Ramo" na coluna terminal;
+  não redimensiona; ao remover, apaga também a bobina da linha na coluna terminal.
+  Não aceita contatos — só habilita bobina paralela na linha do ramo.
+- **Soltura:** bobina nova vai para `(0, COLUNA_TERMINAL)` (série no trilho
+  principal) ou para `(L, COLUNA_TERMINAL)` quando a linha `L` tem ramo de saída;
+  mover bobina já no terminal preserva a linha. Paralelo **exige** ramo de saída na
+  linha (`motivoPosicaoInvalida`).
+- **Desenho:** sem slots automáticos nem elo vertical incondicional; o ramo de
+  saída desenha conector da linha 0 até a linha `L` e célula soltável na coluna
+  terminal, sem alça de redimensionar.
+- **Modal:** `ModalVariavel` passa a "Propriedades do elemento" — `<select>` de
+  variável e seletor de tipo por ícones na mesma família (`trocarTipoElemento` no
+  núcleo); CTU mantém limite PV, sem troca de tipo.
+
+## Revisão aditiva — 2026-09-23 (oito ajustes de IDE)
+
+- **Desfazer / Refazer:** pilha no cliente (`historico.ts`) cobre diagrama e
+  variáveis; botões na `BarraSuperior` e atalhos Ctrl+Z, Ctrl+Y e
+  Ctrl+Shift+Z (desabilitados durante a simulação). Não persiste em
+  `localStorage`.
+- *Revisão aditiva (2026-09-23, ajuste de UX):* os botões saíram da barra do
+  `EditorLadder` e passaram para a navbar principal (`BarraSuperior`).
+- **Remoção de degrau:** degrau vazio remove direto; com elemento ou ramo,
+  modal de confirmação antes de chamar o núcleo.
+- **Ramo paralelo:** alças nas duas pontas (`colunaInicio` e `colunaFim`);
+  `redimensionarRamo` valida ambos os extremos.
+- **Energização (RF-14, spec 004):** token `--ide-energizado` em verde,
+  distinto de `--ide-destaque`; redundância por cor e espessura mantida.
+- **Painel lateral:** largura máxima dinâmica (`window.innerWidth` menos
+  mínimo do editor) — ver também revisão na spec 005.
+
+## Revisão aditiva — 2026-09-23 (criar variável pelo elemento)
+
+- **Problema levantado pelo autor:** com um ambiente de simulação aberto, o
+  painel lateral mostra a planta e o alternador de variáveis fica desabilitado;
+  sem variáveis declaradas, o modal do elemento só dizia "crie na tabela ao
+  lado", uma tabela que não estava à vista. Montar a lógica exigia alternar
+  entre ambiente e variáveis a cada contato.
+- **Decisão:** o modal "Propriedades do elemento" ganha **"Nova variável…"**,
+  que abre um modal de criação de **uma** variável (`ModalNovaVariavel`) por
+  cima dele: nome, pino (livres das classes que o elemento aceita — contato:
+  entrada, saída ou memória; bobina e contador: saída ou memória, mesma regra
+  que já desabilita entradas no `<select>`) e, só leitura, tipo `BOOL` e uso
+  derivado do endereço. "Criar e vincular" declara a variável e a vincula ao
+  elemento **numa só jogada** (um `aoMudar`, uma entrada no Desfazer). É o
+  fluxo usual das ferramentas do nicho — criar a *tag* a partir do elemento.
+- **Com ambiente aberto:** cada pino do seletor mostra o ponto da planta que o
+  usa ("GPIO 0 · %IX0.0 — Abrir") e o nome proposto é o do contrato; a
+  proposta acompanha a troca de pino até o usuário digitar no nome. É o que
+  cobre o "apenas atribuir o endereço" do pedido: escolher o pino já traz um
+  nome válido.
+- **Regras preservadas:** a criação passa por `declararVariavel` (nome IEC
+  válido, nome e endereço únicos); a recusa aparece **no próprio modal**, junto
+  do campo — exceção consciente à regra das recusas em toast (#27), porque o
+  toast ficaria sob o overlay. O modal não abre durante a simulação (edição
+  congelada, spec 004 Q-7), logo a criação por aqui também não.
+- **O que não mudou:** a tabela de variáveis continua o lugar de renomear,
+  trocar pino e remover; o modal só cria.
+- O fluxo principal com ambiente aberto é o do contrato de E/S — ver revisão
+  de mesma data na spec 005.
+
+## Revisão aditiva — 2026-09-23 (tabela de variáveis bloqueada na simulação)
+
+- **Problema:** com a simulação ativa, o contrato de E/S do ambiente (spec
+  005) já impedia criar variáveis, mas a **tabela de variáveis** no painel
+  lateral continuava permitindo declarar, renomear, trocar classe/pino e
+  remover — assimetria registrada na F9 do `state.md`.
+- **Decisão do autor:** bloquear também a tabela, ficando simétrico ao
+  contrato e ao congelamento da edição do diagrama (spec 004 Q-7).
+- **Comportamento:** `TabelaVariaveis` recebe `simulacaoAtiva` (via
+  `PainelVariaveis` e `App.tsx`). Enquanto a simulação está ativa:
+  - **Desabilitado:** linha "Adicionar variável", edição de nome, seletor de
+    classe, seletor de pino e botão remover em cada linha.
+  - **Motivos no `title`:** "Saia da simulação para criar variáveis",
+    "Saia da simulação para editar variáveis" e "Saia da simulação para
+    remover variáveis" (mesmo tom do contrato de E/S).
+  - **Permanece ativo:** leitura da tabela, coluna "Valor" ao vivo e
+    acionamento de entradas simuláveis (quando não comandadas pela planta).
+- **O que não mudou:** renomear, trocar pino e remover pelo contrato de E/S
+  do ambiente continuam fora do escopo (próxima rodada, se o autor pedir).

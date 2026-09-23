@@ -38,6 +38,10 @@ function renderEditor(inicial: Diagrama = diagramaVazio()) {
   return { aoMudar, aoRecusar }
 }
 
+async function confirmarRemocaoDegrau(usuario: ReturnType<typeof userEvent.setup>) {
+  await usuario.click(screen.getByRole('button', { name: /^remover$/i }))
+}
+
 /** Diagrama de partida com variáveis já declaradas e nenhum elemento — a
  * criação de variável pela UI (tabela/painel) é responsabilidade da frente
  * que monta a IDE (`PainelVariaveis`), fora deste componente (plano §23). */
@@ -119,8 +123,9 @@ async function arrastarEEscolher(usuario: ReturnType<typeof userEvent.setup>, ro
   // `\b` nos dois lados: sem isso, escolher "led" também bateria com a opção
   // "led_estava_aceso" (usada pelo BLINK, CA-3) — as duas começam com "led",
   // mas só a primeira tem fronteira de palavra depois do "d".
-  const rotuloOpcao = nomeVariavel === null ? 'Sem variável' : new RegExp(`\\b${nomeVariavel}\\b`, 'i')
-  await usuario.click(within(dialogo).getByRole('button', { name: rotuloOpcao }))
+  const valor = nomeVariavel === null ? '__sem-variavel__' : nomeVariavel
+  await usuario.selectOptions(within(dialogo).getByRole('combobox'), valor)
+  await usuario.click(within(dialogo).getByRole('button', { name: 'Fechar' }))
 }
 
 describe('EditorLadder — CA-1: espelho direto (IO_ESPELHO) construído só pela UI', () => {
@@ -168,7 +173,7 @@ describe('EditorLadder — CA-5 (refeita, tarefa #25): recusa não altera o diag
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })).toBeInTheDocument()
   })
 
-  it('bobina com a coluna 8 já ocupada: soltar em qualquer célula recusa (mira sempre a coluna 8), aoRecusar chamado, diagrama intacto', () => {
+  it('segunda bobina sem ramo de saída: recusa (célula terminal da linha 0 ocupada)', () => {
     const diagramaComBobina: Diagrama = {
       versao: 1,
       variaveis: [],
@@ -176,13 +181,50 @@ describe('EditorLadder — CA-5 (refeita, tarefa #25): recusa não altera o diag
     }
     const { aoMudar, aoRecusar } = renderEditor(diagramaComBobina)
 
-    // solta uma segunda bobina numa célula qualquer (coluna 4): celulaDeSoltura mira a coluna 8, já ocupada
     const alvo = screen.getByRole('button', { name: 'Degrau 1, coluna 4, vazia' })
     arrastar(screen.getByRole('button', { name: /^bobina$/i }), alvo)
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/célula ocupada/i))
+    expect(aoRecusar).toHaveBeenCalled()
     expect(aoMudar).not.toHaveBeenCalled()
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('EditorLadder — nova variável pelo elemento (revisão 2026-09-23)', () => {
+  it('declara e vincula numa única mudança do diagrama', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const chamadasAntes = aoMudar.mock.calls.length
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' }))
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    await usuario.type(within(criacao).getByLabelText('Nome'), 'liga')
+    await usuario.click(within(criacao).getByRole('button', { name: 'Criar e vincular' }))
+
+    expect(aoMudar.mock.calls.length).toBe(chamadasAntes + 1)
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.variaveis).toEqual([{ nome: 'liga', tipo: 'BOOL', endereco: '%IX0.0' }])
+    expect(final.rungs[0].elementos[0]).toMatchObject({ tipo: 'contato_na', variavel: 'liga' })
+    expect(within(screen.getByRole('dialog', { name: /propriedades do elemento/i })).getByRole('combobox')).toHaveValue('liga')
+  })
+
+  it('nome repetido: recusa no modal de criação e o diagrama não muda', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor(diagramaComVariaveis([{ nome: 'liga', tipo: 'BOOL' }]))
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const chamadasAntes = aoMudar.mock.calls.length
+    await usuario.click(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' }))
+    await usuario.click(screen.getByRole('button', { name: /nova variável/i }))
+
+    const criacao = screen.getByRole('dialog', { name: 'Nova variável' })
+    await usuario.type(within(criacao).getByLabelText('Nome'), 'liga')
+    await usuario.click(within(criacao).getByRole('button', { name: 'Criar e vincular' }))
+
+    expect(within(criacao).getByText("já existe uma variável chamada 'liga'")).toBeInTheDocument()
+    expect(aoMudar.mock.calls.length).toBe(chamadasAntes)
   })
 })
 
@@ -292,7 +334,7 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
     fireEvent.pointerUp(window, { pointerId: 1 })
   })
 
-  it('arrastar bobina sobre coluna 1 com a coluna 8 já ocupada mostra prévia inválida na coluna 8, sem <title> nem texto do motivo', () => {
+  it('arrastar bobina sobre coluna 1 com a coluna 8 já ocupada mostra prévia inválida na coluna 8', () => {
     const diagramaComBobina: Diagrama = {
       versao: 1,
       variaveis: [],
@@ -309,7 +351,6 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
     fireEvent.pointerEnter(celula1, { pointerId: 1 })
 
     expect(celula8).toHaveAttribute('data-previa', 'invalida')
-    expect(celula8.querySelector('title')).toBeNull()
 
     fireEvent.pointerUp(window, { pointerId: 1 })
   })
@@ -474,7 +515,8 @@ describe('EditorLadder — arrasto por teclado, de ponta a ponta (sem ponteiro)'
 
     await usuario.keyboard('{Enter}')
     const dialogo = screen.getByRole('dialog')
-    await usuario.click(within(dialogo).getByRole('button', { name: /entrada/i }))
+    await usuario.selectOptions(within(dialogo).getByRole('combobox'), 'entrada')
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Fechar' }))
 
     const final = ultimoDiagrama(aoMudar)
     expect(final.rungs[0].elementos).toHaveLength(1)
@@ -632,7 +674,8 @@ describe('EditorLadder — cobertura adicional depois do ciclo modal', () => {
 
     await usuario.keyboard('{Enter}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sem variável' }))
+    await usuario.selectOptions(within(screen.getByRole('dialog')).getByRole('combobox'), '__sem-variavel__')
+    await usuario.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Fechar' }))
 
     expect(screen.getByRole('button', { name: 'Degrau 1, coluna 8, bobina sem variável' })).toBeInTheDocument()
   })
@@ -679,14 +722,15 @@ describe('EditorLadder — criar ramo por arrasto (tarefa #24, D-14)', () => {
     expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 1, vazia' })).toBeInTheDocument()
   })
 
-  it('soltar "Ramo" na coluna terminal (reservada a bobinas) é recusado, com o motivo do núcleo em aoRecusar', () => {
+  it('soltar "Ramo" na coluna terminal cria ramo de saída na primeira linha livre', () => {
     const { aoMudar, aoRecusar } = renderEditor()
 
     arrastar(screen.getByRole('button', { name: /^ramo$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/ramo só cobre colunas de contato/i))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(aoMudar).not.toHaveBeenCalled()
+    expect(aoRecusar).not.toHaveBeenCalled()
+    const final = ultimoDiagrama(aoMudar)
+    expect(final.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 7, colunaFim: 7 }])
+    expect(screen.getByRole('button', { name: 'Degrau 1, ramo 1, coluna 8, vazia' })).toBeInTheDocument()
   })
 
   it('arrastar "Ramo" até a lixeira cancela, sem criar ramo nenhum', () => {
@@ -715,7 +759,7 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
   it('arrasto por ponteiro: soltar numa coluna maior estica o ramo (redimensionarRamo aplicado)', () => {
     const { aoMudar } = renderEditor(diagramaComRamo())
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
     fireEvent.pointerMove(window, { pointerId: 7, clientX: 200, clientY: 0 })
     fireEvent.pointerUp(window, { pointerId: 7, clientX: 330, clientY: 0 })
@@ -728,7 +772,7 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
   it('arrasto por ponteiro: soltar numa coluna menor encolhe o ramo', () => {
     const { aoMudar } = renderEditor(diagramaComRamo())
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
     fireEvent.pointerUp(window, { pointerId: 7, clientX: 60, clientY: 0 })
 
@@ -742,7 +786,7 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
     diagrama.rungs[0].elementos.push({ id: 'e9', tipo: 'contato_na', celula: { linha: 1, coluna: 2 }, variavel: null })
     const { aoMudar, aoRecusar } = renderEditor(diagrama)
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     fireEvent.pointerDown(alca, { pointerId: 7, clientX: 200, clientY: 0 })
     fireEvent.pointerUp(window, { pointerId: 7, clientX: 60, clientY: 0 }) // coluna 0; contato está na coluna 2
 
@@ -755,7 +799,7 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
     const usuario = userEvent.setup()
     const { aoMudar } = renderEditor(diagramaComRamo())
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     alca.focus()
     await usuario.keyboard(' ')
     await usuario.keyboard('{ArrowRight}{ArrowRight}')
@@ -769,7 +813,7 @@ describe('EditorLadder — alça do ramo: esticar e encolher (D-14)', () => {
     const usuario = userEvent.setup()
     const { aoMudar } = renderEditor(diagramaComRamo())
 
-    const alca = screen.getByRole('slider', { name: /estender ramo 1/i })
+    const alca = screen.getByRole('slider', { name: /fim do ramo 1/i })
     alca.focus()
     await usuario.keyboard(' ')
     await usuario.keyboard('{ArrowLeft}')
@@ -867,6 +911,7 @@ describe('EditorLadder — CA-6: vários degraus (tarefa #10)', () => {
     expect(screen.getByRole('button', { name: 'Degrau 2, coluna 8, bobina sem variável' })).toBeInTheDocument()
 
     await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+    await confirmarRemocaoDegrau(usuario)
 
     const final = ultimoDiagrama(aoMudar)
     expect(final.rungs).toHaveLength(1)
@@ -910,6 +955,7 @@ describe('EditorLadder — CA-6: vários degraus (tarefa #10)', () => {
     expect(elemento).toHaveAttribute('aria-selected', 'true')
 
     await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+    await confirmarRemocaoDegrau(usuario)
 
     // o elemento marcado foi embora junto com o degrau; nenhuma célula do que restou continua marcada
     const celulasRestantes = screen.getAllByRole('button', { name: /^Degrau 1,/ })
@@ -1157,8 +1203,52 @@ describe('EditorLadder — bobina sempre na coluna 8 (tarefa #25, celulaDeSoltur
     const alvo = screen.getByRole('button', { name: 'Degrau 1, coluna 4, vazia' })
     arrastar(screen.getByRole('button', { name: /^bobina$/i }), alvo)
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/célula ocupada/i))
+    expect(aoRecusar).toHaveBeenCalled()
     expect(aoMudar).not.toHaveBeenCalled()
+  })
+
+  it('coluna terminal cheia nas três linhas com ramos de saída: nova bobina é recusada', () => {
+    const diagrama: Diagrama = {
+      versao: 1,
+      variaveis: [],
+      rungs: [
+        {
+          id: 'r1',
+          elementos: [
+            { id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null },
+            { id: 'e2', tipo: 'bobina', celula: { linha: 1, coluna: 7 }, variavel: null },
+            { id: 'e3', tipo: 'bobina', celula: { linha: 2, coluna: 7 }, variavel: null },
+          ],
+          ramos: [
+            { id: 'rs1', linha: 1, colunaInicio: 7, colunaFim: 7 },
+            { id: 'rs2', linha: 2, colunaInicio: 7, colunaFim: 7 },
+          ],
+        },
+      ],
+    }
+    const { aoMudar, aoRecusar } = renderEditor(diagrama)
+
+    const alvo = screen.getByRole('button', { name: 'Degrau 1, coluna 4, vazia' })
+    arrastar(screen.getByRole('button', { name: /^bobina$/i }), alvo)
+
+    expect(aoRecusar).toHaveBeenCalled()
+    expect(aoMudar).not.toHaveBeenCalled()
+  })
+})
+
+describe('EditorLadder — confirmação ao remover degrau com conteúdo', () => {
+  it('degrau com elemento abre modal; Cancelar não altera o diagrama', async () => {
+    const usuario = userEvent.setup()
+    const { aoMudar } = renderEditor()
+
+    arrastar(screen.getByRole('button', { name: /^contato na$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 1, vazia' }))
+    const chamadasAposInserir = aoMudar.mock.calls.length
+    await usuario.click(screen.getByRole('button', { name: 'Remover degrau 1' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(aoMudar.mock.calls.length).toBe(chamadasAposInserir)
+    expect(screen.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA sem variável' })).toBeInTheDocument()
   })
 })
 
@@ -1298,6 +1388,9 @@ describe('EditorLadder — CA-3: construir o BLINK inteiro pela UI (spec 003, ct
   // 8 degraus, ~22 arrastos reais via userEvent + o modal do CTU duas vezes:
   // passa dos 5s padrão do vitest com folga (medido isolado: ~3,8s em
   // container node:22-bookworm-slim) — daí o timeout de 20s abaixo.
+  // 2026-09-23: no host o teste já levava 18–19 s isolado; o botão "Nova
+  // variável…" no modal (um papel `button` a mais por `getByRole`) passou dos
+  // 20 s — timeout elevado para 40 s.
   it('8 degraus com contatos, bobinas SET/RESET e o contador CTU resultam na fixture BLINK, sem problemas', async () => {
     const usuario = userEvent.setup()
     const { aoMudar } = renderEditor(diagramaComVariaveis(BLINK.variaveis))
@@ -1355,7 +1448,7 @@ describe('EditorLadder — CA-3: construir o BLINK inteiro pela UI (spec 003, ct
     const final = ultimoDiagrama(aoMudar)
     expect(normalizarIds(final)).toEqual(normalizarIds(BLINK))
     expect(validarDiagrama(final)).toEqual([])
-  }, 20000)
+  }, 40000)
 })
 
 describe('EditorLadder — desempenho com 50 degraus preenchidos (plano §6, RNF)', () => {

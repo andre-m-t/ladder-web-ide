@@ -96,6 +96,7 @@ import { GitBranch, Plus } from 'lucide-react'
 import {
   celulaDeSoltura,
   criarRamo,
+  declararVariavel,
   inserirDegrau,
   inserirElemento,
   moverElemento,
@@ -103,14 +104,17 @@ import {
   removerDegrau,
   removerElemento,
   removerRamo,
+  trocarTipoElemento,
   vincularVariavel,
 } from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
+import type { PontoAmbiente } from '../../ambientes/contrato'
 import { atualizarCtu } from '../../ladder/ctu'
 import { COLUNAS_POR_DEGRAU, ehCtu, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
 import type { EnergizacaoDegrau } from '../../ladder/simulacao'
 import { descreverCelula, type Problema } from '../../ladder/validacao'
-import GradeDegrau, { type Previa, type PreviaAlca } from './GradeDegrau'
+import GradeDegrau, { type PontaAlcaRamo, type Previa, type PreviaAlca } from './GradeDegrau'
+import ModalConfirmarRemocaoDegrau from './ModalConfirmarRemocaoDegrau'
 import ModalVariavel from './ModalVariavel'
 import Paleta, { type TipoPaleta } from './Paleta'
 import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
@@ -144,6 +148,9 @@ export interface EditorLadderProps {
   /** Energização por degrau, calculada pelo motor de simulação (RF-6, RF-14,
    * plano §5.4) — `null`/ausente é o comportamento de hoje (sem simulação). */
   simulacao?: { energizacao: Record<string, EnergizacaoDegrau> } | null
+  /** Pontos do ambiente aberto (spec 005, revisão 2026-09-23): no modal do
+   * elemento, rotulam os pinos e sugerem o nome da variável nova. */
+  pontosAmbiente?: readonly PontoAmbiente[]
 }
 
 /** Recusa de uma jogada, localizada no degrau (e, quando há, na célula)
@@ -290,7 +297,8 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
       if (novoRamo === undefined) return { celula, tipo: 'invalida', motivo: 'não foi possível calcular a prévia do ramo' }
       return { tipo: 'ramo-criar', ramo: { linha: novoRamo.linha, colunaInicio: novoRamo.colunaInicio, colunaFim: novoRamo.colunaFim } }
     }
-    const alvo = celulaDeSoltura(origem.tipo, celula)
+    const rung = diagrama.rungs.find((r) => r.id === rungId)
+    const alvo = celulaDeSoltura(origem.tipo, celula, rung)
     const resultado = inserirElemento(diagrama, rungId, origem.tipo, alvo)
     if (resultado.ok) {
       const linhaReset = origem.tipo === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId) : undefined
@@ -300,7 +308,8 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
   }
   const achadoOrigem = encontrarElementoPorId(diagrama, origem.elementoId)
   const tipoOrigem = achadoOrigem?.elemento.tipo ?? 'contato_na'
-  const alvo = celulaDeSoltura(tipoOrigem, celula)
+  const rungMover = diagrama.rungs.find((r) => r.id === rungId)
+  const alvo = celulaDeSoltura(tipoOrigem, celula, rungMover, origem.elementoId)
   const resultado = moverElemento(diagrama, origem.elementoId, rungId, alvo)
   if (resultado.ok) {
     const linhaReset = tipoOrigem === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId, origem.elementoId) : undefined
@@ -383,7 +392,21 @@ function proximoAlvo(diagrama: Diagrama, alvo: AlvoArrasto, tecla: string): Alvo
   return alvo
 }
 
-export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRecusar, congelado = false, simulacao = null }: EditorLadderProps) {
+function extremosRamo(ramo: Ramo, coluna: number, ponta: PontaAlcaRamo): { colunaInicio: number; colunaFim: number } {
+  if (ponta === 'inicio') return { colunaInicio: coluna, colunaFim: ramo.colunaFim }
+  return { colunaInicio: ramo.colunaInicio, colunaFim: coluna }
+}
+
+export default function EditorLadder({
+  diagrama,
+  aoMudar,
+  problemas,
+  foco,
+  aoRecusar,
+  congelado = false,
+  simulacao = null,
+  pontosAmbiente,
+}: EditorLadderProps) {
   const [marcado, setMarcado] = useState<string | null>(null)
   const [ramoMarcado, setRamoMarcado] = useState<string | null>(null)
   const [modal, setModal] = useState<{ elementoId: string } | null>(null)
@@ -402,7 +425,15 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
   /** Prévia (ponteiro ou teclado) da alça de redimensionamento de um ramo
    * (D-14) — `null` quando nenhuma alça está sendo manipulada. `valido`
    * reflete o resultado de `redimensionarRamo` chamado sem aplicar. */
-  const [previaAlca, setPreviaAlca] = useState<{ rungId: string; ramoId: string; colunaFim: number; valido: boolean } | null>(null)
+  const [previaAlca, setPreviaAlca] = useState<{
+    rungId: string
+    ramoId: string
+    colunaInicio: number
+    colunaFim: number
+    ponta: PontaAlcaRamo
+    valido: boolean
+  } | null>(null)
+  const [modalRemoverDegrau, setModalRemoverDegrau] = useState<{ rungId: string; indice: number } | null>(null)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const diagramaRef = useRef(diagrama)
@@ -551,7 +582,8 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
       }
       // Tarefa #25: bobina redireciona para a coluna terminal, não importa a
       // célula sob o cursor/foco — `alvoReal` é onde a jogada de fato cai.
-      const alvoReal = celulaDeSoltura(origem.tipo, alvo.celula)
+      const rungSolta = diagramaRef.current.rungs.find((r) => r.id === alvo.rungId)
+      const alvoReal = celulaDeSoltura(origem.tipo, alvo.celula, rungSolta)
       const onde = descreverCelula(indiceDegrau, alvoReal)
       const resultado: ResultadoEdicao = inserirElemento(diagramaRef.current, alvo.rungId, origem.tipo, alvoReal)
       if (!resultado.ok) {
@@ -571,7 +603,8 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     setMarcado(null)
     const achadoOrigem = encontrarElementoPorId(diagramaRef.current, origem.elementoId)
     const tipoOrigem = achadoOrigem?.elemento.tipo ?? 'contato_na'
-    const alvoReal = celulaDeSoltura(tipoOrigem, alvo.celula)
+    const rungMoverSolta = diagramaRef.current.rungs.find((r) => r.id === alvo.rungId)
+    const alvoReal = celulaDeSoltura(tipoOrigem, alvo.celula, rungMoverSolta, origem.elementoId)
     const onde = descreverCelula(indiceDegrau, alvoReal)
     const resultado = moverElemento(diagramaRef.current, origem.elementoId, alvo.rungId, alvoReal)
     if (!resultado.ok) {
@@ -812,8 +845,7 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * alterar o diagrama; um sucesso limpa a marcação de elemento ou ramo que
    * pertencesse ao degrau removido — do contrário ficaria apontando para algo
    * que não existe mais. */
-  function aoRemoverDegrauHandler(rungId: string) {
-    if (congelado) return
+  function executarRemoverDegrau(rungId: string) {
     const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
     const marcadoNesteDegrau = marcado !== null && encontrarElementoPorId(diagrama, marcado)?.rungId === rungId
     const ramoMarcadoNesteDegrau = ramoMarcado !== null && encontrarRamoPorId(diagrama, ramoMarcado)?.rungId === rungId
@@ -830,6 +862,19 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     if (marcadoNesteDegrau) setMarcado(null)
     if (ramoMarcadoNesteDegrau) setRamoMarcado(null)
     setAnuncio(`degrau ${indice + 1} removido`)
+  }
+
+  function aoRemoverDegrauHandler(rungId: string) {
+    if (congelado) return
+    const rung = diagrama.rungs.find((r) => r.id === rungId)
+    if (!rung) return
+    const indice = diagrama.rungs.findIndex((r) => r.id === rungId)
+    const temConteudo = rung.elementos.length > 0 || rung.ramos.length > 0
+    if (temConteudo) {
+      setModalRemoverDegrau({ rungId, indice })
+      return
+    }
+    executarRemoverDegrau(rungId)
   }
 
   // Um arrasto que se movimenta o bastante para contar como arrasto (>4px)
@@ -929,10 +974,13 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * (coluna vem da geometria calculada em `GradeDegrau`) quanto por cada
    * tecla de seta durante o arrasto por teclado. Inválida repassa o motivo a
    * `aoRecusar` (tarefa #25), âncorado na linha do ramo. */
-  function atualizarPreviaAlca(rungId: string, ramoId: string, coluna: number) {
+  function atualizarPreviaAlca(rungId: string, ramoId: string, coluna: number, ponta: PontaAlcaRamo) {
     if (congelado) return
-    const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
-    setPreviaAlca({ rungId, ramoId, colunaFim: coluna, valido: resultado.ok })
+    const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
+    if (!achado) return
+    const extremos = extremosRamo(achado.ramo, coluna, ponta)
+    const resultado = redimensionarRamo(diagramaRef.current, ramoId, extremos)
+    setPreviaAlca({ rungId, ramoId, ...extremos, ponta, valido: resultado.ok })
     if (resultado.ok) {
       setRecusa(null)
       setAnuncio(`alça em coluna ${coluna + 1} — posição válida`)
@@ -941,19 +989,24 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     // Prévia, não jogada: só marca a célula. `aoRecusar` fica para o soltar
     // (`aplicarAlca`), senão a barra de status e o Console recebem uma recusa
     // a cada `pointermove`.
-    const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
-    setRecusa({ rungId, celula: { linha: achado?.ramo.linha ?? 0, coluna }, motivo: resultado.motivo })
+    setRecusa({ rungId, celula: { linha: achado.ramo.linha, coluna }, motivo: resultado.motivo })
     setAnuncio(`alça em coluna ${coluna + 1} — recusado: ${resultado.motivo}`)
   }
 
   /** Aplica o redimensionamento na coluna dada (fim do arrasto por ponteiro,
    * ou Espaço com a alça pega pelo teclado). */
-  function aplicarAlca(rungId: string, ramoId: string, coluna: number) {
+  function aplicarAlca(rungId: string, ramoId: string, coluna: number, ponta: PontaAlcaRamo) {
     if (congelado) {
       setPreviaAlca(null)
       return
     }
-    const resultado = redimensionarRamo(diagramaRef.current, ramoId, coluna)
+    const achado = encontrarRamoPorId(diagramaRef.current, ramoId)
+    if (!achado) {
+      setPreviaAlca(null)
+      return
+    }
+    const extremos = extremosRamo(achado.ramo, coluna, ponta)
+    const resultado = redimensionarRamo(diagramaRef.current, ramoId, extremos)
     if (resultado.ok) {
       aoMudarRef.current(resultado.diagrama)
       setRecusa(null)
@@ -979,18 +1032,26 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
    * Espaço/Enter só pega (grava a prévia com a coluna atual, sem chamar o
    * núcleo — nada mudou ainda); com a alça pega, ←/→ recalculam a prévia,
    * Espaço/Enter aplicam e Esc cancela. */
-  function aoTeclarNaAlca(evento: ReactKeyboardEvent<SVGGElement>, rungId: string, ramoId: string) {
+  function aoTeclarNaAlca(evento: ReactKeyboardEvent<SVGGElement>, rungId: string, ramoId: string, ponta: PontaAlcaRamo) {
     if (congelado) return
     const achado = encontrarRamoPorId(diagrama, ramoId)
     if (!achado) return
-    const pega = previaAlca !== null && previaAlca.ramoId === ramoId
+    const pega = previaAlca !== null && previaAlca.ramoId === ramoId && previaAlca.ponta === ponta
 
     if (!pega) {
       if (evento.key === ' ' || evento.key === 'Enter') {
         evento.preventDefault()
         evento.stopPropagation()
-        setPreviaAlca({ rungId, ramoId, colunaFim: achado.ramo.colunaFim, valido: true })
-        setAnuncio(`alça do ramo ${achado.ramo.linha} selecionada, coluna ${achado.ramo.colunaFim + 1} — use as setas para esticar ou encolher`)
+        setPreviaAlca({
+          rungId,
+          ramoId,
+          colunaInicio: achado.ramo.colunaInicio,
+          colunaFim: achado.ramo.colunaFim,
+          ponta,
+          valido: true,
+        })
+        const col = ponta === 'inicio' ? achado.ramo.colunaInicio : achado.ramo.colunaFim
+        setAnuncio(`alça do ramo ${achado.ramo.linha} selecionada, coluna ${col + 1} — use as setas para esticar ou encolher`)
       }
       return
     }
@@ -998,16 +1059,18 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     if (evento.key === 'ArrowLeft' || evento.key === 'ArrowRight') {
       evento.preventDefault()
       evento.stopPropagation()
-      const atual = previaAlca?.colunaFim ?? achado.ramo.colunaFim
+      const atual = ponta === 'inicio' ? (previaAlca?.colunaInicio ?? achado.ramo.colunaInicio) : (previaAlca?.colunaFim ?? achado.ramo.colunaFim)
       const proxima = evento.key === 'ArrowLeft' ? atual - 1 : atual + 1
       if (proxima < 0 || proxima >= COLUNAS_POR_DEGRAU) return
-      atualizarPreviaAlca(rungId, ramoId, proxima)
+      atualizarPreviaAlca(rungId, ramoId, proxima, ponta)
       return
     }
     if (evento.key === ' ' || evento.key === 'Enter') {
       evento.preventDefault()
       evento.stopPropagation()
-      aplicarAlca(rungId, ramoId, previaAlca?.colunaFim ?? achado.ramo.colunaFim)
+      const col =
+        ponta === 'inicio' ? (previaAlca?.colunaInicio ?? achado.ramo.colunaInicio) : (previaAlca?.colunaFim ?? achado.ramo.colunaFim)
+      aplicarAlca(rungId, ramoId, col, ponta)
       return
     }
     if (evento.key === 'Escape') {
@@ -1069,8 +1132,46 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
     const resultado = vincularVariavel(diagrama, modal.elementoId, nome)
     if (resultado.ok) {
       aoMudar(resultado.diagrama)
+      setRecusa(null)
+    } else {
+      reportarRecusa({
+        rungId: diagrama.rungs.find((r) => r.elementos.some((e) => e.id === modal.elementoId))?.id ?? diagrama.rungs[0].id,
+        celula: encontrarElementoPorId(diagrama, modal.elementoId)?.elemento.celula,
+        motivo: resultado.motivo,
+      })
     }
-    fecharModal()
+  }
+
+  /** "Nova variável" no modal do elemento (spec 002, revisão 2026-09-23):
+   * declara e vincula numa jogada só — um único `aoMudar`, logo uma única
+   * entrada no histórico de Desfazer. A recusa volta ao modal de criação,
+   * que a mostra junto do campo (um toast ficaria sob o overlay). */
+  function aoCriarVariavelNoModal(variavel: { nome: string; endereco?: string }): string | null {
+    if (congelado || !modal) return 'edição congelada durante a simulação'
+    const declarada = declararVariavel(diagrama, variavel)
+    if (!declarada.ok) return declarada.motivo
+    const vinculada = vincularVariavel(declarada.diagrama, modal.elementoId, variavel.nome)
+    if (!vinculada.ok) return vinculada.motivo
+    aoMudar(vinculada.diagrama)
+    setRecusa(null)
+    setAnuncio(`variável ${variavel.nome} criada e vinculada`)
+    return null
+  }
+
+  function aoTrocarTipoNoModal(novoTipo: Elemento['tipo']) {
+    if (congelado || !modal) return
+    const resultado = trocarTipoElemento(diagrama, modal.elementoId, novoTipo)
+    if (resultado.ok) {
+      aoMudar(resultado.diagrama)
+      setRecusa(null)
+    } else {
+      const achado = encontrarElementoPorId(diagrama, modal.elementoId)
+      reportarRecusa({
+        rungId: achado?.rungId ?? diagrama.rungs[0].id,
+        celula: achado?.elemento.celula,
+        motivo: resultado.motivo,
+      })
+    }
   }
 
   /** Novo limite (PV) do CTU aberto no modal (tarefa #18, D-19): aplica via
@@ -1158,7 +1259,14 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
           })()
 
           const previaAlcaAqui: PreviaAlca | null =
-            previaAlca && previaAlca.rungId === rung.id ? { ramoId: previaAlca.ramoId, colunaFim: previaAlca.colunaFim, valido: previaAlca.valido } : null
+            previaAlca && previaAlca.rungId === rung.id
+              ? {
+                  ramoId: previaAlca.ramoId,
+                  colunaInicio: previaAlca.colunaInicio,
+                  colunaFim: previaAlca.colunaFim,
+                  valido: previaAlca.valido,
+                }
+              : null
 
           return (
             <GradeDegrau
@@ -1210,13 +1318,34 @@ export default function EditorLadder({ diagrama, aoMudar, problemas, foco, aoRec
         <GhostArrasto tipo={tipoGhost} x={posGhost.x} y={posGhost.y} />
       )}
 
+      {modalRemoverDegrau && (() => {
+        const rung = diagrama.rungs.find((r) => r.id === modalRemoverDegrau.rungId)
+        if (!rung) return null
+        return (
+          <ModalConfirmarRemocaoDegrau
+            indiceDegrau={modalRemoverDegrau.indice}
+            quantidadeElementos={rung.elementos.length}
+            quantidadeRamos={rung.ramos.length}
+            aoCancelar={() => setModalRemoverDegrau(null)}
+            aoConfirmar={() => {
+              const id = modalRemoverDegrau.rungId
+              setModalRemoverDegrau(null)
+              executarRemoverDegrau(id)
+            }}
+          />
+        )
+      })()}
+
       {modal && elementoDoModal && (
         <ModalVariavel
           elemento={elementoDoModal}
           variaveis={diagrama.variaveis}
           aoEscolher={aoEscolherNoModal}
+          aoTrocarTipo={aoTrocarTipoNoModal}
           aoFechar={fecharModal}
           aoAlterarLimite={aoAlterarLimiteNoModal}
+          aoCriarVariavel={aoCriarVariavelNoModal}
+          pontosAmbiente={pontosAmbiente}
         />
       )}
     </div>

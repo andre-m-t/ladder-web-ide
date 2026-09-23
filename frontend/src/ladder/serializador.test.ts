@@ -360,6 +360,24 @@ describe('bobinas', () => {
     if (resultado.ok) expect(resultado.st).toContain('  x := a;')
   })
 
+  it('duas bobinas paralelas no mesmo degrau: mesma expressão, duas atribuições', () => {
+    const diagrama = diagramaDeUmDegrau(
+      [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' },
+        { id: 'e2', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'x' },
+        { id: 'e3', tipo: 'bobina', celula: { linha: 1, coluna: COLUNA_TERMINAL }, variavel: 'y' },
+      ],
+      [],
+      [variavelInterna('a'), variavelInterna('x'), variavelInterna('y')],
+    )
+    const resultado = serializar(diagrama)
+    expect(resultado.ok).toBe(true)
+    if (resultado.ok) {
+      expect(resultado.st).toContain('  x := a;')
+      expect(resultado.st).toContain('  y := a;')
+    }
+  })
+
   it('bobina_set: "IF expr THEN\\n    x := TRUE;\\n  END_IF;"', () => {
     const diagrama = diagramaDeUmDegrau(
       [

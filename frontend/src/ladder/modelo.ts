@@ -107,3 +107,8 @@ export function variavelDoElemento(elemento: Elemento): string | null {
 
 /** Coluna reservada aos terminais. */
 export const COLUNA_TERMINAL = COLUNAS_POR_DEGRAU - 1
+
+/** Ramo de saída: só na coluna terminal — reserva a linha para uma bobina paralela. */
+export function ehRamoDeSaida(ramo: Ramo): boolean {
+  return ramo.colunaInicio === COLUNA_TERMINAL && ramo.colunaFim === COLUNA_TERMINAL
+}

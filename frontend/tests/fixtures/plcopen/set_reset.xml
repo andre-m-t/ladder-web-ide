@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://www.plcopen.org/xml/tc6_0201">
+  <fileHeader companyName="LadderFlow" productName="LadderFlow" productVersion="1" creationDateTime="2026-09-23T12:00:00.000Z"/>
+  <contentHeader name="set_reset"/>
+  <types>
+    <dataTypes/>
+    <pous>
+      <pou name="Programa" pouType="program">
+        <interface>
+          <localVars>
+          <variable name="liga">
+            <type><BOOL/></type>
+            <address>%IX0.0</address>
+          </variable>
+          <variable name="desliga">
+            <type><BOOL/></type>
+            <address>%IX0.1</address>
+          </variable>
+          <variable name="q">
+            <type><BOOL/></type>
+            <address>%QX0.0</address>
+          </variable>
+          </localVars>
+        </interface>
+        <body>
+          <LD>
+<leftPowerRail localId="1" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="2" x="400" y="0" width="8" height="48"/>
+<contact localId="3" x="0" y="0" width="48" height="48"><variable>liga</variable></contact>
+<coil localId="4" x="336" y="0" width="48" height="48" storage="set"><variable>q</variable></coil>
+<connection refLocalId="3"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="4"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="2"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+          <LD>
+<leftPowerRail localId="5" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="6" x="400" y="0" width="8" height="48"/>
+<contact localId="7" x="0" y="0" width="48" height="48"><variable>desliga</variable></contact>
+<coil localId="8" x="336" y="0" width="48" height="48" storage="reset"><variable>q</variable></coil>
+<connection refLocalId="7"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="8"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="6"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+        </body>
+      </pou>
+    </pous>
+  </types>
+</project>

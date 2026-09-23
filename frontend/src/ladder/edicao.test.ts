@@ -19,6 +19,7 @@ import {
   removerElemento,
   removerRamo,
   removerVariavel,
+  trocarTipoElemento,
   vincularVariavel,
 } from './edicao'
 
@@ -48,8 +49,19 @@ describe('celulaDeSoltura', () => {
     expect(COLUNA_TERMINAL).toBe(7)
   })
 
-  it('bobina_set solta numa linha de ramo também vai para (linha 0, coluna terminal)', () => {
-    expect(celulaDeSoltura('bobina_set', { linha: 1, coluna: 3 })).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+  it('bobina solta numa linha de ramo de contato ainda vai para a coluna terminal da linha 0', () => {
+    const rungVazio = { id: 'r1', elementos: [], ramos: [] }
+    expect(celulaDeSoltura('bobina_set', { linha: 1, coluna: 3 }, rungVazio)).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+  })
+
+  it('bobina solta numa linha com ramo de saída vai para a coluna terminal dessa linha', () => {
+    const rung = {
+      id: 'r1',
+      elementos: [{ id: 'b1', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'a' }],
+      ramos: [{ id: 'rs1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL }],
+    }
+    expect(celulaDeSoltura('bobina', { linha: 1, coluna: COLUNA_TERMINAL }, rung)).toEqual({ linha: 1, coluna: COLUNA_TERMINAL })
+    expect(celulaDeSoltura('bobina', { linha: 0, coluna: 3 }, rung)).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
   })
 
   it('contato: devolve a mesma célula, sem alterar', () => {
@@ -58,19 +70,24 @@ describe('celulaDeSoltura', () => {
     expect(celulaDeSoltura('contato_na', celula)).toBe(celula) // mesma referência, não cópia
   })
 
-  it('composição com inserirElemento: bobina solta em qualquer célula vai para o terminal, mas ainda recusa se ocupado', () => {
+  it('composição com inserirElemento: segunda bobina paralela exige ramo de saída', () => {
     const comBobina = inserirElemento(diagramaVazio(), 'r1', 'bobina', { linha: 0, coluna: COLUNA_TERMINAL })
     if (!comBobina.ok) throw new Error('esperava sucesso')
-    const diagrama = congelarProfundo(comBobina.diagrama)
+    let diagrama = congelarProfundo(comBobina.diagrama)
 
-    // soltando uma segunda bobina em qualquer célula, a UI chamaria celulaDeSoltura primeiro
-    const destino = celulaDeSoltura('bobina_set', { linha: 0, coluna: 3 })
-    expect(destino).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+    const rung = diagrama.rungs[0]
+    const destinoSemRamo = celulaDeSoltura('bobina_set', { linha: 0, coluna: 3 }, rung)
+    expect(destinoSemRamo).toEqual({ linha: 0, coluna: COLUNA_TERMINAL })
+    expect(inserirElemento(diagrama, 'r1', 'bobina_set', destinoSemRamo).ok).toBe(false)
 
-    const resultado = inserirElemento(diagrama, 'r1', 'bobina_set', destino)
-    expect(resultado.ok).toBe(false)
-    if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toContain('ocupada')
+    const comRamo = criarRamo(diagrama, 'r1', COLUNA_TERMINAL)
+    if (!comRamo.ok) throw new Error('esperava ramo de saída')
+    diagrama = comRamo.diagrama
+    const destinoParalelo = celulaDeSoltura('bobina_set', { linha: 1, coluna: COLUNA_TERMINAL }, diagrama.rungs[0])
+    const resultado = inserirElemento(diagrama, 'r1', 'bobina_set', destinoParalelo)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].elementos).toHaveLength(2)
   })
 })
 
@@ -124,7 +141,7 @@ describe('inserirElemento', () => {
     // explica a regra (bobina só na última coluna do trilho principal), com
     // a coluna terminal em 1-based (a interface rotula a partir de 1)
     expect(resultado.motivo).toContain(`coluna ${COLUNA_TERMINAL + 1}`)
-    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).toContain('última coluna')
     // nunca no formato interno linha=/coluna= (0-based)
     expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
   })
@@ -437,6 +454,32 @@ describe('declararVariavel', () => {
   })
 })
 
+describe('trocarTipoElemento', () => {
+  it('troca contato NA por NF preservando id, célula e variável', () => {
+    const comElemento = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 1 })
+    if (!comElemento.ok) throw new Error('esperava sucesso')
+    const comVar = vincularVariavel(comElemento.diagrama, 'e1', null)
+    if (!comVar.ok) throw new Error('esperava sucesso')
+
+    const resultado = trocarTipoElemento(comVar.diagrama, 'e1', 'contato_nf')
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error(resultado.motivo)
+    expect(resultado.diagrama.rungs[0].elementos[0]).toMatchObject({
+      id: 'e1',
+      tipo: 'contato_nf',
+      celula: { linha: 0, coluna: 1 },
+      variavel: null,
+    })
+  })
+
+  it('recusa troca entre famílias contato e bobina', () => {
+    const comElemento = inserirElemento(diagramaVazio(), 'r1', 'contato_na', { linha: 0, coluna: 0 })
+    if (!comElemento.ok) throw new Error('esperava sucesso')
+    const resultado = trocarTipoElemento(comElemento.diagrama, 'e1', 'bobina')
+    expect(resultado.ok).toBe(false)
+  })
+})
+
 describe('vincularVariavel', () => {
   it('caminho feliz: vincula elemento a variável declarada', () => {
     const comVariavel = declararVariavel(diagramaVazio(), { nome: 'x' })
@@ -536,7 +579,7 @@ describe('moverElemento', () => {
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('posição inválida')
-    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).toContain('última coluna')
     expect(resultado.motivo).not.toMatch(/linha=|coluna=/)
   })
 
@@ -621,7 +664,7 @@ describe('contatos e ramos: inserirElemento/moverElemento respeitam o intervalo 
     const resultado = inserirElemento(diagrama, 'r1', 'bobina', { linha: 1, coluna: 2 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).toContain('última coluna')
   })
 
   it('moverElemento aceita mover contato do trilho para dentro do ramo', () => {
@@ -654,7 +697,7 @@ describe('contatos e ramos: inserirElemento/moverElemento respeitam o intervalo 
     const resultado = moverElemento(diagrama, 'e1', 'r1', { linha: 1, coluna: 1 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).toContain('última coluna')
   })
 })
 
@@ -696,12 +739,24 @@ describe('criarRamo', () => {
     expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
   })
 
-  it('recusa: coluna fora de 0..COLUNA_TERMINAL-1 (coluna terminal é de bobina)', () => {
+  it('aceita coluna terminal: cria ramo de saída (colunaInicio === colunaFim === terminal)', () => {
     const diagrama = congelarProfundo(diagramaVazio())
     const resultado = criarRamo(diagrama, 'r1', COLUNA_TERMINAL)
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error(resultado.motivo)
+    expect(resultado.diagrama.rungs[0].ramos).toEqual([
+      { id: 'b1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL },
+    ])
+  })
+
+  it('recusa: coluna acima do terminal', () => {
+    const diagrama = congelarProfundo(diagramaVazio())
+    const resultado = criarRamo(diagrama, 'r1', COLUNA_TERMINAL + 1)
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toBe(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
+    expect(resultado.motivo).toBe(
+      `ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}, ou a coluna terminal para ramo de saída`,
+    )
   })
 
   it('recusa: coluna negativa', () => {
@@ -764,7 +819,7 @@ describe('redimensionarRamo', () => {
     const original = congelarProfundo(comRamo.diagrama)
     const antes = JSON.parse(JSON.stringify(original))
 
-    const resultado = redimensionarRamo(original, 'b1', 4)
+    const resultado = redimensionarRamo(original, 'b1', { colunaInicio: 1, colunaFim: 4 })
 
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
@@ -777,7 +832,7 @@ describe('redimensionarRamo', () => {
     if (!comRamo.ok) throw new Error('esperava sucesso')
     const diagrama = congelarProfundo(comRamo.diagrama)
 
-    const resultado = redimensionarRamo(diagrama, 'b1', 1)
+    const resultado = redimensionarRamo(diagrama, 'b1', { colunaInicio: 1, colunaFim: 1 })
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
     expect(resultado.diagrama.rungs[0].ramos).toEqual(diagrama.rungs[0].ramos)
@@ -785,7 +840,7 @@ describe('redimensionarRamo', () => {
 
   it('recusa: ramo inexistente', () => {
     const diagrama = congelarProfundo(diagramaVazio())
-    const resultado = redimensionarRamo(diagrama, 'b-fantasma', 2)
+    const resultado = redimensionarRamo(diagrama, 'b-fantasma', { colunaInicio: 0, colunaFim: 2 })
     expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
   })
 
@@ -794,8 +849,23 @@ describe('redimensionarRamo', () => {
     if (!comRamo.ok) throw new Error('esperava sucesso')
     const diagrama = congelarProfundo(comRamo.diagrama)
 
-    const resultado = redimensionarRamo(diagrama, 'b1', 2)
+    const resultado = redimensionarRamo(diagrama, 'b1', { colunaInicio: 3, colunaFim: 1 })
     expect(resultado.ok).toBe(false)
+    if (resultado.ok) throw new Error('esperava recusa')
+    expect(resultado.motivo).toMatch(/coluna final.*antes da coluna inicial/i)
+  })
+
+  it('encolhe pela colunaInicio quando a ponta esquerda é puxada', () => {
+    const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
+    if (!comRamo.ok) throw new Error('esperava sucesso')
+    let diagrama = comRamo.diagrama
+    const esticado = redimensionarRamo(diagrama, 'b1', { colunaInicio: 1, colunaFim: 4 })
+    if (!esticado.ok) throw new Error('esperava sucesso')
+    diagrama = esticado.diagrama
+    const resultado = redimensionarRamo(diagrama, 'b1', { colunaInicio: 2, colunaFim: 4 })
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) throw new Error('esperava sucesso')
+    expect(resultado.diagrama.rungs[0].ramos[0]).toMatchObject({ colunaInicio: 2, colunaFim: 4 })
   })
 
   it('recusa: colunaFim >= COLUNA_TERMINAL', () => {
@@ -803,7 +873,7 @@ describe('redimensionarRamo', () => {
     if (!comRamo.ok) throw new Error('esperava sucesso')
     const diagrama = congelarProfundo(comRamo.diagrama)
 
-    const resultado = redimensionarRamo(diagrama, 'b1', COLUNA_TERMINAL)
+    const resultado = redimensionarRamo(diagrama, 'b1', { colunaInicio: 3, colunaFim: COLUNA_TERMINAL })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toBe(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}`)
@@ -820,7 +890,7 @@ describe('redimensionarRamo', () => {
     const congelado = congelarProfundo(diagrama)
 
     // esticar b1 até 5 invadiria b2
-    const resultado = redimensionarRamo(congelado, 'b1', 5)
+    const resultado = redimensionarRamo(congelado, 'b1', { colunaInicio: 0, colunaFim: 5 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('sobrep')
@@ -830,14 +900,14 @@ describe('redimensionarRamo', () => {
     const comRamo = criarRamo(diagramaVazio(), 'r1', 1)
     if (!comRamo.ok) throw new Error('esperava sucesso')
     let diagrama = comRamo.diagrama
-    const r2 = redimensionarRamo(diagrama, 'b1', 4)
+    const r2 = redimensionarRamo(diagrama, 'b1', { colunaInicio: 1, colunaFim: 4 })
     if (!r2.ok) throw new Error('esperava sucesso')
     diagrama = r2.diagrama
     const comContato = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 4 })
     if (!comContato.ok) throw new Error('esperava sucesso')
     const congelado = congelarProfundo(comContato.diagrama)
 
-    const resultado = redimensionarRamo(congelado, 'b1', 2)
+    const resultado = redimensionarRamo(congelado, 'b1', { colunaInicio: 1, colunaFim: 2 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain('degrau 1, ramo 1, coluna 5')
@@ -1170,7 +1240,7 @@ describe('inserirElemento — SET/RESET como terminal (tarefa #15)', () => {
     const resultado = inserirElemento(diagramaVazio(), 'r1', 'bobina_set', { linha: 0, coluna: 0 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toContain('trilho principal')
+    expect(resultado.motivo).toContain('última coluna')
   })
 
   it('bobina_reset fora da coluna terminal: recusa', () => {

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://www.plcopen.org/xml/tc6_0201">
+  <fileHeader companyName="LadderFlow" productName="LadderFlow" productVersion="1" creationDateTime="2026-09-23T12:00:00.000Z"/>
+  <contentHeader name="saidas_paralelas"/>
+  <types>
+    <dataTypes/>
+    <pous>
+      <pou name="Programa" pouType="program">
+        <interface>
+          <localVars>
+          <variable name="entrada">
+            <type><BOOL/></type>
+            <address>%IX0.0</address>
+          </variable>
+          <variable name="saida_a">
+            <type><BOOL/></type>
+            <address>%QX0.0</address>
+          </variable>
+          <variable name="saida_b">
+            <type><BOOL/></type>
+            <address>%QX0.1</address>
+          </variable>
+          </localVars>
+        </interface>
+        <body>
+          <LD>
+<leftPowerRail localId="1" x="0" y="0" width="8" height="48"/>
+<rightPowerRail localId="2" x="400" y="0" width="8" height="48"/>
+<contact localId="3" x="0" y="0" width="48" height="48"><variable>entrada</variable></contact>
+<coil localId="4" x="336" y="0" width="48" height="48"><variable>saida_a</variable></coil>
+<coil localId="5" x="336" y="48" width="48" height="48"><variable>saida_b</variable></coil>
+<connection refLocalId="3"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="4"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="5"><position x="0" y="0"/><position x="0" y="0"/></connection>
+<connection refLocalId="2"><position x="0" y="0"/><position x="0" y="0"/></connection>
+</LD>
+        </body>
+      </pou>
+    </pous>
+  </types>
+</project>

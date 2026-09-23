@@ -145,6 +145,12 @@ registrado como consequência desta spec, não coberto por ela.
   controlador além dos que o próprio diagrama de origem já usa — a
   serialização não introduz, nem precisa validar de novo, endereço fora do
   conjunto que o editor já restringe ao construir o diagrama.
+- **RF-13.** *Revisão aditiva (2026-09-23):* o sistema deve oferecer **exportação**
+  do diagrama em PLCopen XML (TC6 0201) pelo menu Baixar, cobrindo o subconjunto
+  do editor (contatos, bobinas SET/RESET, ramo, CTU, endereços em `localVars`).
+  É **somente exportação** — não há importação. A leitura de topologia do
+  exportador é independente do serializador ST (mesma disciplina do RF-7). O JSON
+  do projeto continua sendo o formato nativo.
 
 > **Revisão aditiva do RF-5 (2026-09-18), na aprovação do plano.** O texto
 > original do RF-5 continua valendo. A recusa com mensagem clara passa a
@@ -461,6 +467,19 @@ data, decisão e justificativa; não apague o enunciado.
   Inventar uma instrução de preenchimento esconderia o caso e mandaria ao
   dispositivo um programa que não faz nada. Omitir o degrau vazio mantém a
   leitura da spec 002, em que ele é espaço em branco, não erro.
+
+## Revisão aditiva — 2026-09-22 (emissão por bobina paralela)
+
+- **`emitirDegrau`:** coleta todas as bobinas na coluna terminal (ordenadas por
+  linha) e emite uma atribuição por bobina com a **mesma** expressão booleana
+  do degrau. Fixture `SAIDAS_PARALELAS` e dourado `saidas_paralelas.st`.
+
+## Revisão aditiva — 2026-09-22 (ramo de saída fora da topologia de contatos)
+
+- Na leitura de ramos para a expressão booleana do degrau, ramos com
+  `ehRamoDeSaida` são ignorados (não entram na redução série-paralelo). A emissão
+  por bobina paralela da revisão anterior permanece; a fixture `SAIDAS_PARALELAS`
+  inclui o ramo de saída no diagrama JSON.
 
 ## 10. Conformidade com a Constituição
 

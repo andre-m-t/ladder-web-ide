@@ -653,3 +653,78 @@ describe('TabelaVariaveis — tokens de tema', () => {
     expect(codigoFonte).not.toMatch(/\b(slate|sky|red|emerald|amber)-\d/)
   })
 })
+
+describe('TabelaVariaveis — bloqueio durante a simulação (revisão 2026-09-23, simetria com o contrato de E/S do ambiente)', () => {
+  it('sem `simulacaoAtiva`, tudo continua habilitado (comportamento de sempre)', () => {
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])])
+
+    const nomeNovaVariavel = screen.getByLabelText('Nome da nova variável')
+    expect(nomeNovaVariavel).not.toBeDisabled()
+    fireEvent.change(nomeNovaVariavel, { target: { value: 'y' } })
+    expect(screen.getByRole('button', { name: 'Adicionar' })).not.toBeDisabled()
+    expect(screen.getByLabelText('Nome da variável x')).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Alterar pino de x' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Remover variável x' })).not.toBeDisabled()
+  })
+
+  it('com `simulacaoAtiva`, desabilita a linha "Adicionar" inteira (nome, classe, pino, botão) com o motivo', () => {
+    const aoDeclarar = vi.fn()
+    renderizar([], { aoDeclarar, simulacaoAtiva: true })
+
+    const nome = screen.getByLabelText('Nome da nova variável')
+    const botaoAdicionar = screen.getByRole('button', { name: 'Adicionar' })
+    expect(nome).toBeDisabled()
+    expect(nome).toHaveAttribute('title', 'Saia da simulação para criar variáveis')
+    expect(screen.getByRole('radio', { name: 'Entrada' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Saída' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Memória' })).toBeDisabled()
+    expect(screen.getByLabelText('Pino da nova variável')).toBeDisabled()
+    expect(botaoAdicionar).toBeDisabled()
+    expect(botaoAdicionar).toHaveAttribute('title', 'Saia da simulação para criar variáveis')
+
+    // defesa em profundidade: mesmo tentando (fireEvent ignora `disabled` no jsdom em alguns casos), o núcleo nunca é chamado
+    fireEvent.click(botaoAdicionar)
+    expect(aoDeclarar).not.toHaveBeenCalled()
+  })
+
+  it('com `simulacaoAtiva`, desabilita renomear (nome) e trocar pino de uma variável existente, com o motivo', () => {
+    const aoAtualizar = vi.fn()
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { aoAtualizar, simulacaoAtiva: true })
+
+    const nome = screen.getByLabelText('Nome da variável x')
+    const botaoPino = screen.getByRole('button', { name: 'Alterar pino de x' })
+    expect(nome).toBeDisabled()
+    expect(nome).toHaveAttribute('title', 'Saia da simulação para editar variáveis')
+    expect(botaoPino).toBeDisabled()
+    expect(botaoPino).toHaveAttribute('title', 'Saia da simulação para editar variáveis')
+
+    // o botão de pino desabilitado não abre o select — trocar pino fica inalcançável
+    fireEvent.click(botaoPino)
+    expect(screen.queryByLabelText('Pino da variável x')).not.toBeInTheDocument()
+    expect(aoAtualizar).not.toHaveBeenCalled()
+  })
+
+  it('com `simulacaoAtiva`, desabilita "Remover" com o motivo e não chama aoRemover', () => {
+    const aoRemover = vi.fn()
+    renderizar([variavel('x')], { aoRemover, simulacaoAtiva: true })
+
+    const botaoRemover = screen.getByRole('button', { name: 'Remover variável x' })
+    expect(botaoRemover).toBeDisabled()
+    expect(botaoRemover).toHaveAttribute('title', 'Saia da simulação para remover variáveis')
+
+    fireEvent.click(botaoRemover)
+    expect(aoRemover).not.toHaveBeenCalled()
+  })
+
+  it('com `simulacaoAtiva`, a leitura continua disponível: linhas, valores e mapa de pinos aparecem normalmente', () => {
+    renderizar([variavel('x', ENTRADAS_LOCALIZADAS[0])], { simulacaoAtiva: true, valores: { x: true } })
+
+    expect(screen.getByLabelText('Nome da variável x')).toHaveValue('x')
+    expect(screen.getByText('TRUE')).toBeInTheDocument()
+    expect(screen.getByText('1 declarada')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Mapa de pinos ESP32'))
+    const detalhes = screen.getByText('Mapa de pinos ESP32').closest('details') as HTMLElement
+    expect(within(detalhes).getByText(ENTRADAS_LOCALIZADAS[0])).toBeInTheDocument()
+  })
+})

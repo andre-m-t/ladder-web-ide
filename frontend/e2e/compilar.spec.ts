@@ -99,7 +99,8 @@ async function inserirEVincular(page: Page, rotuloItem: string, rotuloCelulaVazi
   await celula.click()
   const dialogo = page.getByRole('dialog')
   await expect(dialogo).toBeVisible()
-  await dialogo.getByRole('button', { name: new RegExp(`^${nomeVariavel} `, 'i') }).click()
+  await dialogo.getByRole('combobox').selectOption(nomeVariavel)
+  await dialogo.getByRole('button', { name: 'Fechar' }).click()
   await expect(dialogo).toHaveCount(0)
 }
 
@@ -150,6 +151,19 @@ test.describe('Compilar em projeto Ladder (spec 003, CA-5): IO_ESPELHO envia o S
     if (caminhoBaixado === null) throw new Error('download sem caminho local (falhou?)')
     const conteudoBaixado = readFileSync(caminhoBaixado, 'utf-8')
     expect(conteudoBaixado).toBe(ST_DOURADO_IO_ESPELHO)
+
+    await page.getByRole('button', { name: 'Baixar projeto' }).click()
+    const [downloadXml] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'PLCopen XML (.xml)' }).click(),
+    ])
+    expect(downloadXml.suggestedFilename()).toMatch(/\.xml$/)
+    const caminhoXml = await downloadXml.path()
+    if (caminhoXml === null) throw new Error('download XML sem caminho local')
+    const conteudoXml = readFileSync(caminhoXml, 'utf-8')
+    expect(conteudoXml).toContain('http://www.plcopen.org/xml/tc6_0201')
+    expect(conteudoXml).toContain('<contact')
+    expect(conteudoXml).toContain('<coil')
 
     // Intercepta /compile/pacote (sem back-end no ar, D-10: mesmo caminho do ST).
     let corpoRecebido: unknown
