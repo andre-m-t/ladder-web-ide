@@ -88,6 +88,22 @@ mensagens do compilador e nada é gravado.
 - **CA-6 (RF-8).** Dado um ST inválido, quando a compilação falha, então a
   resposta do serviço contém as mensagens do `iec2c` em campo estruturado
   (não um erro 500 genérico).
+- **CA-7 (RF-5, revisão 2026-09-23).** Dado um binário compilado, quando clico
+  em "Gravar no ESP32", então vejo um modal para escolher entre as portas
+  seriais já autorizadas para o site ou adicionar uma nova via seletor nativo
+  do navegador; ao cancelar o modal, a gravação **não** inicia; ao confirmar
+  com uma porta selecionada, essa porta é a usada pelo `esptool-js` (sem um
+  segundo `requestPort`).
+
+> **Revisão aditiva (2026-09-23) — RF-5 (seleção de porta).** O RF-5 original
+> citava apenas o diálogo nativo da Web Serial API. A interface passa a
+> incluir um **modal intermediário** antes da gravação: lista `getPorts()` com
+> rótulo derivado de `usbVendorId`/`usbProductId` (a API **não** expõe o nome
+> do sistema `COMn` ou `/dev/ttyUSBn` à página — esse nome aparece só no
+> seletor nativo ao adicionar porta); botão "Adicionar porta…" chama
+> `requestPort()`; confirmar "Gravar" no modal inicia o fluxo já com a porta
+> escolhida. A primeira autorização de cada dispositivo continua obrigatória
+> pelo seletor nativo (restrição da plataforma).
 
 > **Nota de rastreabilidade (CA-4):** evidência de execução do procedimento de
 > bancada em `docs/validacao/ca-4-gravacao-esp32.md`. Ressalva: esse documento

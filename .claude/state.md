@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-23 (retomada da rodada de fechamento do stash de 2026-09-21: CA-8, coluna Valor, `IO_ESPELHO_8`, Passo funcional, pytest não-root, documentação) · **Branch ativa:** `main`
+**Última atualização:** 2026-09-23 (modal de porta serial antes da gravação — spec 001 revisão RF-5/CA-7) · **Branch ativa:** `main`
 
 ## Legenda
 
@@ -181,6 +181,7 @@ Transfere o `.bin` ao ESP32 pela porta serial, sem driver nem instalação.
   - compilar `blink.st` → "3 imagens prontas";
   - ST inválido → painel com `3:4 — no expression defined…` e Gravar desabilitado;
   - Gravar sem dispositivo → a tentativa chega ao `requestPort` e falha com "Nenhuma porta serial foi selecionada".
+- **Modal de porta serial (revisão spec 001, 2026-09-23, CA-7):** `portasSeriais.ts` + `ModalPortaSerial.tsx`; Gravar abre o modal (portas autorizadas + "Adicionar porta…" → seletor nativo); confirmação passa `opcoes.porta` ao `gravar` — progresso "Gravando…" só após confirmar; cancelar registra no Console sem chamar `esptool-js`. Testes vitest em `portasSeriais`, `gravador`, `ModalPortaSerial` e `App.test`.
 
 **Falta**
 - **Transporte Web Serial:** depois da S2, é a única camada da gravação sem cobertura automatizada. É código da Espressif (esptool-js) e só fecha com ESP32 físico (CA-4).
@@ -736,4 +737,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-23 | Tabela de variáveis bloqueada na simulação (spec 002, revisão aditiva) | Decisão do autor após a criação de variáveis pelo contrato de E/S (que já bloqueava na simulação): a **tabela** no painel lateral também desabilita criar, renomear, trocar classe/pino e remover enquanto `simulacao.ativo`, com os mesmos motivos no `title`; leitura e valores ao vivo permanecem. Implementação já estava no disco (`TabelaVariaveis.tsx`, `PainelVariaveis.tsx`, `App.tsx`); esta rodada fechou spec 002, `state.md` (pendência F9) e verificação final. Testes: `TabelaVariaveis.test.tsx`, `PainelVariaveis.test.tsx` |
 | 2026-09-23 | Botão Ambiente oculto com painel aberto (spec 005) | O autor pediu para não mostrar o botão **Ambiente** na `BarraSimulacao` enquanto o painel lateral de ambiente está aberto; fechar só pelo **Fechar ambiente** do `PainelAmbiente`. Teste em `BarraSimulacao.test.tsx` |
 | 2026-09-23 | Retomada da rodada de fechamento (stash 2026-09-21) | Port manual do stash sobre `b4a7bcd`: CA-8 (paleta sem `pointer-events-none`, grade `not-allowed`, toast, e2e 10/10), coluna Valor após Nome, `aoPassoSimulacao` funcional + teste rajada, `IO_ESPELHO_8` + diferencial, `Dockerfile`/`ESP_BUILD_ROOT` para pytest não-root, README/arquitetura/THIRD_PARTY/limitações/dia-do-hardware, spec 004 revisões 2026-09-21; chip SIMULANDO **não** reaplicado (`BarraSimulacao`). Verificação completa na mesma rodada |
+| 2026-09-23 | Modal de porta serial (spec 001, RF-5/CA-7) | Revisão aditiva na spec/plan/tasks (#17–#20); `portasSeriais.ts`, `ModalPortaSerial.tsx`, `gravar({ porta })`, integração em `App.tsx`; depósito com dois arquivos novos; vitest/tsc/build/`--verificar` verdes |
 | 2026-09-21 | Spec 005 revisão — redesign do portão | Modal de escolha (`ModalAmbiente`); cena SVG redesenhada; mapa `%IX`/`%QX` alinhado à referência; nome **Portão**; correção do × na janela flutuante; `PORTAO` com NF; dourados/`portao.toml` regenerados; e2e atualizado; depósito com componentes de UI do ambiente |

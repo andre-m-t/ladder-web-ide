@@ -49,6 +49,8 @@ export interface OpcoesGravacao {
   onProgresso?: (percentual: number) => void
   /** Linhas de log do próprio esptool-js (opcional). */
   onLog?: (linha: string) => void
+  /** Porta já escolhida (modal de seleção) — não chama `requestPort`. */
+  porta?: PortaLike
   /** Substitui `navigator.serial` — usado nos testes. */
   serial?: SerialLike
   /** Substitui a construção do `ESPLoader` real — usado nos testes. */
@@ -125,13 +127,17 @@ export async function gravar(pacote: Pacote, opcoes: OpcoesGravacao = {}): Promi
   }
 
   let porta: PortaLike
-  try {
-    porta = await serial.requestPort()
-  } catch (erro) {
-    // Cobre tanto "nenhuma porta disponível" quanto o cancelamento do
-    // usuário no diálogo nativo, que a Web Serial API relata como
-    // `DOMException` com `name === 'NotFoundError'`.
-    throw new ErroGravacao('porta_nao_selecionada', erro)
+  if (opcoes.porta) {
+    porta = opcoes.porta
+  } else {
+    try {
+      porta = await serial.requestPort()
+    } catch (erro) {
+      // Cobre tanto "nenhuma porta disponível" quanto o cancelamento do
+      // usuário no diálogo nativo, que a Web Serial API relata como
+      // `DOMException` com `name === 'NotFoundError'`.
+      throw new ErroGravacao('porta_nao_selecionada', erro)
+    }
   }
 
   let desconectadaDuranteGravacao = false

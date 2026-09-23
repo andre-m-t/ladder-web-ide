@@ -222,3 +222,24 @@ recapturado pelo envelope Q-3.
   do serviço; autenticação/rate-limit seguem fora de escopo (§7 da spec),
   registrados como pré-requisito de VPS em `state.md`.
 - Nenhuma tensão nova com a Constituição foi identificada nesta sprint.
+
+## 10. Revisão aditiva (2026-09-23) — modal de porta serial (RF-5, CA-7)
+
+**Motivação:** o botão "Gravar no ESP32" chamava `requestPort()` imediatamente,
+exibindo progresso "Gravando… 0%" enquanto o seletor nativo estava aberto e
+tratando cancelamento como erro genérico de porta não selecionada.
+
+**Abordagem (caminho curto, revisão da spec):**
+
+- `frontend/src/lib/portasSeriais.ts` — `listarPortas`, `solicitarPorta`
+  (cancelamento → `null`), `rotuloPorta` por vendor ID conhecido,
+  `observarPortas` (`connect`/`disconnect`).
+- `frontend/src/lib/gravador.ts` — `opcoes.porta` opcional; se presente, não
+  chama `requestPort`.
+- `frontend/src/components/ide/ModalPortaSerial.tsx` — radiogroup sobre
+  `Modal.tsx`; rodapé Cancelar / Adicionar porta… / Gravar.
+- `App.tsx` — Gravar abre o modal; confirmar chama `gravar` com a porta;
+  `setGravacao({ fase: 'gravando' })` só após confirmação.
+
+**Testes:** vitest em `portasSeriais`, `gravador` (porta injetada),
+`ModalPortaSerial`, `App.test` (abrir/cancelar/confirmar).

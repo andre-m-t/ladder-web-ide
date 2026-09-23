@@ -38,6 +38,18 @@ describe('gravar', () => {
     await expect(gravar(pacoteExemplo)).rejects.toMatchObject({ tipo: 'sem_web_serial' })
   })
 
+  it('usa porta injetada em opcoes.porta sem chamar requestPort', async () => {
+    const portaEscolhida = {}
+    const requestPort = vi.fn()
+    const serial: SerialLike = { requestPort }
+    const loader = loaderFalsoBemSucedido()
+
+    await gravar(pacoteExemplo, { serial, porta: portaEscolhida, criarLoader: () => loader })
+
+    expect(requestPort).not.toHaveBeenCalled()
+    expect(loader.main).toHaveBeenCalled()
+  })
+
   it('rejeita com porta_nao_selecionada quando requestPort() é cancelado pelo usuário (NotFoundError)', async () => {
     const serial: SerialLike = {
       requestPort: vi.fn().mockRejectedValue(new DOMException('cancelado pelo usuário', 'NotFoundError')),

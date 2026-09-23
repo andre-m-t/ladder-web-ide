@@ -22,6 +22,19 @@ vi.mock('./lib/download', async (importActual) => {
 })
 const baixarTextoMock = vi.mocked(baixarTexto)
 
+const { gravarMock } = vi.hoisted(() => ({
+  gravarMock: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./lib/gravador', async (importActual) => {
+  const real = await importActual<typeof import('./lib/gravador')>()
+  return {
+    ...real,
+    gravar: gravarMock,
+    webSerialDisponivel: () => true,
+  }
+})
+
 function respostaJson(corpo: unknown, status = 200): Response {
   return new Response(JSON.stringify(corpo), {
     status,
@@ -189,6 +202,77 @@ describe('App', () => {
   })
 
   // -- Compilação/gravação (só existem em projeto ST) ----------------------
+
+  function stubSerialComPorta(porta: { getInfo: () => { usbVendorId: number; usbProductId: number } }) {
+    vi.stubGlobal('navigator', {
+      ...globalThis.navigator,
+      serial: {
+        getPorts: () => Promise.resolve([porta]),
+        requestPort: () => Promise.resolve(porta),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
+    })
+  }
+
+  const PACOTE_MINIMO = {
+    chip: 'esp32',
+    flash: { mode: 'dio', freq: '40m', size: '4MB' },
+    images: [{ name: 'bootloader.bin', offset: 4096, size: 2048, sha256: 'x', data_base64: '' }],
+  }
+
+  it('Gravar abre o modal de porta; cancelar não chama gravar', async () => {
+    stubSerialComPorta({ getInfo: () => ({ usbVendorId: 0x10c4, usbProductId: 1 }) })
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) return Promise.resolve(respostaJson(PACOTE_MINIMO))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario)
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
+    await within(screen.getByRole('log', { name: 'Console' })).findByText(/Compilação concluída/)
+
+    gravarMock.mockClear()
+    await usuario.click(screen.getByRole('button', { name: /gravar no esp32/i }))
+    expect(screen.getByRole('dialog', { name: 'Porta serial do ESP32' })).toBeInTheDocument()
+
+    await usuario.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(gravarMock).not.toHaveBeenCalled()
+    expect(within(screen.getByRole('log', { name: 'Console' })).getByText(/Gravação cancelada/)).toBeInTheDocument()
+  })
+
+  it('confirmar porta no modal chama gravar com opcoes.porta', async () => {
+    const porta = { getInfo: () => ({ usbVendorId: 0x303a, usbProductId: 0x1001 }) }
+    stubSerialComPorta(porta)
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) return Promise.resolve(respostaJson(PACOTE_MINIMO))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario)
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
+    await within(screen.getByRole('log', { name: 'Console' })).findByText(/Compilação concluída/)
+
+    gravarMock.mockClear()
+    await usuario.click(screen.getByRole('button', { name: /gravar no esp32/i }))
+    await screen.findByText(/Espressif/)
+    await usuario.click(screen.getByRole('button', { name: 'Gravar' }))
+
+    await waitFor(() => {
+      expect(gravarMock).toHaveBeenCalledTimes(1)
+    })
+    expect(gravarMock.mock.calls[0][1]).toMatchObject({ porta })
+  })
 
   it('compilar com sucesso registra início e sucesso (com as imagens) no console', async () => {
     const pacote = {

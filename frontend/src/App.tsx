@@ -6,6 +6,7 @@ import BarraSuperior from './components/ide/BarraSuperior'
 import type { OpcaoDownload } from './components/ide/MenuDownload'
 import ModalConfirmarDescarte from './components/ide/ModalConfirmarDescarte'
 import ModalNovoProjeto from './components/ide/ModalNovoProjeto'
+import ModalPortaSerial from './components/ide/ModalPortaSerial'
 import PainelInferior from './components/ide/PainelInferior'
 import PainelInferiorConteudo, { type AbaInferior } from './components/ide/PainelInferiorConteudo'
 import PainelLateral from './components/ide/PainelLateral'
@@ -42,7 +43,7 @@ import {
 } from './lib/api'
 import { registrar, type EntradaConsole } from './lib/console'
 import { baixarTexto, conteudoProjetoJson, nomeDeArquivo } from './lib/download'
-import { ErroGravacao, gravar, webSerialDisponivel } from './lib/gravador'
+import { ErroGravacao, gravar, webSerialDisponivel, type PortaLike } from './lib/gravador'
 import { aplicarTema, temaInicial, type Tema } from './lib/tema'
 import { adicionarToast, removerToast, type Toast } from './lib/toasts'
 import {
@@ -340,6 +341,7 @@ export default function App() {
   /** Ambiente de simulação (spec 005) — volátil, sem localStorage. */
   const [painelAmbienteAberto, setPainelAmbienteAberto] = useState(false)
   const [modalAmbienteAberto, setModalAmbienteAberto] = useState(false)
+  const [modalPortaSerialAberto, setModalPortaSerialAberto] = useState(false)
   const [ambienteId, setAmbienteId] = useState(AMBIENTE_PADRAO_ID)
   const [plantaPortao, setPlantaPortao] = useState<EstadoPortao>(() => criarEstadoPortao())
 
@@ -785,7 +787,12 @@ export default function App() {
     }
   }
 
-  async function aoGravar() {
+  function aoGravar() {
+    if (compilacao.fase !== 'sucesso') return
+    setModalPortaSerialAberto(true)
+  }
+
+  async function executarGravacao(porta: PortaLike) {
     if (compilacao.fase !== 'sucesso') return
 
     setGravacao({ fase: 'gravando', progresso: 0 })
@@ -794,6 +801,7 @@ export default function App() {
 
     try {
       await gravar(compilacao.pacote, {
+        porta,
         onProgresso: (progresso) => {
           setGravacao({ fase: 'gravando', progresso })
           const dezena = Math.floor(progresso / 10)
@@ -1194,6 +1202,19 @@ export default function App() {
             setPlantaPortao(criarEstadoPortao())
             setModalAmbienteAberto(false)
             setPainelAmbienteAberto(true)
+          }}
+        />
+      )}
+
+      {modalPortaSerialAberto && (
+        <ModalPortaSerial
+          aoCancelar={() => {
+            setModalPortaSerialAberto(false)
+            log('info', 'Gravação cancelada.')
+          }}
+          aoConfirmar={(porta) => {
+            setModalPortaSerialAberto(false)
+            void executarGravacao(porta)
           }}
         />
       )}

@@ -151,3 +151,31 @@ explícitas e um critério de pronto verificável. `[x]` marca concluída.
 | #11, #12 | RF-5 (metade servidor) | pré-requisito de CA-4 |
 | #13 | RF-5, RF-6 (validação sem hardware) | pré-requisito de CA-4 |
 | #14, #15, #16 | RF-1, RF-5, RF-6 | CA-1 a CA-6 (CA-4 só fecha com ESP32 físico) |
+
+---
+
+## Revisão 2026-09-23 — modal de porta serial (RF-5, CA-7)
+
+- [x] **#17 — `portasSeriais.ts`**
+  - Arquivos: `frontend/src/lib/portasSeriais.ts`, `portasSeriais.test.ts`
+  - Depende de: —
+  - Pronto quando: listar, solicitar (cancelamento → `null`), rótulo por VID,
+    observar connect/disconnect; testes vitest verdes.
+
+- [x] **#18 — `gravar` com porta pré-selecionada**
+  - Arquivos: `frontend/src/lib/gravador.ts`, `gravador.test.ts`
+  - Depende de: #17
+  - Pronto quando: `opcoes.porta` evita `requestPort`; teste confirma.
+
+- [x] **#19 — `ModalPortaSerial`**
+  - Arquivos: `frontend/src/components/ide/ModalPortaSerial.tsx`,
+    `ModalPortaSerial.test.tsx`
+  - Depende de: #17
+  - Pronto quando: estado vazio, adicionar porta, seleção, Gravar desabilitado
+    sem seleção; testes de componente verdes.
+
+- [x] **#20 — Integração na IDE**
+  - Arquivos: `frontend/src/App.tsx`, `App.test.tsx`
+  - Depende de: #18, #19
+  - Pronto quando: Gravar abre modal; cancelar não grava; confirmar passa porta
+    ao `gravar`; `tsc`, vitest e build verdes; depósito atualizado.

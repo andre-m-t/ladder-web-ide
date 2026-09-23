@@ -144,6 +144,8 @@ REQUIRED_FILES=(
   "backend/app/main.py"
   "frontend/src/lib/api.ts"
   "frontend/src/lib/gravador.ts"
+  "frontend/src/lib/portasSeriais.ts"
+  "frontend/src/components/ide/ModalPortaSerial.tsx"
   "frontend/src/App.tsx"
   # Nucleo do editor Ladder (spec 002, tarefa #19): modelo, enderecos,
   # validacao, edicao e o contador destacavel (Q-7), mais o editor e o simbolo
