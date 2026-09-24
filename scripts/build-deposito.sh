@@ -5,7 +5,7 @@
 #
 # Monta o staging, AUDITA o conteúdo contra um manifesto obrigatório e uma
 # lista de artefatos proibidos e só então gera o .zip em dist/deposito/,
-# calcula o SHA-256 e imprime a árvore do que foi incluído.
+# calcula o SHA-512 e imprime a árvore do que foi incluído.
 #
 # O que entra no pacote é decidido por uma ALLOWLIST explícita (abaixo), não por
 # exclusão — mais seguro para um depósito. Ajuste INCLUDE_* conforme o código do
@@ -40,11 +40,11 @@
 # atual o levaria junto por estar sob o mesmo diretório.
 #
 # Uso:
-#   build-deposito.sh                 # monta, audita e gera o .zip + .sha256
+#   build-deposito.sh                 # monta, audita e gera o .zip + .sha512
 #   build-deposito.sh --verificar     # monta, audita e sai sem gerar o .zip
 #   build-deposito.sh --check         # sinônimo de --verificar (uso em CI)
 #
-# Dependências: bash, rsync, zip, sha256sum, find.
+# Dependências: bash, rsync, zip, sha512sum, find.
 
 set -euo pipefail
 
@@ -110,6 +110,10 @@ EXCLUDES=(
   --exclude "dependencies.lock" --exclude "*.map"
   # Testes co-localizados no front-end (vitest): teste não é o programa.
   --exclude "*.test.ts" --exclude "*.test.tsx" --exclude "src/test/"
+  # Diagramas de referência importados só por testes e specs e2e. Escapam do
+  # padrão acima por não terem `.test.` no nome, mas nenhum código de produção
+  # os usa — são gabarito de teste morando dentro de src/.
+  --exclude "src/ladder/fixtures.ts"
 )
 
 # --- Manifesto obrigatório: código autoral que TEM de estar no pacote --------
@@ -331,11 +335,15 @@ fi
 
 # --- Gera o pacote ---------------------------------------------------------
 mkdir -p "$OUT_DIR"
-rm -f "$ZIP_PATH" "$ZIP_PATH.sha256"
+rm -f "$ZIP_PATH" "$ZIP_PATH.sha512"
 ( cd "$STAGING" && zip -r -X -q "$ROOT/$ZIP_PATH" . )
 
-SHA="$(sha256sum "$ZIP_PATH" | awk '{print $1}')"
-echo "$SHA  $(basename "$ZIP_PATH")" > "$ZIP_PATH.sha256"
+# SHA-512 porque é o que vai no campo "Resumo digital hash" do formulário
+# e-Software: o Manual do Usuário do RPC recomenda esse algoritmo, e é o
+# declarado nos depósitos anteriores do NIT do IFTM. São 128 caracteres
+# hexadecimais, não 64 — conferir o comprimento antes de transcrever.
+SHA="$(sha512sum "$ZIP_PATH" | awk '{print $1}')"
+echo "$SHA  $(basename "$ZIP_PATH")" > "$ZIP_PATH.sha512"
 
 # --- Relatório para conferência manual -----------------------------------
 echo
@@ -352,7 +360,9 @@ echo
 echo "=== Pacote gerado ==="
 echo "arquivo : $ZIP_PATH"
 echo "tamanho : $(du -h "$ZIP_PATH" | cut -f1)"
-echo "SHA-256 : $SHA"
-echo "hash    : $ZIP_PATH.sha256"
+echo "SHA-512 : $SHA"
+echo "hash    : $ZIP_PATH.sha512"
 echo
+echo "Algoritmo a declarar no e-Software: SHA512"
 echo "Confira a árvore acima antes de enviar ao NIT."
+echo "Guarde o .zip intacto: o INPI não armazena o código, só o resumo hash."
