@@ -215,6 +215,13 @@ nenhuma camada — o projeto cobre Ladder e Structured Text.
 itens expõe o endpoint de compilação sem controle de acesso, sem proteção
 contra abuso por volume de requisições e sem criptografia de borda.
 
+> **Revisão aditiva (2026-09-23).** Para demonstração temporária na VPS, o
+> runbook em `deploy/README.md` prevê **HTTPS e autenticação HTTP básica na
+> borda** (Caddy do host, fora do código autoral) e limite de corpo no proxy.
+> A aplicação FastAPI continua **sem** autenticação, rate limiting nem HTTPS
+> integrados; remover o bloco do Caddyfile e os contêineres restaura o estado
+> descrito acima.
+
 ---
 
 ### 8. Planta do portão (spec 005)

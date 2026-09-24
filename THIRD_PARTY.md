@@ -28,6 +28,7 @@ como processo separado.
 | Vitest, jsdom, Testing Library (`@testing-library/react`, `jest-dom`, `user-event`) | MIT | Dependências de pacote usadas só nos testes do front-end; não entram no programa entregue. |
 | Playwright (`@playwright/test`) | Apache-2.0 | Dependência de pacote usada só nos testes ponta a ponta (`frontend/e2e/`, fora do front-end entregue e fora do pacote de depósito); roda em contêiner à parte, a partir da imagem oficial `mcr.microsoft.com/playwright`. |
 | `@types/w3c-web-serial` | MIT | Declarações de tipo da Web Serial API (ferramenta de build do front-end). |
+| Caddy | Apache-2.0 | Servidor HTTP e proxy reverso executado como **processo separado**; imagem oficial `caddy:2-alpine` no cenário de demonstração (`deploy/`). Não integra o programa entregue nem o pacote de depósito. |
 | FastAPI | MIT | Dependência de pacote (back-end). |
 | Uvicorn | BSD-3-Clause | Dependência de pacote (servidor ASGI do back-end). |
 | Pydantic / pydantic-settings | MIT | Dependência de pacote (back-end). |

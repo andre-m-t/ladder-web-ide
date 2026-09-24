@@ -1,0 +1,56 @@
+# Orquestração de produção / demonstração na VPS.
+#
+# Uso (na raiz do repositório):
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml \
+#     --project-directory . up -d --build
+#
+# Arquivo standalone: não faz merge com docker-compose.yml de desenvolvimento.
+# Portas no host vêm exclusivamente de deploy/.env (sem padrão no compose).
+
+name: ladderflow
+
+services:
+  backend:
+    build:
+      context: ./backend
+    image: ladderflow-backend:dev
+    restart: unless-stopped
+    cpus: ${BACKEND_CPUS:?defina BACKEND_CPUS em deploy/.env}
+    mem_limit: ${BACKEND_MEM:?defina BACKEND_MEM em deploy/.env}
+    environment:
+      CORS_ORIGINS: ${CORS_ORIGINS:?defina CORS_ORIGINS em deploy/.env}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      COMPILE_TIMEOUT_ESP32_S: ${COMPILE_TIMEOUT_ESP32_S:-900}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:?defina BACKEND_PORT em deploy/.env}:8000"
+    volumes:
+      - esp-build-cache:/var/cache/ladderflow/esp-build
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: ${PUBLIC_URL:?defina PUBLIC_URL em deploy/.env}
+    image: ladderflow-frontend:prod
+    restart: unless-stopped
+    cpus: "0.25"
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:?defina FRONTEND_PORT em deploy/.env}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  esp-build-cache:

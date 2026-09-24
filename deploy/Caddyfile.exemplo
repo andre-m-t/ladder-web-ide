@@ -1,0 +1,27 @@
+# Bloco para anexar ao Caddyfile do host (/etc/caddy/Caddyfile).
+# Renderize os placeholders a partir de deploy/.env (ver deploy/README.md).
+#
+#   export $(grep -v '^#' deploy/.env | xargs)
+#   sed -e "s/__DOMINIO__/$DOMINIO/g" \
+#       -e "s/__BACKEND_PORT__/$BACKEND_PORT/g" \
+#       -e "s/__FRONTEND_PORT__/$FRONTEND_PORT/g" \
+#       deploy/Caddyfile.exemplo
+
+__DOMINIO__ {
+	encode zstd gzip
+
+	basic_auth {
+		professor SUBSTITUA_PELO_HASH
+	}
+
+	@api path /health /compile /compile/* /docs /docs/* /openapi.json /redoc
+	handle @api {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy 127.0.0.1:__BACKEND_PORT__
+	}
+	handle {
+		reverse_proxy 127.0.0.1:__FRONTEND_PORT__
+	}
+}

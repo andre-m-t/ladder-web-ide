@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-23 (modal de porta serial antes da gravação — spec 001 revisão RF-5/CA-7) · **Branch ativa:** `main`
+**Última atualização:** 2026-09-23 (scripts `deploy/deploy.sh` e `deploy/remover.sh` — fora do pacote INPI) · **Branch ativa:** `main`
 
 ## Legenda
 
@@ -145,7 +145,7 @@ Compila o C gerado pelo MATIEC em firmware executável. Inclui o runtime que o `
 - `POST /compile/pacote` (JSON com as 3 imagens de flash + offsets). *Correção de 2026-09-20: até esta data este item continuava listado em "Falta" aqui, embora a **F5** o registre concluído desde 2026-09-16 — ver "Concluído — camada servidor (S2)" na F5. O item foi movido, não reescrito.*
 
 **Falta**
-- 🟡 **Pré-requisito para VPS, ainda fora de escopo (ver §7 da spec 001):** autenticação, *rate limiting*, fila de compilação se houver concorrência real (hoje só há exclusão mútua via `threading.Lock`, suficiente para um usuário por vez), e HTTPS na borda — nenhum implementado, todos necessários antes de expor o serviço fora de `localhost`.
+- 🟡 **Pré-requisito para VPS em produção (ver §7 da spec 001):** autenticação, *rate limiting* e fila de compilação sob concorrência real continuam **fora do código**. Para demonstração temporária, `deploy/` documenta compose de produção (front estático, portas só em `127.0.0.1` via `deploy/.env`), `frontend/Dockerfile.prod` e Caddy do host com TLS + `basic_auth` — não entra no pacote de depósito (`build-deposito.sh --verificar` inalterado quanto ao manifesto autoral).
 
 ---
 
@@ -738,4 +738,6 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-23 | Botão Ambiente oculto com painel aberto (spec 005) | O autor pediu para não mostrar o botão **Ambiente** na `BarraSimulacao` enquanto o painel lateral de ambiente está aberto; fechar só pelo **Fechar ambiente** do `PainelAmbiente`. Teste em `BarraSimulacao.test.tsx` |
 | 2026-09-23 | Retomada da rodada de fechamento (stash 2026-09-21) | Port manual do stash sobre `b4a7bcd`: CA-8 (paleta sem `pointer-events-none`, grade `not-allowed`, toast, e2e 10/10), coluna Valor após Nome, `aoPassoSimulacao` funcional + teste rajada, `IO_ESPELHO_8` + diferencial, `Dockerfile`/`ESP_BUILD_ROOT` para pytest não-root, README/arquitetura/THIRD_PARTY/limitações/dia-do-hardware, spec 004 revisões 2026-09-21; chip SIMULANDO **não** reaplicado (`BarraSimulacao`). Verificação completa na mesma rodada |
 | 2026-09-23 | Modal de porta serial (spec 001, RF-5/CA-7) | Revisão aditiva na spec/plan/tasks (#17–#20); `portasSeriais.ts`, `ModalPortaSerial.tsx`, `gravar({ porta })`, integração em `App.tsx`; depósito com dois arquivos novos; vitest/tsc/build/`--verificar` verdes |
+| 2026-09-23 | Deploy temporário VPS (`deploy/`) | Caminho curto: `docker-compose.prod.yml` standalone (`name: ladderflow`), portas só `127.0.0.1` via `deploy/.env`, `frontend/Dockerfile.prod` (build estático + Caddy no contêiner), `Caddyfile.exemplo` + README (TLS e `basic_auth` no host); `THIRD_PARTY.md` (Caddy); nota aditiva item 13 em `limitacoes-declaradas.md`; F4 atualizada — fora do pacote INPI |
+| 2026-09-23 | Scripts `deploy/deploy.sh` e `deploy/remover.sh` | Caminho curto. `deploy.sh`: confere `deploy/.env`, avisa porta ocupada, `up -d --build`, espera `service_healthy` via `docker inspect` no id resolvido por `compose ps -q backend` (sem hardcode de nome de contêiner), testa `/health`, imprime o bloco do Caddy pronto para colar (não mexe no Caddy do host). `remover.sh`: `down -v --rmi all` e depois remove as imagens base (`espressif/idf:v5.4.1`, `node:22-bookworm-slim`, `caddy:2-alpine`) só quando `docker ps -a --filter ancestor=<imagem>` confirma que nenhum outro contêiner do host as usa; nunca roda prune global; lembra os 2 passos manuais restantes (bloco do Caddyfile e apagar `deploy/.env`). README §3/§7 atualizado para usar os scripts, mantendo o equivalente manual. `build-deposito.sh --verificar` confirmado sem `deploy/` no pacote |
 | 2026-09-21 | Spec 005 revisão — redesign do portão | Modal de escolha (`ModalAmbiente`); cena SVG redesenhada; mapa `%IX`/`%QX` alinhado à referência; nome **Portão**; correção do × na janela flutuante; `PORTAO` com NF; dourados/`portao.toml` regenerados; e2e atualizado; depósito com componentes de UI do ambiente |
