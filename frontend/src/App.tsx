@@ -42,7 +42,7 @@ import {
   type ToolInfo,
 } from './lib/api'
 import { registrar, type EntradaConsole } from './lib/console'
-import { baixarTexto, conteudoProjetoJson, nomeDeArquivo } from './lib/download'
+import { baixarPacoteFirmware, baixarTexto, conteudoProjetoJson, nomeDeArquivo } from './lib/download'
 import { ErroGravacao, gravar, webSerialDisponivel, type PortaLike } from './lib/gravador'
 import { aplicarTema, temaInicial, type Tema } from './lib/tema'
 import { adicionarToast, removerToast, type Toast } from './lib/toasts'
@@ -71,7 +71,7 @@ type ErroDeCompilacao = ErroCompilacao | ErroHttpCompilacao | ErroRedeCompilacao
 type EstadoCompilacao =
   | { fase: 'ocioso' }
   | { fase: 'compilando' }
-  | { fase: 'sucesso'; pacote: Pacote }
+  | { fase: 'sucesso'; pacote: Pacote; fonte: string }
   | { fase: 'erro'; erro: ErroDeCompilacao }
 
 type EstadoGravacao =
@@ -670,13 +670,19 @@ export default function App() {
    * (a fonte já existe, editada à mão).
    */
   const opcoesDownload: OpcaoDownload[] = useMemo(() => {
+    const firmware = {
+      id: 'firmware' as const,
+      rotulo: 'Firmware ESP32 (.zip)',
+      desabilitadaMotivo: motivoIndisponivel,
+    }
     if (projeto.linguagem === 'st') {
-      return [{ id: 'st', rotulo: 'Structured Text (.st)' }]
+      return [{ id: 'st', rotulo: 'Structured Text (.st)' }, firmware]
     }
     return [
       { id: 'ld', rotulo: 'Ladder (.json)' },
       { id: 'st', rotulo: 'Structured Text (.st)', desabilitadaMotivo: motivoIndisponivel },
       { id: 'plcopen', rotulo: 'PLCopen XML (.xml)', desabilitadaMotivo: motivoIndisponivel },
+      firmware,
     ]
   }, [projeto.linguagem, motivoIndisponivel])
 
@@ -688,6 +694,64 @@ export default function App() {
    * `projeto.fonte` direto em projeto ST. Uma linha "Baixado …" vai ao
    * Console, no mesmo padrão informativo do resto da IDE.
    */
+  /** Fonte ST que seria enviada ao compilador, ou `undefined` se indisponível. */
+  function fonteCompilacaoAtual(): string | undefined {
+    if (projeto.linguagem === 'st') return projeto.fonte
+    if (stGerado === undefined || !stGerado.ok) return undefined
+    return stGerado.st
+  }
+
+  /**
+   * Compila `fonte` com o mesmo fluxo de `aoCompilar` (log, estado, Problemas).
+   * Devolve o pacote em sucesso; em falha, `undefined` (estado já atualizado).
+   */
+  async function executarCompilacao(fonte: string): Promise<Pacote | undefined> {
+    setProblemasCompilacao([])
+    setCompilacao({ fase: 'compilando' })
+    setGravacao({ fase: 'ocioso' })
+    log('info', 'Compilação iniciada.')
+    const inicio = performance.now()
+
+    try {
+      const pacote = await compilarPacote(fonte)
+      setCompilacao({ fase: 'sucesso', pacote, fonte })
+      const decorrido = ((performance.now() - inicio) / 1000).toFixed(1)
+      log('sucesso', `Compilação concluída em ${decorrido}s — chip ${pacote.chip}.`)
+      for (const imagem of pacote.images) {
+        const offsetHex = `0x${imagem.offset.toString(16)}`
+        const tamanhoKb = (imagem.size / 1024).toFixed(1)
+        log('info', `Imagem ${imagem.name}: offset ${offsetHex}, ${tamanhoKb} KB.`)
+      }
+      return pacote
+    } catch (erro) {
+      const decorrido = ((performance.now() - inicio) / 1000).toFixed(1)
+      const erroTratado =
+        erro instanceof ErroCompilacao || erro instanceof ErroHttpCompilacao || erro instanceof ErroRedeCompilacao
+          ? erro
+          : new ErroRedeCompilacao(erro instanceof Error ? erro.message : String(erro))
+      setCompilacao({ fase: 'erro', erro: erroTratado })
+
+      if (erroTratado instanceof ErroCompilacao) {
+        const { envelope } = erroTratado
+        log('erro', `Falha na compilação após ${decorrido}s — etapa ${envelope.stage} (${envelope.code}): ${envelope.message}`)
+        for (const diagnostico of envelope.diagnostics) {
+          log('erro', `${diagnostico.line ?? '?'}:${diagnostico.column ?? '?'} — ${diagnostico.message}`)
+        }
+
+        if (projeto.linguagem === 'ld' && stGerado !== undefined && stGerado.ok) {
+          const novosProblemas = problemasDeDiagnosticos(envelope.diagnostics, stGerado.mapaLinhas, projeto.diagrama)
+          setProblemasCompilacao(novosProblemas)
+          if (novosProblemas.some((problema) => problema.rungId !== '')) {
+            setAbaInferior('problemas')
+          }
+        }
+      } else {
+        log('erro', `Falha na compilação após ${decorrido}s: ${erroTratado.message}`)
+      }
+      return undefined
+    }
+  }
+
   function aoBaixar(id: OpcaoDownload['id']) {
     if (id === 'ld') {
       if (projeto.linguagem !== 'ld') return
@@ -707,15 +771,41 @@ export default function App() {
       return
     }
 
-    let fonte: string
-    if (projeto.linguagem === 'st') {
-      fonte = projeto.fonte
-    } else {
-      if (stGerado === undefined || !stGerado.ok) return
-      fonte = stGerado.st
+    if (id === 'firmware') {
+      void aoBaixarFirmware()
+      return
     }
+
+    if (id !== 'st') return
+
+    const fonte = fonteCompilacaoAtual()
+    if (fonte === undefined) return
     const nome = nomeDeArquivo(projeto.titulo, 'st')
     baixarTexto(nome, fonte, 'text/plain;charset=utf-8')
+    log('info', `Baixado ${nome}.`)
+  }
+
+  /** Download do ZIP de firmware: reutiliza pacote da última compilação da
+   * mesma fonte ST; senão compila antes, com aviso ao usuário. */
+  async function aoBaixarFirmware() {
+    if (compilacao.fase === 'compilando') return
+    const fonte = fonteCompilacaoAtual()
+    if (fonte === undefined) return
+
+    let pacote: Pacote
+    if (compilacao.fase === 'sucesso' && compilacao.fonte === fonte) {
+      pacote = compilacao.pacote
+    } else {
+      const mensagem = 'A lógica será compilada antes do download.'
+      log('info', mensagem)
+      recusar(mensagem)
+      const resultado = await executarCompilacao(fonte)
+      if (resultado === undefined) return
+      pacote = resultado
+    }
+
+    baixarPacoteFirmware(pacote, projeto.titulo)
+    const nome = nomeDeArquivo(projeto.titulo, 'firmware-esp32.zip')
     log('info', `Baixado ${nome}.`)
   }
 
@@ -728,63 +818,9 @@ export default function App() {
    * não deveria ser alcançável com a serialização recusada ou vazia.
    */
   async function aoCompilar() {
-    let fonte: string
-    if (projeto.linguagem === 'st') {
-      fonte = projeto.fonte
-    } else {
-      if (stGerado === undefined || !stGerado.ok) return
-      fonte = stGerado.st
-    }
-
-    setProblemasCompilacao([])
-    setCompilacao({ fase: 'compilando' })
-    setGravacao({ fase: 'ocioso' })
-    log('info', 'Compilação iniciada.')
-    const inicio = performance.now()
-
-    try {
-      const pacote = await compilarPacote(fonte)
-      setCompilacao({ fase: 'sucesso', pacote })
-      const decorrido = ((performance.now() - inicio) / 1000).toFixed(1)
-      log('sucesso', `Compilação concluída em ${decorrido}s — chip ${pacote.chip}.`)
-      for (const imagem of pacote.images) {
-        const offsetHex = `0x${imagem.offset.toString(16)}`
-        const tamanhoKb = (imagem.size / 1024).toFixed(1)
-        log('info', `Imagem ${imagem.name}: offset ${offsetHex}, ${tamanhoKb} KB.`)
-      }
-    } catch (erro) {
-      const decorrido = ((performance.now() - inicio) / 1000).toFixed(1)
-      const erroTratado =
-        erro instanceof ErroCompilacao || erro instanceof ErroHttpCompilacao || erro instanceof ErroRedeCompilacao
-          ? erro
-          : new ErroRedeCompilacao(erro instanceof Error ? erro.message : String(erro))
-      setCompilacao({ fase: 'erro', erro: erroTratado })
-
-      if (erroTratado instanceof ErroCompilacao) {
-        const { envelope } = erroTratado
-        log('erro', `Falha na compilação após ${decorrido}s — etapa ${envelope.stage} (${envelope.code}): ${envelope.message}`)
-        for (const diagnostico of envelope.diagnostics) {
-          log('erro', `${diagnostico.line ?? '?'}:${diagnostico.column ?? '?'} — ${diagnostico.message}`)
-        }
-
-        // D-8/Q-3: em projeto Ladder, cada diagnóstico com linha volta a ser
-        // um problema do degrau que a gerou, somado à lista da aba Problemas.
-        // Se algum deles apontar para um degrau real (rungId não vazio),
-        // abre a aba Problemas — é o jeito de "ver o motivo" chegar até quem
-        // acionou Compilar sem precisar procurar; um diagnóstico só de
-        // declaração/cabeçalho (sem degrau) não abre nada por conta própria,
-        // porque não há onde focar na tela além da mensagem já no Console.
-        if (projeto.linguagem === 'ld' && stGerado !== undefined && stGerado.ok) {
-          const novosProblemas = problemasDeDiagnosticos(envelope.diagnostics, stGerado.mapaLinhas, projeto.diagrama)
-          setProblemasCompilacao(novosProblemas)
-          if (novosProblemas.some((problema) => problema.rungId !== '')) {
-            setAbaInferior('problemas')
-          }
-        }
-      } else {
-        log('erro', `Falha na compilação após ${decorrido}s: ${erroTratado.message}`)
-      }
-    }
+    const fonte = fonteCompilacaoAtual()
+    if (fonte === undefined) return
+    await executarCompilacao(fonte)
   }
 
   function aoGravar() {

@@ -456,3 +456,19 @@ código literal.
   (comportamento já existente: encerra a simulação ativa, se houver).
 - **Abrir:** com o painel fechado, o botão **Ambiente** na faixa abre o modal
   de escolha, como antes.
+
+## Revisão aditiva — 2026-09-28 (botão Parar normalmente fechado)
+
+- **Pedido do orientador:** o botão Parar do ambiente Portão estava modelado
+  como NA (entrada `%IX0.2` só fica verdadeira enquanto o botão é pressionado).
+  Passa a ser **NF**: em repouso o contato conduz (`true`); pressionado, abre
+  (`false`). Abrir e Fechar permanecem NA.
+- **Planta:** `nivelParar` em `frontend/src/ambientes/portao.ts`. O rótulo do
+  ponto no contrato é `Parar (NF)`.
+- **Cena:** o botão na `CenaPortao` mostra `PARAR (NF)` e o nome acessível
+  `Parar (NF)`.
+- **Programa de referência `PORTAO`:** os dois contatos de `parar` passam de
+  NF para **NA**, para o motor continuar habilitado com o botão em repouso
+  (bit verdadeiro) e parar quando o botão abre o contato. Dourados
+  `portao.st` / `portao.json` regenerados; `portao.toml` passa a manter
+  `%IX0.2 = true` nos ciclos de repouso.

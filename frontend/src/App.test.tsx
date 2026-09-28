@@ -7,7 +7,7 @@ import { IO_ESPELHO, SET_RESET } from './ladder/fixtures'
 import { COLUNA_TERMINAL, type Diagrama } from './ladder/modelo'
 import { CHAVE_DIAGRAMA } from './ladder/persistencia'
 import { serializar } from './ladder/serializador'
-import { baixarTexto, conteudoProjetoJson } from './lib/download'
+import { baixarPacoteFirmware, baixarTexto, conteudoProjetoJson } from './lib/download'
 import { CHAVE_PROJETO, ESQUELETO_ST, type Projeto } from './projeto/projeto'
 
 // `baixarTexto` toca o DOM (Blob/URL.createObjectURL) — mockado para os
@@ -18,9 +18,10 @@ import { CHAVE_PROJETO, ESQUELETO_ST, type Projeto } from './projeto/projeto'
 // jeito que o `App` faz.
 vi.mock('./lib/download', async (importActual) => {
   const real = await importActual<typeof import('./lib/download')>()
-  return { ...real, baixarTexto: vi.fn() }
+  return { ...real, baixarTexto: vi.fn(), baixarPacoteFirmware: vi.fn() }
 })
 const baixarTextoMock = vi.mocked(baixarTexto)
+const baixarPacoteFirmwareMock = vi.mocked(baixarPacoteFirmware)
 
 const { gravarMock } = vi.hoisted(() => ({
   gravarMock: vi.fn().mockResolvedValue(undefined),
@@ -117,6 +118,7 @@ async function criarProjetoST(usuario: UserEvent, titulo = 'Programa ST') {
 describe('App', () => {
   beforeEach(() => {
     baixarTextoMock.mockClear()
+    baixarPacoteFirmwareMock.mockClear()
     try {
       window.localStorage.clear()
     } catch {
@@ -470,19 +472,81 @@ describe('App', () => {
     )
   })
 
-  it('Q-1 revista: em projeto ST, o menu Baixar só tem a opção .st, que baixa projeto.fonte', async () => {
+  it('Q-1 revista: em projeto ST, o menu Baixar tem .st e firmware; .st baixa projeto.fonte', async () => {
     const usuario = userEvent.setup()
     render(<App />)
     await criarProjetoST(usuario, 'Programa ST')
 
     await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
     const menu = screen.getByRole('menu')
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(1)
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(2)
     const itemSt = within(menu).getByRole('menuitem', { name: /structured text/i })
 
     await usuario.click(itemSt)
 
     expect(baixarTextoMock).toHaveBeenCalledWith('programa-st.st', ESQUELETO_ST, 'text/plain;charset=utf-8')
+  })
+
+  it('firmware: sem compilação prévia, compila e chama baixarPacoteFirmware', async () => {
+    const pacote = {
+      chip: 'esp32',
+      flash: { mode: 'dio', freq: '40m', size: '4MB' },
+      images: [{ name: 'bootloader', offset: 4096, size: 3, sha256: 'x', data_base64: btoa('BOT') }],
+    }
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) return Promise.resolve(respostaJson(pacote))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario, 'Blink')
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    await usuario.click(screen.getByRole('menuitem', { name: /firmware esp32/i }))
+
+    const log = screen.getByRole('log', { name: 'Console' })
+    expect(await within(log).findByText(/será compilada antes do download/i)).toBeInTheDocument()
+    expect(await within(log).findByText(/Compilação concluída/)).toBeInTheDocument()
+    expect(baixarPacoteFirmwareMock).toHaveBeenCalledWith(pacote, 'Blink')
+  })
+
+  it('firmware: após compilar, baixa sem nova requisição de compilação', async () => {
+    const pacote = {
+      chip: 'esp32',
+      flash: { mode: 'dio', freq: '40m', size: '4MB' },
+      images: [{ name: 'app', offset: 65536, size: 3, sha256: 'x', data_base64: btoa('APP') }],
+    }
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = urlDaRequisicao(input)
+      if (url.endsWith('/health')) return Promise.resolve(respostaJson(HEALTH_OK))
+      if (url.endsWith('/compile/pacote')) return Promise.resolve(respostaJson(pacote))
+      return Promise.reject(new Error(`URL inesperada no teste: ${url}`))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const usuario = userEvent.setup()
+    render(<App />)
+    await criarProjetoST(usuario, 'Blink')
+
+    await usuario.click(screen.getByRole('button', { name: /^compilar$/i }))
+    await within(screen.getByRole('log', { name: 'Console' })).findByText(/Compilação concluída/)
+
+    const chamadasPacoteAntes = fetchMock.mock.calls.filter((chamada) =>
+      urlDaRequisicao(chamada[0]).endsWith('/compile/pacote'),
+    ).length
+
+    await usuario.click(screen.getByRole('button', { name: /baixar projeto/i }))
+    await usuario.click(screen.getByRole('menuitem', { name: /firmware esp32/i }))
+
+    const chamadasPacoteDepois = fetchMock.mock.calls.filter((chamada) =>
+      urlDaRequisicao(chamada[0]).endsWith('/compile/pacote'),
+    ).length
+    expect(chamadasPacoteDepois).toBe(chamadasPacoteAntes)
+    expect(baixarPacoteFirmwareMock).toHaveBeenCalledWith(pacote, 'Blink')
   })
 
   it('Q-3: diagnóstico do compilador na linha do degrau 2 aparece como problema desse degrau, e clicar nele foca o degrau', async () => {

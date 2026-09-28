@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { Pacote } from './api'
 import type { Projeto } from '../projeto/projeto'
-import { baixarTexto, conteudoProjetoJson, nomeDeArquivo } from './download'
+import {
+  baixarTexto,
+  conteudoGravacaoTxt,
+  conteudoProjetoJson,
+  montarZipFirmware,
+  nomeDeArquivo,
+} from './download'
 
 describe('nomeDeArquivo', () => {
   it('remove acentos e passa para minúsculo', () => {
@@ -56,6 +63,69 @@ describe('conteudoProjetoJson', () => {
 
     expect(JSON.parse(conteudo)).toEqual(projeto)
     expect(conteudo.endsWith('\n')).toBe(true)
+  })
+})
+
+const PACOTE_ZIP: Pacote = {
+  chip: 'esp32',
+  flash: { mode: 'dio', freq: '40m', size: '4MB' },
+  images: [
+    {
+      name: 'bootloader',
+      offset: 0x1000,
+      size: 3,
+      sha256: 'a'.repeat(64),
+      data_base64: btoa('BOT'),
+    },
+    {
+      name: 'partition-table',
+      offset: 0x8000,
+      size: 4,
+      sha256: 'b'.repeat(64),
+      data_base64: btoa('PART'),
+    },
+    {
+      name: 'app',
+      offset: 0x10000,
+      size: 7,
+      sha256: 'c'.repeat(64),
+      data_base64: btoa('APP-BIN'),
+    },
+  ],
+}
+
+describe('conteudoGravacaoTxt', () => {
+  it('lista offsets reais e inclui exemplo de esptool', () => {
+    const texto = conteudoGravacaoTxt(PACOTE_ZIP)
+    expect(texto).toContain('0x1000  bootloader.bin')
+    expect(texto).toContain('0x8000  partition-table.bin')
+    expect(texto).toContain('0x10000  ladderflow_plc.bin')
+    expect(texto).toContain('esptool.py --chip esp32')
+    expect(texto).toContain('0x1000 bootloader.bin 0x8000 partition-table.bin 0x10000 ladderflow_plc.bin')
+  })
+})
+
+describe('montarZipFirmware', () => {
+  it('produz um ZIP válido com as três imagens e gravacao.txt', async () => {
+    const zip = montarZipFirmware(PACOTE_ZIP)
+    expect(zip.type).toBe('application/zip')
+
+    const bytes = new Uint8Array(await zip.arrayBuffer())
+    expect(bytes[0]).toBe(0x50)
+    expect(bytes[1]).toBe(0x4b)
+
+    const nomes = ['bootloader.bin', 'partition-table.bin', 'ladderflow_plc.bin', 'gravacao.txt']
+    for (const nome of nomes) {
+      const marcador = new TextEncoder().encode(nome)
+      let encontrado = false
+      for (let i = 0; i <= bytes.length - marcador.length; i++) {
+        if (marcador.every((byte, j) => bytes[i + j] === byte)) {
+          encontrado = true
+          break
+        }
+      }
+      expect(encontrado).toBe(true)
+    }
   })
 })
 

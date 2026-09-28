@@ -453,6 +453,7 @@ function PainelControle({
         cx={x + 28}
         cy={y + 195}
         label="PARAR"
+        contato="NF"
         endereco={ENDERECO_PARAR}
         pressionado={botoes.parar}
         vermelho={true}
@@ -494,6 +495,7 @@ function BotaoSvg({
   cx,
   cy,
   label,
+  contato,
   endereco,
   pressionado,
   vermelho,
@@ -503,6 +505,8 @@ function BotaoSvg({
   cx: number
   cy: number
   label: string
+  /** NA ou NF, quando o botão não segue o padrão normalmente aberto. */
+  contato?: 'NA' | 'NF'
   endereco: string
   pressionado: boolean
   vermelho: boolean
@@ -511,6 +515,7 @@ function BotaoSvg({
 }) {
   const r = 14
   const nome = label.charAt(0) + label.slice(1).toLowerCase()
+  const rotuloAcessivel = contato ? `${nome} (${contato})` : nome
 
   function aoPointerDown(e: PointerEvent) {
     e.preventDefault()
@@ -530,7 +535,7 @@ function BotaoSvg({
       role="button"
       tabIndex={disabled ? -1 : 0}
       aria-pressed={pressionado}
-      aria-label={nome}
+      aria-label={rotuloAcessivel}
       aria-disabled={disabled}
       style={{ cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 }}
       onPointerDown={aoPointerDown}
@@ -552,6 +557,7 @@ function BotaoSvg({
       <circle cx={cx} cy={cy} r="4" fill="#222" />
       <text x={cx + 20} y={cy - 2} fill="#ddd" fontSize="7" fontFamily="sans-serif">
         {label}
+        {contato ? ` (${contato})` : ''}
       </text>
       <text x={cx + 20} y={cy + 8} fill="#aaa" fontSize="6" fontFamily="monospace">
         {endereco}

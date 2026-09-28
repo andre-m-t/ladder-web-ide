@@ -14,9 +14,9 @@ PROGRAM prog0
   END_VAR
 
   (* degrau 1 *)
-  motor_sobe := abrir AND NOT parar AND fc_superior;
+  motor_sobe := abrir AND parar AND fc_superior;
   (* degrau 2 *)
-  motor_desce := fechar AND NOT parar AND NOT fc_inferior;
+  motor_desce := fechar AND parar AND NOT fc_inferior;
   (* degrau 3 *)
   lamp_aberto := NOT fc_superior;
   (* degrau 4 *)

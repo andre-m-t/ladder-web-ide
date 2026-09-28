@@ -369,8 +369,10 @@ export const BLINK: Diagrama = {
 
 /**
  * `portao.st` (spec 005): lógica mínima do cenário portão — Abrir aciona motor
- * sobe e Fechar aciona motor desce, com Parar em NF. Medido no arcabouço
- * diferencial (RF-11).
+ * sobe e Fechar aciona motor desce. O botão Parar da planta é NF (revisão
+ * 2026-09-28): `%IX0.2` fica verdadeiro em repouso e cai quando o botão é
+ * pressionado, então o intertravamento no diagrama é um contato NA.
+ * Medido no arcabouço diferencial (RF-11).
  *
  * Revisão 2026-09-23 (spec 005, §10): o FC superior (`fc_superior`) é NA,
  * mas fica **ligado** enquanto a folha estiver fechada ou entreaberta — a
@@ -413,7 +415,7 @@ export const PORTAO: Diagrama = {
       id: 'r1',
       elementos: [
         { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'abrir' },
-        { id: 'e2', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
+        { id: 'e2', tipo: 'contato_na', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
         { id: 'e3', tipo: 'contato_na', celula: { linha: 0, coluna: 2 }, variavel: 'fc_superior' },
         { id: 'e4', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'motor_sobe' },
       ],
@@ -423,7 +425,7 @@ export const PORTAO: Diagrama = {
       id: 'r2',
       elementos: [
         { id: 'e5', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'fechar' },
-        { id: 'e6', tipo: 'contato_nf', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
+        { id: 'e6', tipo: 'contato_na', celula: { linha: 0, coluna: 1 }, variavel: 'parar' },
         { id: 'e7', tipo: 'contato_nf', celula: { linha: 0, coluna: 2 }, variavel: 'fc_inferior' },
         { id: 'e8', tipo: 'bobina', celula: { linha: 0, coluna: COLUNA_TERMINAL }, variavel: 'motor_desce' },
       ],

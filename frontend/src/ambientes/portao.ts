@@ -39,7 +39,13 @@ export interface EstadoPortao {
 export const PONTOS_PORTAO: readonly PontoAmbiente[] = [
   { endereco: ENDERECO_ABRIR, direcao: 'entrada', papel: 'entrada_usuario', rotulo: 'Abrir', nomeSugerido: 'abrir' },
   { endereco: ENDERECO_FECHAR, direcao: 'entrada', papel: 'entrada_usuario', rotulo: 'Fechar', nomeSugerido: 'fechar' },
-  { endereco: ENDERECO_PARAR, direcao: 'entrada', papel: 'entrada_usuario', rotulo: 'Parar', nomeSugerido: 'parar' },
+  {
+    endereco: ENDERECO_PARAR,
+    direcao: 'entrada',
+    papel: 'entrada_usuario',
+    rotulo: 'Parar (NF)',
+    nomeSugerido: 'parar',
+  },
   {
     endereco: ENDERECO_FC_SUPERIOR,
     direcao: 'entrada',
@@ -90,11 +96,20 @@ function nivelFcInferior(abertura: number): boolean {
   return abertura <= MARGEM_FC
 }
 
+/**
+ * Botão Parar normalmente fechado (revisão 2026-09-28): em repouso o
+ * contato conduz (`true` em `%IX0.2`); pressionado, abre (`false`).
+ * Abrir e Fechar continuam NA — `true` só enquanto pressionados.
+ */
+function nivelParar(pressionado: boolean): boolean {
+  return !pressionado
+}
+
 export function montarEntradasPortao(estado: EstadoPortao): MapaEntradas {
   return {
     [ENDERECO_ABRIR]: estado.botoes.abrir,
     [ENDERECO_FECHAR]: estado.botoes.fechar,
-    [ENDERECO_PARAR]: estado.botoes.parar,
+    [ENDERECO_PARAR]: nivelParar(estado.botoes.parar),
     [ENDERECO_FC_SUPERIOR]: nivelFcSuperior(estado.abertura),
     [ENDERECO_FC_INFERIOR]: nivelFcInferior(estado.abertura),
   }
@@ -162,7 +177,8 @@ export function acionarComandoPortao(estado: EstadoPortao, comando: string, pres
 export const AMBIENTE_PORTAO: DefinicaoAmbiente<EstadoPortao> = {
   id: 'portao',
   nome: 'Portão',
-  descricao: 'Portão de enrolar com botões Abrir/Fechar/Parar, fins de curso e motor sobe/desce.',
+  descricao:
+    'Portão de enrolar com botões Abrir e Fechar (NA), Parar (NF), fins de curso e motor sobe/desce.',
   pontos: PONTOS_PORTAO,
   criarEstado: criarEstadoPortao,
   avancar: avancarPortao,

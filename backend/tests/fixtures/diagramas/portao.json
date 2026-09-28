@@ -67,7 +67,7 @@
         },
         {
           "id": "e2",
-          "tipo": "contato_nf",
+          "tipo": "contato_na",
           "celula": {
             "linha": 0,
             "coluna": 1
@@ -109,7 +109,7 @@
         },
         {
           "id": "e6",
-          "tipo": "contato_nf",
+          "tipo": "contato_na",
           "celula": {
             "linha": 0,
             "coluna": 1

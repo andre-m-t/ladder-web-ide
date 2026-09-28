@@ -10,6 +10,7 @@ import {
   ENDERECO_MOTOR_DESCE,
   ENDERECO_MOTOR_SOBE,
   ENDERECO_ABRIR,
+  ENDERECO_PARAR,
   MARGEM_FC,
   PASSO_ABERTURA_POR_CICLO,
   acionarComandoPortao,
@@ -37,6 +38,14 @@ describe('planta portão', () => {
     const estado = acionarComandoPortao(criarEstadoPortao(), 'abrir', true)
     const r = avancarPortao(estado, {})
     expect(r.entradas[ENDERECO_ABRIR]).toBe(true)
+  })
+
+  it('botão parar é NF: entrada true em repouso e false quando pressionado', () => {
+    const repouso = avancarPortao(criarEstadoPortao(), {}).entradas
+    expect(repouso[ENDERECO_PARAR]).toBe(true)
+
+    const pressionado = avancarPortao(acionarComandoPortao(criarEstadoPortao(), 'parar', true), {}).entradas
+    expect(pressionado[ENDERECO_PARAR]).toBe(false)
   })
 
   it('fim de curso superior (NA) false no topo — lona saiu do ponto do sensor (revisão 2026-09-23)', () => {

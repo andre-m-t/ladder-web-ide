@@ -367,6 +367,19 @@ data, decisão e justificativa; não apague o enunciado.
 > a serialização ocorreu pelo estado do Compilar e pode obter o resultado
 > pelo download. O rastreio da Q-3 continua citando degrau e linha, e a linha
 > é a do arquivo baixado.
+>
+> **Revisão aditiva da Q-1 (2026-09-28), pedido do orientador.** O menu
+> **Baixar** ganha a opção **Firmware ESP32 (.zip)** em projeto Ladder e em
+> projeto ST. O arquivo contém as três imagens de flash devolvidas por
+> `POST /compile/pacote` (bootloader, tabela de partições, aplicação) e um
+> `gravacao.txt` com os endereços e um exemplo de comando `esptool`. A opção
+> obedece ao mesmo portão de indisponibilidade do Compilar em projeto Ladder
+> (`motivoIndisponivel`); em projeto ST, só a simulação bloqueia (como
+> Compilar). Se ainda não houver pacote compilado para a fonte ST atual, a
+> IDE compila antes do download, avisa no console e em toast («A lógica será
+> compilada antes do download.») e só então dispara o download; se já houver
+> sucesso de compilação para a mesma fonte, reutiliza o pacote sem compilar de
+> novo. O ZIP é montado no cliente (`lib/download.ts`), sem endpoint novo.
 
 ### Q-2 — Serializar um diagrama com problema de severidade "erro"
 - **Enunciado:** quando o diagrama de origem tem ao menos um problema de

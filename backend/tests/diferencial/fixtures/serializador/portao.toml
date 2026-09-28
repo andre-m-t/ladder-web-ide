@@ -1,26 +1,26 @@
 # Fixture diferencial do portão (spec 005, RF-11).
-# Abrir (%IX0.0) aciona motor sobe (%QX0.0) com parar em NF e FC superior em
-# NA (revisão 2026-09-23 — %IX0.3 ligado enquanto a lona ainda passa pelo
-# ponto do sensor junto ao tambor, fechado ou entreaberto; só desliga perto
-# do totalmente aberto: ver JSDoc de `PORTAO` em `frontend/src/ladder/fixtures.ts`
-# e de `nivelFcSuperior` em `frontend/src/ambientes/portao.ts`).
+# Abrir (%IX0.0) aciona motor sobe (%QX0.0). O botão Parar é NF na planta
+# (revisão 2026-09-28): %IX0.2 fica verdadeiro em repouso e o diagrama lê
+# esse bit com contato NA. FC superior em NA (revisão 2026-09-23 — %IX0.3
+# ligado enquanto a lona ainda passa pelo ponto do sensor junto ao tambor).
 
 st = "portao.st"
 descricao = """
-Lógica mínima do cenário portão: espelho combinacional com intertravamento NF
-em `parar`/`fc_inferior` e NA em `fc_superior` (fechado/entreaberto = ligado).
+Lógica mínima do cenário portão: espelho combinacional. Parar é botão NF
+(%IX0.2 verdadeiro em repouso, contato NA no diagrama). Intertravamento NF
+em `fc_inferior` e NA em `fc_superior` (fechado/entreaberto = ligado).
 """
 ciclos = 5
 
 [[entradas]]
 de = 1
 ate = 5
-valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = true, "%IX0.4" = true }
+valores = { "%IX0.0" = false, "%IX0.1" = false, "%IX0.2" = true, "%IX0.3" = true, "%IX0.4" = true }
 
 [[entradas]]
 de = 2
 ate = 3
-valores = { "%IX0.0" = true, "%IX0.1" = false, "%IX0.2" = false, "%IX0.3" = true, "%IX0.4" = true }
+valores = { "%IX0.0" = true, "%IX0.1" = false, "%IX0.2" = true, "%IX0.3" = true, "%IX0.4" = true }
 
 [[saidas_esperadas]]
 ciclo = 2

@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ABERTURA_MAX, ABERTURA_MIN, criarEstadoPortao } from '../../ambientes/portao'
@@ -46,5 +46,12 @@ describe('CenaPortao — fins de curso NA (aceso = detectando)', () => {
     const retangulos = Array.from(container.querySelectorAll('rect'))
     const acesos = retangulos.filter((r) => r.getAttribute('fill') === VERDE_ACESO)
     expect(acesos).toHaveLength(1)
+  })
+})
+
+describe('CenaPortao — botão Parar NF', () => {
+  it('identifica o botão Parar como normalmente fechado', () => {
+    render(<CenaPortao estado={criarEstadoPortao()} saidas={{}} simulacaoAtiva aoComando={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Parar (NF)' })).toBeInTheDocument()
   })
 })
