@@ -229,11 +229,11 @@ describe('carregarProjeto — casos de descarte (ladderflow:projeto presente e i
     expect(resultado.veioDoArmazenamento).toBe(false)
   })
 
-  it('versão desconhecida (2): projeto LD "Sem título" vazio + aviso', () => {
+  it('versão desconhecida (99): projeto LD "Sem título" vazio + aviso', () => {
     const armazenamento = new ArmazenamentoFalso()
     armazenamento.setItem(
       CHAVE_PROJETO,
-      JSON.stringify({ versao: 2, titulo: 'x', linguagem: 'ld', diagrama: diagramaVazio() }),
+      JSON.stringify({ versao: 99, titulo: 'x', linguagem: 'ld', diagrama: diagramaVazio() }),
     )
 
     const resultado = carregarProjeto(armazenamento)
@@ -269,7 +269,7 @@ describe('carregarProjeto — casos de descarte (ladderflow:projeto presente e i
     const armazenamento = new ArmazenamentoFalso()
     armazenamento.setItem(
       CHAVE_PROJETO,
-      JSON.stringify({ versao: 1, titulo: 'x', linguagem: 'ld', diagrama: { versao: 1, variaveis: [], rungs: [] } }),
+      JSON.stringify({ versao: 1, titulo: 'x', linguagem: 'ld', diagrama: { versao: 2, variaveis: [], rungs: [] } }),
     )
 
     const resultado = carregarProjeto(armazenamento)

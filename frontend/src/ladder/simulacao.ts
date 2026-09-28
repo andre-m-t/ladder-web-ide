@@ -26,16 +26,17 @@ import {
   COLUNA_TERMINAL,
   ehBobina,
   ehContato,
-  ehCtu,
+  ehBloco,
   ehRamoDeSaida,
   ehTerminal,
   variavelDoElemento,
   type Diagrama,
   type Elemento,
+  type ElementoBloco,
   type Ramo,
   type Rung,
 } from './modelo'
-import { PV_MAX } from './ctu'
+import { DESCRITORES, PERIODO_VARREDURA_MS } from './blocos'
 import { classeDaVariavel } from './enderecos'
 
 /** Chave de nó: `${linha}:${no}`, com `no` de 0 a `COLUNAS_POR_DEGRAU`.
@@ -57,12 +58,26 @@ export interface EnergizacaoDegrau {
   elementos: Record<string, boolean>
 }
 
-/** Estado interno de uma instância de contador crescente (plano D-4). */
-export interface EstadoContador {
+/** Estado interno de contador (CTU/CTD). */
+export interface EstadoContadorSim {
+  familia: 'contador'
   contagem: number
-  /** Nível de CU no ciclo anterior — base da borda de subida. */
-  cuAnterior: boolean
+  entradaAnterior: boolean
 }
+
+/** Estado interno de temporizador (TON/TOF) — semântica MATIEC. */
+export interface EstadoTemporizadorSim {
+  familia: 'temporizador'
+  fase: 0 | 1 | 2
+  inAnterior: boolean
+  inicioMs: number
+  etMs: number
+}
+
+export type EstadoBlocoSim = EstadoContadorSim | EstadoTemporizadorSim
+
+/** @deprecated Use `EstadoBlocoSim`. */
+export type EstadoContador = EstadoContadorSim
 
 /** Estado completo de uma simulação. Imutável: toda função devolve estado
  * novo (plano D-6). */
@@ -74,8 +89,10 @@ export interface EstadoSimulacao {
   /** Entradas acionadas pelo usuário. Só entram na imagem de processo no
    * início do próximo ciclo (RF-1/RF-12, plano D-2). */
   entradas: Record<string, boolean>
-  /** Estado interno por instância de contador. */
-  contadores: Record<string, EstadoContador>
+  /** Estado interno por instância de bloco FB. */
+  blocos: Record<string, EstadoBlocoSim>
+  /** @deprecated Use `blocos`. */
+  contadores: Record<string, EstadoContadorSim>
   /** Energização por id de degrau, resultado do último ciclo. */
   energizacao: Record<string, EnergizacaoDegrau>
 }
@@ -87,7 +104,9 @@ export type ResultadoAcionamento =
 
 /** Intervalo de ciclo do laço de varredura do firmware (`T#20ms`), em
  * milissegundos. É a marcha "tempo real" da interface (RF-11). */
-export const INTERVALO_TEMPO_REAL_MS = 20
+export const INTERVALO_TEMPO_REAL_MS = PERIODO_VARREDURA_MS
+
+export { PERIODO_VARREDURA_MS }
 
 // ---------------------------------------------------------------------------
 // Leitura de topologia própria e independente (RF-7). Nada aqui importa ou
@@ -113,6 +132,9 @@ function verificarTipoConhecido(tipo: Elemento['tipo']): void {
     case 'bobina_set':
     case 'bobina_reset':
     case 'ctu':
+    case 'ctd':
+    case 'ton':
+    case 'tof':
       return
     default: {
       const tipoForjado: never = tipo
@@ -162,8 +184,8 @@ interface FluxoDegrau {
   elementos: Record<string, boolean>
   /** Energia alcança a coluna do terminal (bobina ou CTU) deste degrau. */
   energizadoTerminal: boolean
-  /** Caminho de reinício do CTU do degrau, se houver (D-4); `false` se não há CTU. */
-  resetConduz: boolean
+  /** Caminho de controle (R/LD) do bloco do degrau, se houver. */
+  controleConduz: boolean
 }
 
 /**
@@ -179,7 +201,7 @@ interface FluxoDegrau {
  * ver o relatório da tarefa #1 para a prova contra o oráculo independente de
  * `serializador.test.ts`.
  *
- * A linha de reinício de um CTU (`linhaReset`) não é um `Ramo` (`ctu.ts`): é
+ * A linha de reinício de um CTU (`linhaControle`) não é um `Ramo` (`ctu.ts`): é
  * resolvida à parte, como se estivesse ligada diretamente ao trilho esquerdo
  * (sempre energizada em `coluna 0`), porque ela nunca alimenta o fluxo
  * principal do degrau — só o parâmetro `R` do contador.
@@ -232,18 +254,18 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
     }
   }
 
-  let resetConduz = false
-  const ctu = rung.elementos.find(ehCtu)
-  if (ctu !== undefined) {
-    nos[chaveNo(ctu.linhaReset, 0)] = true
+  let controleConduz = false
+  const bloco = rung.elementos.find(ehBloco)
+  if (bloco !== undefined && bloco.linhaControle !== null) {
+    nos[chaveNo(bloco.linhaControle, 0)] = true
     let atual = true
     for (let coluna = 0; coluna < COLUNA_TERMINAL; coluna++) {
-      const conduz = contatoConduz(rung, ctu.linhaReset, coluna, variaveis)
-      celulas[chaveCelula(ctu.linhaReset, coluna)] = atual && conduz
+      const conduz = contatoConduz(rung, bloco.linhaControle, coluna, variaveis)
+      celulas[chaveCelula(bloco.linhaControle, coluna)] = atual && conduz
       atual = atual && conduz
-      nos[chaveNo(ctu.linhaReset, coluna + 1)] = atual
+      nos[chaveNo(bloco.linhaControle, coluna + 1)] = atual
     }
-    resetConduz = atual
+    controleConduz = atual
   }
 
   // Terminal (bobina ou CTU): "acionado" é a mesma leitura para os dois — a
@@ -255,7 +277,7 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
     (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
   )
   if (principal !== undefined) {
-    if (ehCtu(principal)) {
+    if (ehBloco(principal)) {
       elementos[principal.id] = energizadoTerminal
     } else {
       for (const bobina of rung.elementos.filter(
@@ -266,7 +288,7 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
     }
   }
 
-  return { nos, celulas, elementos, energizadoTerminal, resetConduz }
+  return { nos, celulas, elementos, energizadoTerminal, controleConduz }
 }
 
 /**
@@ -281,22 +303,142 @@ function calcularFluxoDoRung(rung: Rung, variaveis: Record<string, boolean>): Fl
  * de trabalho do ciclo corrente (D-3: a escrita de um degrau precisa ficar
  * visível para os degraus seguintes do mesmo ciclo).
  */
+function estadoInicialBloco(bloco: ElementoBloco): EstadoBlocoSim {
+  const familia = DESCRITORES[bloco.tipo].familiaSimulacao
+  if (familia === 'contador') {
+    return { familia: 'contador', contagem: 0, entradaAnterior: false }
+  }
+  return { familia: 'temporizador', fase: 0, inAnterior: false, inicioMs: 0, etMs: 0 }
+}
+
+function agoraMs(ciclo: number): number {
+  return ciclo * PERIODO_VARREDURA_MS
+}
+
+function aplicarContadorCtu(
+  bloco: ElementoBloco,
+  fluxo: FluxoDegrau,
+  anterior: EstadoContadorSim,
+): { estado: EstadoContadorSim; q: boolean } {
+  let contagem = anterior.contagem
+  const inAtual = fluxo.energizadoTerminal
+  if (fluxo.controleConduz) {
+    contagem = 0
+  } else if (inAtual && !anterior.entradaAnterior && contagem < bloco.preset) {
+    contagem += 1
+  }
+  const estado: EstadoContadorSim = { familia: 'contador', contagem, entradaAnterior: inAtual }
+  return { estado, q: contagem >= bloco.preset }
+}
+
+function aplicarContadorCtd(
+  bloco: ElementoBloco,
+  fluxo: FluxoDegrau,
+  anterior: EstadoContadorSim,
+): { estado: EstadoContadorSim; q: boolean } {
+  let contagem = anterior.contagem
+  const inAtual = fluxo.energizadoTerminal
+  if (fluxo.controleConduz) {
+    contagem = bloco.preset
+  } else if (inAtual && !anterior.entradaAnterior && contagem > 0) {
+    contagem -= 1
+  }
+  const estado: EstadoContadorSim = { familia: 'contador', contagem, entradaAnterior: inAtual }
+  return { estado, q: contagem <= 0 }
+}
+
+function aplicarTemporizadorTon(
+  bloco: ElementoBloco,
+  fluxo: FluxoDegrau,
+  anterior: EstadoTemporizadorSim,
+  tMs: number,
+): { estado: EstadoTemporizadorSim; q: boolean } {
+  const inAtual = fluxo.energizadoTerminal
+  let { fase, inicioMs, etMs } = anterior
+
+  if (fase === 0 && !anterior.inAnterior && inAtual) {
+    fase = 1
+    inicioMs = tMs
+    etMs = 0
+  } else if (!inAtual) {
+    fase = 0
+    etMs = 0
+  } else if (fase === 1) {
+    if (inicioMs + bloco.preset <= tMs) {
+      fase = 2
+      etMs = bloco.preset
+    } else {
+      etMs = tMs - inicioMs
+    }
+  }
+
+  const estado: EstadoTemporizadorSim = { familia: 'temporizador', fase, inAnterior: inAtual, inicioMs, etMs }
+  return { estado, q: fase === 2 }
+}
+
+function aplicarTemporizadorTof(
+  bloco: ElementoBloco,
+  fluxo: FluxoDegrau,
+  anterior: EstadoTemporizadorSim,
+  tMs: number,
+): { estado: EstadoTemporizadorSim; q: boolean } {
+  const inAtual = fluxo.energizadoTerminal
+  let { fase, inicioMs, etMs } = anterior
+
+  if (fase === 0 && anterior.inAnterior && !inAtual) {
+    fase = 1
+    inicioMs = tMs
+  } else if (inAtual) {
+    fase = 0
+    etMs = 0
+  } else if (fase === 1) {
+    if (inicioMs + bloco.preset <= tMs) {
+      fase = 2
+      etMs = bloco.preset
+    } else {
+      etMs = tMs - inicioMs
+    }
+  }
+
+  const q = inAtual || fase === 1
+  const estado: EstadoTemporizadorSim = { familia: 'temporizador', fase, inAnterior: inAtual, inicioMs, etMs }
+  return { estado, q }
+}
+
 function aplicarEscritaDoTerminal(
   terminal: Elemento,
   fluxo: FluxoDegrau,
   variaveis: Record<string, boolean>,
-  contadores: Record<string, EstadoContador>,
+  blocos: Record<string, EstadoBlocoSim>,
+  cicloAtual: number,
 ): void {
-  if (ehCtu(terminal)) {
-    const anterior = contadores[terminal.instancia] ?? { contagem: 0, cuAnterior: false }
-    let contagem = anterior.contagem
-    if (fluxo.resetConduz) {
-      contagem = 0
-    } else if (fluxo.energizadoTerminal && !anterior.cuAnterior) {
-      contagem = Math.min(contagem + 1, PV_MAX)
+  if (ehBloco(terminal)) {
+    const anterior = blocos[terminal.instancia] ?? estadoInicialBloco(terminal)
+    const tMs = agoraMs(cicloAtual)
+    let resultado: { estado: EstadoBlocoSim; q: boolean }
+
+    const tipoBloco = terminal.tipo
+    switch (tipoBloco) {
+      case 'ctu':
+        resultado = aplicarContadorCtu(terminal, fluxo, anterior as EstadoContadorSim)
+        break
+      case 'ctd':
+        resultado = aplicarContadorCtd(terminal, fluxo, anterior as EstadoContadorSim)
+        break
+      case 'ton':
+        resultado = aplicarTemporizadorTon(terminal, fluxo, anterior as EstadoTemporizadorSim, tMs)
+        break
+      case 'tof':
+        resultado = aplicarTemporizadorTof(terminal, fluxo, anterior as EstadoTemporizadorSim, tMs)
+        break
+      default: {
+        const _: never = tipoBloco
+        throw new Error(`simulacao: bloco desconhecido: ${String(_)}`)
+      }
     }
-    contadores[terminal.instancia] = { contagem, cuAnterior: fluxo.energizadoTerminal }
-    if (terminal.saida !== null) variaveis[terminal.saida] = contagem >= terminal.pv
+
+    blocos[terminal.instancia] = resultado.estado
+    if (terminal.saida !== null) variaveis[terminal.saida] = resultado.q
     return
   }
 
@@ -342,10 +484,10 @@ export function criarEstado(diagrama: Diagrama): EstadoSimulacao {
     if (classeDaVariavel(variavel) === 'entrada') entradas[variavel.nome] = false
   }
 
-  const contadores: Record<string, EstadoContador> = {}
+  const blocos: Record<string, EstadoBlocoSim> = {}
   for (const rung of diagrama.rungs) {
     for (const elemento of rung.elementos) {
-      if (ehCtu(elemento)) contadores[elemento.instancia] = { contagem: 0, cuAnterior: false }
+      if (ehBloco(elemento)) blocos[elemento.instancia] = estadoInicialBloco(elemento)
     }
   }
 
@@ -354,7 +496,12 @@ export function criarEstado(diagrama: Diagrama): EstadoSimulacao {
     energizacao[rung.id] = energizacaoDoFluxo(calcularFluxoDoRung(rung, variaveis))
   }
 
-  return { ciclo: 0, variaveis, entradas, contadores, energizacao }
+  const contadoresLegado: Record<string, EstadoContadorSim> = {}
+  for (const [k, v] of Object.entries(blocos)) {
+    if (v.familia === 'contador') contadoresLegado[k] = v
+  }
+
+  return { ciclo: 0, variaveis, entradas, blocos, contadores: contadoresLegado, energizacao }
 }
 
 /**
@@ -372,9 +519,22 @@ export function executarCiclo(diagrama: Diagrama, estado: EstadoSimulacao): Esta
     variaveis[nome] = estado.entradas[nome]
   }
 
-  const contadores: Record<string, EstadoContador> = {}
-  for (const instancia of Object.keys(estado.contadores)) {
-    contadores[instancia] = { ...estado.contadores[instancia] }
+  const blocos: Record<string, EstadoBlocoSim> = {}
+  const origem =
+    estado.blocos ??
+    Object.fromEntries(
+      Object.entries(estado.contadores ?? {}).map(([k, v]) => [
+        k,
+        {
+          familia: 'contador' as const,
+          contagem: v.contagem,
+          entradaAnterior: v.entradaAnterior ?? (v as { cuAnterior?: boolean }).cuAnterior ?? false,
+        },
+      ]),
+    )
+  for (const instancia of Object.keys(origem)) {
+    const b = origem[instancia]
+    blocos[instancia] = b.familia === 'contador' ? { ...b } : { ...b }
   }
 
   const energizacao: Record<string, EnergizacaoDegrau> = {}
@@ -384,24 +544,30 @@ export function executarCiclo(diagrama: Diagrama, estado: EstadoSimulacao): Esta
       (e) => e.celula.linha === 0 && e.celula.coluna === COLUNA_TERMINAL && ehTerminal(e.tipo),
     )
     if (principal !== undefined) {
-      if (ehCtu(principal)) {
-        aplicarEscritaDoTerminal(principal, fluxo, variaveis, contadores)
+      if (ehBloco(principal)) {
+        aplicarEscritaDoTerminal(principal, fluxo, variaveis, blocos, estado.ciclo)
       } else {
         for (const bobina of rung.elementos.filter(
           (e) => e.celula.coluna === COLUNA_TERMINAL && ehBobina(e.tipo),
         )) {
-          aplicarEscritaDoTerminal(bobina, fluxo, variaveis, contadores)
+          aplicarEscritaDoTerminal(bobina, fluxo, variaveis, blocos, estado.ciclo)
         }
       }
     }
     energizacao[rung.id] = energizacaoDoFluxo(fluxo)
   }
 
+  const contadoresLegado: Record<string, EstadoContadorSim> = {}
+  for (const [k, v] of Object.entries(blocos)) {
+    if (v.familia === 'contador') contadoresLegado[k] = v
+  }
+
   return {
     ciclo: estado.ciclo + 1,
     variaveis,
     entradas: { ...estado.entradas },
-    contadores,
+    blocos,
+    contadores: contadoresLegado,
     energizacao,
   }
 }

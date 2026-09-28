@@ -301,6 +301,8 @@ registrado como consequência desta spec, não coberto por ela.
   escopo pelo RF-13. Ver a revisão aditiva no §4.)*
 - Temporizadores (TON/TOF) e contador decrescente (CTD) — permanecem fora do
   subconjunto do projeto inteiro, não só desta spec (cf. §7 da spec 002).
+  *(Revisão aditiva 2026-09-28, spec 006: passam a ser emitidos como FB
+  padrão `TON`/`TOF`/`CTD` com `PT`/`PV` conforme IEC 61131-3.)*
 - Seleção de placa, pinagem ou endereço por interface além do que a
   spec 001/002 já decidiram.
 - Qualquer forma de otimização, reescrita ou simplificação do texto

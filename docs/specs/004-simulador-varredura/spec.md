@@ -286,7 +286,10 @@ compara ciclo a ciclo, ponto a ponto. O número que sai daí é resultado do TCC
 - **Persistência do estado de simulação** (Q-5, RF-17).
 - **Temporizadores (TON/TOF), contador decrescente (CTD)** e qualquer elemento
   fora do subconjunto do RF-3 — não existem no modelo do editor nem na
-  serialização.
+  serialização. *(Revisão aditiva 2026-09-28, spec 006: simulador e
+  serializador passam a cobri-los; base de tempo lógica 20 ms/ciclo, alinhada
+  a `TASK … INTERVAL := T#20ms`; equivalência de tempo exige `PT` e período em
+  múltiplos de 1 ms — ver plano 006 sobre `__normalize_timespec`.)*
 - **Medição de tempo real de varredura**. A simulação controla o relógio; tempo
   de ciclo no dispositivo é medição de bancada, e depende de hardware que não
   existe.

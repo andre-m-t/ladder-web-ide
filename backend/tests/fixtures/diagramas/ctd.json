@@ -2,19 +2,19 @@
   "versao": 2,
   "variaveis": [
     {
-      "nome": "entrada",
+      "nome": "pulso",
       "tipo": "BOOL",
       "endereco": "%IX0.0"
     },
     {
-      "nome": "saida_a",
+      "nome": "carregar",
       "tipo": "BOOL",
-      "endereco": "%QX0.0"
+      "endereco": "%IX0.1"
     },
     {
-      "nome": "saida_b",
+      "nome": "vazio",
       "tipo": "BOOL",
-      "endereco": "%QX0.1"
+      "endereco": "%QX0.0"
     }
   ],
   "rungs": [
@@ -28,35 +28,31 @@
             "linha": 0,
             "coluna": 0
           },
-          "variavel": "entrada"
+          "variavel": "pulso"
         },
         {
           "id": "e2",
-          "tipo": "bobina",
+          "tipo": "contato_na",
+          "celula": {
+            "linha": 1,
+            "coluna": 0
+          },
+          "variavel": "carregar"
+        },
+        {
+          "id": "e3",
+          "tipo": "ctd",
           "celula": {
             "linha": 0,
             "coluna": 7
           },
-          "variavel": "saida_a"
-        },
-        {
-          "id": "e3",
-          "tipo": "bobina",
-          "celula": {
-            "linha": 1,
-            "coluna": 7
-          },
-          "variavel": "saida_b"
+          "linhaControle": 1,
+          "instancia": "ctd0",
+          "preset": 3,
+          "saida": "vazio"
         }
       ],
-      "ramos": [
-        {
-          "id": "b1",
-          "linha": 1,
-          "colunaInicio": 7,
-          "colunaFim": 7
-        }
-      ]
+      "ramos": []
     }
   ]
 }

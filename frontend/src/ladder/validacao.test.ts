@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { COLUNA_TERMINAL, COLUNAS_POR_DEGRAU, LINHAS_EXTRAS_MAX } from './modelo'
-import type { Diagrama, Elemento, Rung } from './modelo'
+import type { Diagrama, ElementoBloco, Rung } from './modelo'
 import { diagramaVazio } from './edicao'
 import { IO_ESPELHO, MINIMAL } from './fixtures'
 import { descreverCelula, motivoPosicaoInvalida, posicaoValida, validarDiagrama } from './validacao'
@@ -21,7 +21,7 @@ function rungBase(): Rung {
 
 function diagramaBase(rungs: Rung[]): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [
       { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.0' },
       { nome: 'saida', tipo: 'BOOL', endereco: '%QX0.0' },
@@ -171,7 +171,7 @@ describe('validarDiagrama — um código por vez', () => {
 
   it('diagrama com 3 degraus vazios: sem problemas (tarefa #25)', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [
         { id: 'r1', elementos: [], ramos: [] },
@@ -489,7 +489,7 @@ describe('validarDiagrama — Q-6 (D-10): set_reset_autodependente', () => {
 })
 
 describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e limite', () => {
-  function rungComCtu(pv = 10): Rung {
+  function rungComCtu(preset = 10): Rung {
     return {
       id: 'r1',
       elementos: [
@@ -498,9 +498,9 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
           id: 'ctu1',
           tipo: 'ctu',
           celula: { linha: 0, coluna: COLUNA_TERMINAL },
-          linhaReset: 1,
+          linhaControle: 1,
           instancia: 'ctu0',
-          pv,
+          preset,
           saida: 'saida',
         },
       ],
@@ -515,7 +515,7 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
 
   it('CTU com saida nula: variavel_nao_atribuida (mesma regra de bobina/contato)', () => {
     const rung = rungComCtu()
-    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: null }
+    rung.elementos[1] = { ...(rung.elementos[1] as ElementoBloco), saida: null }
     const problemas = validarDiagrama(diagramaBase([rung]))
     expect(problemas).toContainEqual(
       expect.objectContaining({ codigo: 'variavel_nao_atribuida', elementoId: 'ctu1', severidade: 'erro' }),
@@ -524,7 +524,7 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
 
   it('CTU com saida inexistente: variavel_inexistente', () => {
     const rung = rungComCtu()
-    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: 'fantasma' }
+    rung.elementos[1] = { ...(rung.elementos[1] as ElementoBloco), saida: 'fantasma' }
     const problemas = validarDiagrama(diagramaBase([rung]))
     expect(problemas).toContainEqual(
       expect.objectContaining({ codigo: 'variavel_inexistente', elementoId: 'ctu1', severidade: 'erro' }),
@@ -533,13 +533,13 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
 
   it('CTU com saida numa entrada (%IX): bobina_escreve_entrada, mensagem fala em "contador"', () => {
     const rung = rungComCtu()
-    rung.elementos[1] = { ...(rung.elementos[1] as Extract<Elemento, { tipo: 'ctu' }>), saida: 'entrada' }
+    rung.elementos[1] = { ...(rung.elementos[1] as ElementoBloco), saida: 'entrada' }
     const problemas = validarDiagrama(diagramaBase([rung]))
     const problema = problemas.find((p) => p.codigo === 'bobina_escreve_entrada')
     expect(problema).toEqual(
       expect.objectContaining({ codigo: 'bobina_escreve_entrada', elementoId: 'ctu1', severidade: 'erro' }),
     )
-    expect(problema?.mensagem).toContain('contador')
+    expect(problema?.mensagem).toContain('bloco')
   })
 
   it('bobina_duplicada: CTU e bobina simples na mesma variável', () => {
@@ -566,9 +566,9 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
           id: 'ctu2',
           tipo: 'ctu',
           celula: { linha: 0, coluna: COLUNA_TERMINAL },
-          linhaReset: 1,
+          linhaControle: 1,
           instancia: 'ctu1',
-          pv: 10,
+          preset: 10,
           saida: 'saida',
         },
       ],
@@ -602,10 +602,10 @@ describe('validarDiagrama — CTU (tarefa #16, D-7): terminal, escrita simples e
     expect(problemas.filter((p) => p.mensagem.includes('ramo vazio'))).toEqual([])
   })
 
-  it('ctu_limite_invalido: pv fora de [PV_MIN, PV_MAX] num diagrama já montado', () => {
+  it('bloco_preset_invalido: pv fora de [PV_MIN, PV_MAX] num diagrama já montado', () => {
     const problemas = validarDiagrama(diagramaBase([rungComCtu(0)]))
     expect(problemas).toContainEqual(
-      expect.objectContaining({ codigo: 'ctu_limite_invalido', elementoId: 'ctu1', severidade: 'erro' }),
+      expect.objectContaining({ codigo: 'bloco_preset_invalido', elementoId: 'ctu1', severidade: 'erro' }),
     )
   })
 })

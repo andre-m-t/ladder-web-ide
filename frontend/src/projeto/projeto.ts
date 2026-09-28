@@ -26,7 +26,12 @@
 
 import { diagramaVazio } from '../ladder/edicao'
 import type { Diagrama } from '../ladder/modelo'
-import { CHAVE_DIAGRAMA, carregarDiagrama, diagramaEstruturalmenteValido } from '../ladder/persistencia'
+import {
+  CHAVE_DIAGRAMA,
+  carregarDiagrama,
+  diagramaEstruturalmenteValido,
+  migrarDiagramaParaV2,
+} from '../ladder/persistencia'
 
 /** Linguagem única de um projeto. */
 export type Linguagem = 'ld' | 'st'
@@ -197,7 +202,15 @@ export function carregarProjeto(armazenamento: Storage): ResultadoCargaProjeto {
     if (motivo !== null) {
       return descartado(motivo)
     }
-    return { projeto: valor as Projeto, aviso: null, veioDoArmazenamento: true }
+    const brutoProjeto = valor as Projeto
+    if (brutoProjeto.linguagem === 'ld') {
+      const diagrama = migrarDiagramaParaV2(brutoProjeto.diagrama)
+      if (diagrama === null) {
+        return descartado('a estrutura do diagrama salvo está incompleta ou corrompida')
+      }
+      return { projeto: { ...brutoProjeto, diagrama }, aviso: null, veioDoArmazenamento: true }
+    }
+    return { projeto: brutoProjeto, aviso: null, veioDoArmazenamento: true }
   }
 
   return migrarDiagramaAntigo(armazenamento)
@@ -223,11 +236,16 @@ function migrarDiagramaAntigo(armazenamento: Storage): ResultadoCargaProjeto {
     return { projeto: projetoVazioPadrao(), aviso: resultadoAntigo.aviso, veioDoArmazenamento: false }
   }
 
+  const diagramaMigrado = migrarDiagramaParaV2(resultadoAntigo.diagrama)
+  if (diagramaMigrado === null) {
+    return { projeto: projetoVazioPadrao(), aviso: resultadoAntigo.aviso, veioDoArmazenamento: false }
+  }
+
   const projetoMigrado: Projeto = {
     versao: VERSAO_PROJETO,
     titulo: TITULO_PADRAO,
     linguagem: 'ld',
-    diagrama: resultadoAntigo.diagrama,
+    diagrama: diagramaMigrado,
   }
   try {
     armazenamento.setItem(CHAVE_PROJETO, JSON.stringify(projetoMigrado))

@@ -13,18 +13,16 @@ import {
   LINHAS_EXTRAS_MAX,
   ehBobina,
   ehContato,
-  ehCtu,
+  ehBloco,
   ehRamoDeSaida,
   ehTerminal,
+  ehTipoBloco,
   variavelDoElemento,
 } from './modelo'
-import type { Celula, Diagrama, Elemento, ElementoCtu, ElementoSimples, Ramo, Rung, Variavel } from './modelo'
+import type { Celula, Diagrama, Elemento, ElementoBloco, ElementoSimples, Ramo, Rung, Variavel } from './modelo'
 import { descreverCelula, motivoPosicaoInvalida } from './validacao'
 import { enderecoValido } from './enderecos'
-// Ponto de extensão (D-7): criação e limite do CTU vivem em `ctu.ts`, nunca
-// duplicados aqui — ver o cabeçalho de `ctu.ts` sobre o ciclo de módulos que
-// isso evita.
-import { criarCtu, linhaResetLivre, planoDeRamoComCtu } from './ctu'
+import { criarBloco, linhaControleLivre, planoDeRamoComBloco } from './blocos'
 
 export type ResultadoEdicao = { ok: true; diagrama: Diagrama } | { ok: false; motivo: string }
 
@@ -42,7 +40,7 @@ function sucesso(diagrama: Diagrama): ResultadoEdicao {
 /** Diagrama inicial: um degrau vazio (`r1`), sem variáveis declaradas. */
 export function diagramaVazio(): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [],
     rungs: [{ id: 'r1', elementos: [], ramos: [] }],
   }
@@ -153,7 +151,7 @@ export function celulaDeSoltura(
   rung?: Rung,
   ignorarElementoId?: string,
 ): Celula {
-  if (tipo === 'ctu') {
+  if (ehTipoBloco(tipo)) {
     return { linha: 0, coluna: COLUNA_TERMINAL }
   }
   if (ehBobina(tipo)) {
@@ -194,7 +192,7 @@ export function inserirElemento(
   // Ponto de extensão (D-7, tarefa #16): posição e ocupação já foram
   // checadas acima, iguais às de qualquer outro elemento — o que falta
   // (linha de reset, instância, pv, saída) é regra do contador, em `ctu.ts`.
-  if (tipo === 'ctu') return criarCtu(diagrama, rungId)
+  if (ehTipoBloco(tipo)) return criarBloco(diagrama, rungId, tipo)
 
   const novoDiagrama = structuredClone(diagrama)
   const rung = encontrarRung(novoDiagrama, rungId) as Rung
@@ -216,8 +214,11 @@ export function removerElemento(diagrama: Diagrama, elementoId: string): Resulta
   const novoDiagrama = structuredClone(diagrama)
   const rung = encontrarRung(novoDiagrama, encontrado.rung.id) as Rung
   const { elemento } = encontrado
-  if (ehCtu(elemento)) {
-    rung.elementos = rung.elementos.filter((e) => e.id !== elementoId && e.celula.linha !== elemento.linhaReset)
+  if (ehBloco(elemento)) {
+    const linhaCtrl = elemento.linhaControle
+    rung.elementos = rung.elementos.filter(
+      (e) => e.id !== elementoId && (linhaCtrl === null || e.celula.linha !== linhaCtrl),
+    )
   } else {
     rung.elementos = rung.elementos.filter((e) => e.id !== elementoId)
   }
@@ -300,13 +301,13 @@ export function moverElemento(
   // destino para os contatos da sua linha de reset — recusa aqui, antes de
   // qualquer clonagem, se não houver.
   const trocaDegrau = rungOrigem.id !== rungIdDestino
-  let novaLinhaResetCtu: number | null = null
-  if (ehCtu(elemento) && trocaDegrau) {
-    novaLinhaResetCtu = linhaResetLivre(rungDestino)
-    if (novaLinhaResetCtu === null) {
+  let novaLinhaControleBloco: number | null = null
+  if (ehBloco(elemento) && elemento.linhaControle !== null && trocaDegrau) {
+    novaLinhaControleBloco = linhaControleLivre(rungDestino)
+    if (novaLinhaControleBloco === null) {
       return recusa(
-        `sem linha livre no degrau ${indiceDegrauDestino + 1} para o reinício do contador '${elemento.instancia}': ` +
-          `ramos e a linha de reset dividem o mesmo limite de ${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal (Q-3)`,
+        `sem linha livre no degrau ${indiceDegrauDestino + 1} para o controle do bloco '${elemento.instancia}': ` +
+          `ramos e a linha de controle dividem o mesmo limite de ${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal (Q-3)`,
       )
     }
   }
@@ -318,22 +319,22 @@ export function moverElemento(
 
   // Separa os contatos da linha de reset do CTU: eles atravessam para o
   // degrau destino junto com o CTU (D-7, "sem contos de reset sem CTU").
-  let contatosDoReset: Elemento[] = []
-  if (ehCtu(elemento) && trocaDegrau) {
-    contatosDoReset = novoRungOrigem.elementos.filter((e) => e.celula.linha === elemento.linhaReset)
-    novoRungOrigem.elementos = novoRungOrigem.elementos.filter((e) => e.celula.linha !== elemento.linhaReset)
+  let contatosDoControle: Elemento[] = []
+  if (ehBloco(elemento) && trocaDegrau && elemento.linhaControle !== null) {
+    contatosDoControle = novoRungOrigem.elementos.filter((e) => e.celula.linha === elemento.linhaControle)
+    novoRungOrigem.elementos = novoRungOrigem.elementos.filter((e) => e.celula.linha !== elemento.linhaControle)
   }
 
   const novoRungDestino =
     rungOrigem.id === rungIdDestino ? novoRungOrigem : (encontrarRung(novoDiagrama, rungIdDestino) as Rung)
   elementoAMover.celula = celula
-  if (ehCtu(elementoAMover) && novaLinhaResetCtu !== null) {
-    elementoAMover.linhaReset = novaLinhaResetCtu
+  if (ehBloco(elementoAMover) && novaLinhaControleBloco !== null) {
+    elementoAMover.linhaControle = novaLinhaControleBloco
   }
   novoRungDestino.elementos.push(elementoAMover)
 
-  for (const contato of contatosDoReset) {
-    contato.celula = { ...contato.celula, linha: novaLinhaResetCtu as number }
+  for (const contato of contatosDoControle) {
+    contato.celula = { ...contato.celula, linha: novaLinhaControleBloco as number }
     novoRungDestino.elementos.push(contato)
   }
 
@@ -386,11 +387,11 @@ export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): R
     return recusa(`ramo só cobre colunas de contato, 1 a ${COLUNA_TERMINAL}, ou a coluna terminal para ramo de saída`)
   }
 
-  const ctuDoRung = rungOriginal.elementos.find(ehCtu)
-  const linhaDoResetCtu = ctuDoRung?.linhaReset
+  const blocoDoRung = rungOriginal.elementos.find(ehBloco)
+  const linhaDeControle = blocoDoRung?.linhaControle ?? undefined
 
   const sobrepoeNaLinha = (linha: number) =>
-    linha === linhaDoResetCtu ||
+    linha === linhaDeControle ||
     rungOriginal.ramos.some((ramo) => ramo.linha === linha && coluna >= ramo.colunaInicio && coluna <= ramo.colunaFim)
 
   let linhaLivre: number | undefined
@@ -401,10 +402,10 @@ export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): R
     }
   }
   if (linhaLivre === undefined) {
-    const mencaoCtu = linhaDoResetCtu !== undefined ? ', entre ramos e a linha de reinício do contador,' : ''
+    const mencaoBloco = linhaDeControle !== undefined ? ', entre ramos e a linha de controle do bloco,' : ''
     return recusa(
       `sem linha livre para o ramo em ${descreverCelula(indiceDegrau, { linha: 0, coluna })}: o degrau já usa` +
-        `${mencaoCtu} ${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal nessa coluna (no máximo ${LINHAS_EXTRAS_MAX} linha(s), Q-3)`,
+        `${mencaoBloco} ${LINHAS_EXTRAS_MAX} linha(s) além do trilho principal nessa coluna (no máximo ${LINHAS_EXTRAS_MAX} linha(s), Q-3)`,
     )
   }
 
@@ -415,16 +416,16 @@ export function criarRamo(diagrama: Diagrama, rungId: string, coluna: number): R
   // cairia abaixo da linha de reset do CTU, troca de lugar com ela — ver
   // `planoDeRamoComCtu`. Sem CTU no degrau, `linhaDoNovoRamo` é só `linhaLivre`.
   let linhaDoNovoRamo = linhaLivre
-  if (ctuDoRung !== undefined) {
-    const plano = planoDeRamoComCtu(rungOriginal, ctuDoRung, linhaLivre)
+  if (blocoDoRung !== undefined) {
+    const plano = planoDeRamoComBloco(rungOriginal, blocoDoRung, linhaLivre)
     linhaDoNovoRamo = plano.linhaRamo
-    if (plano.novaLinhaReset !== null) {
-      const ctuClonado = rung.elementos.find((e) => e.id === ctuDoRung.id) as ElementoCtu
-      const linhaResetAntiga = ctuClonado.linhaReset
-      ctuClonado.linhaReset = plano.novaLinhaReset
+    if (plano.novaLinhaControle !== null) {
+      const blocoClonado = rung.elementos.find((e) => e.id === blocoDoRung.id) as ElementoBloco
+      const linhaControleAntiga = blocoClonado.linhaControle as number
+      blocoClonado.linhaControle = plano.novaLinhaControle
       for (const elemento of rung.elementos) {
-        if (elemento.id !== ctuClonado.id && elemento.celula.linha === linhaResetAntiga) {
-          elemento.celula = { ...elemento.celula, linha: plano.novaLinhaReset }
+        if (elemento.id !== blocoClonado.id && elemento.celula.linha === linhaControleAntiga) {
+          elemento.celula = { ...elemento.celula, linha: plano.novaLinhaControle }
         }
       }
     }
@@ -523,8 +524,8 @@ export function trocarTipoElemento(diagrama: Diagrama, elementoId: string, novoT
   const encontrado = encontrarElemento(diagrama, elementoId)
   if (encontrado === undefined) return recusa(`elemento '${elementoId}' inexistente`)
   const { rung, elemento } = encontrado
-  if (ehCtu(elemento)) return recusa('o tipo do contador não pode ser alterado')
-  if (novoTipo === 'ctu') return recusa('não é possível converter este elemento em contador')
+  if (ehBloco(elemento)) return recusa('o tipo do bloco de função não pode ser alterado')
+  if (ehTipoBloco(novoTipo)) return recusa('não é possível converter este elemento em bloco de função')
 
   const deContato = ehContato(elemento.tipo)
   const paraContato = ehContato(novoTipo)
@@ -541,7 +542,7 @@ export function trocarTipoElemento(diagrama: Diagrama, elementoId: string, novoT
   const novoDiagrama = structuredClone(diagrama)
   const novoRung = encontrarRung(novoDiagrama, rung.id) as Rung
   const alvo = novoRung.elementos.find((e) => e.id === elementoId)
-  if (alvo === undefined || ehCtu(alvo)) return recusa(`elemento '${elementoId}' inexistente`)
+  if (alvo === undefined || ehBloco(alvo)) return recusa(`elemento '${elementoId}' inexistente`)
   alvo.tipo = novoTipo as ElementoSimples['tipo']
 
   return sucesso(novoDiagrama)
@@ -589,7 +590,7 @@ export function atualizarVariavel(
   if (nova.nome !== nomeAtual) {
     for (const rung of novoDiagrama.rungs) {
       for (const elemento of rung.elementos) {
-        if (ehCtu(elemento)) {
+        if (ehBloco(elemento)) {
           if (elemento.saida === nomeAtual) elemento.saida = nova.nome
         } else if (elemento.variavel === nomeAtual) elemento.variavel = nova.nome
       }
@@ -633,7 +634,7 @@ export function vincularVariavel(diagrama: Diagrama, elementoId: string, nome: s
   const novoDiagrama = structuredClone(diagrama)
   const rung = encontrarRung(novoDiagrama, encontrado.rung.id) as Rung
   const elemento = rung.elementos.find((e) => e.id === elementoId) as Elemento
-  if (ehCtu(elemento)) elemento.saida = nome
+  if (ehBloco(elemento)) elemento.saida = nome
   else elemento.variavel = nome
 
   return sucesso(novoDiagrama)

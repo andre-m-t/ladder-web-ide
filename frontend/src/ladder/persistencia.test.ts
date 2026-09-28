@@ -37,7 +37,7 @@ class ArmazenamentoFalso implements Storage {
 
 function diagramaDeExemplo(): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [
       { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.0' },
       { nome: 'saida', tipo: 'BOOL', endereco: '%QX0.0' },
@@ -67,14 +67,14 @@ describe('salvarDiagrama / carregarDiagrama — ida e volta', () => {
     expect(resultado.aviso).toBeNull()
   })
 
-  it('grava o envelope { versao: 1, diagrama } exatamente, na chave CHAVE_DIAGRAMA', () => {
+  it('grava o envelope { versao: 2, diagrama } exatamente, na chave CHAVE_DIAGRAMA', () => {
     const armazenamento = new ArmazenamentoFalso()
     const diagrama = diagramaDeExemplo()
     salvarDiagrama(armazenamento, diagrama)
 
     const bruto = armazenamento.getItem(CHAVE_DIAGRAMA)
     expect(bruto).not.toBeNull()
-    expect(JSON.parse(bruto as string)).toEqual({ versao: 1, diagrama })
+    expect(JSON.parse(bruto as string)).toEqual({ versao: 2, diagrama })
   })
 })
 
@@ -96,9 +96,9 @@ describe('carregarDiagrama — casos de descarte (RF-12: nunca em silêncio, nun
     expect(resultado.aviso).toMatch(/json/i)
   })
 
-  it('versão desconhecida (2): diagramaVazio() + aviso', () => {
+  it('versão desconhecida (99): diagramaVazio() + aviso', () => {
     const armazenamento = new ArmazenamentoFalso()
-    armazenamento.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 2, diagrama: diagramaDeExemplo() }))
+    armazenamento.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 99, diagrama: diagramaDeExemplo() }))
 
     const resultado = carregarDiagrama(armazenamento)
     expect(resultado.diagrama).toEqual(diagramaVazio())
@@ -108,7 +108,7 @@ describe('carregarDiagrama — casos de descarte (RF-12: nunca em silêncio, nun
 
   it('formato estruturalmente inválido: rungs vazio', () => {
     const armazenamento = new ArmazenamentoFalso()
-    armazenamento.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: { versao: 1, variaveis: [], rungs: [] } }))
+    armazenamento.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 2, diagrama: { versao: 2, variaveis: [], rungs: [] } }))
 
     const resultado = carregarDiagrama(armazenamento)
     expect(resultado.diagrama).toEqual(diagramaVazio())
@@ -119,7 +119,7 @@ describe('carregarDiagrama — casos de descarte (RF-12: nunca em silêncio, nun
     const armazenamento = new ArmazenamentoFalso()
     armazenamento.setItem(
       CHAVE_DIAGRAMA,
-      JSON.stringify({ versao: 1, diagrama: { versao: 1, variaveis: [], rungs: [{ id: 'r1' }] } }),
+      JSON.stringify({ versao: 2, diagrama: { versao: 2, variaveis: [], rungs: [{ id: 'r1' }] } }),
     )
 
     const resultado = carregarDiagrama(armazenamento)
@@ -131,7 +131,7 @@ describe('carregarDiagrama — casos de descarte (RF-12: nunca em silêncio, nun
     const armazenamento = new ArmazenamentoFalso()
     armazenamento.setItem(
       CHAVE_DIAGRAMA,
-      JSON.stringify({ versao: 1, diagrama: { versao: 1, variaveis: 'nao-array', rungs: [{ id: 'r1', elementos: [], ramos: [] }] } }),
+      JSON.stringify({ versao: 2, diagrama: { versao: 2, variaveis: 'nao-array', rungs: [{ id: 'r1', elementos: [], ramos: [] }] } }),
     )
 
     const resultado = carregarDiagrama(armazenamento)

@@ -56,7 +56,7 @@ const CHAVE_PROJETO = 'ladderflow:projeto'
  * fixture BLINK — a mesma forma `{ versao, titulo, linguagem, diagrama }`
  * que `salvarProjeto`/`carregarProjeto` leem e gravam. */
 const PROJETO_BLINK = {
-  versao: 1 as const,
+  versao: 2 as const,
   titulo: 'Blink',
   linguagem: 'ld' as const,
   diagrama: BLINK,
@@ -99,7 +99,7 @@ test.describe('Projeto Ladder com contador CTU (spec 003, tarefa #12/D-13): BLIN
     }
 
     // Degrau 1: contato NA "pulso" (CU do contador), o contador CTU na coluna
-    // terminal com a saída "atingiu" e, na linha de reset (`linhaReset`), o
+    // terminal com a saída "atingiu" e, na linha de reset (`linhaControle`), o
     // contato "reset_ctu" que alimenta a entrada R.
     await expect(page.getByRole('button', { name: 'Degrau 1, coluna 1, contato NA pulso' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu' })).toBeVisible()

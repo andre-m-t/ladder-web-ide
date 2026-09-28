@@ -9,7 +9,7 @@ import {
   PV_PADRAO,
   atualizarCtu,
   criarCtu,
-  linhaResetLivre,
+  linhaControleLivre,
   motivoPosicaoCtu,
   planoDeRamoComCtu,
   problemasDoCtu,
@@ -25,15 +25,15 @@ function congelarProfundo<T>(valor: T): T {
   return valor
 }
 
-describe('linhaResetLivre', () => {
+describe('linhaControleLivre', () => {
   it('degrau vazio: linha 1 (a primeira)', () => {
-    expect(linhaResetLivre(diagramaVazio().rungs[0])).toBe(1)
+    expect(linhaControleLivre(diagramaVazio().rungs[0])).toBe(1)
   })
 
   it('linha 1 ocupada por ramo: devolve a 2', () => {
     const comRamo = criarRamo(diagramaVazio(), 'r1', 0)
     if (!comRamo.ok) throw new Error('esperava sucesso')
-    expect(linhaResetLivre(comRamo.diagrama.rungs[0])).toBe(2)
+    expect(linhaControleLivre(comRamo.diagrama.rungs[0])).toBe(2)
   })
 
   it('linha 1 ocupada por um elemento (sem ramo): também conta como ocupada', () => {
@@ -42,7 +42,7 @@ describe('linhaResetLivre', () => {
       elementos: [{ id: 'c1', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: null }],
       ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }],
     }
-    expect(linhaResetLivre(rung)).toBe(2)
+    expect(linhaControleLivre(rung)).toBe(2)
   })
 
   it('todas as linhas extras ocupadas: null', () => {
@@ -52,14 +52,14 @@ describe('linhaResetLivre', () => {
       if (!r.ok) throw new Error('esperava sucesso')
       diagrama = r.diagrama
     }
-    expect(linhaResetLivre(diagrama.rungs[0])).toBe(null)
+    expect(linhaControleLivre(diagrama.rungs[0])).toBe(null)
   })
 
   it('preferência (D-7, correção pós-Chromium): busca abaixo do ramo mais baixo já usado, não a menor linha livre qualquer', () => {
     // ramo só na linha 1: o reset deve ficar abaixo dele (linha 2), não acima
     const comRamo = criarRamo(diagramaVazio(), 'r1', 0)
     if (!comRamo.ok) throw new Error('esperava sucesso')
-    expect(linhaResetLivre(comRamo.diagrama.rungs[0])).toBe(2)
+    expect(linhaControleLivre(comRamo.diagrama.rungs[0])).toBe(2)
   })
 
   it('impossível respeitar a preferência (ramo já na linha mais baixa disponível): cai para a menor linha livre — aceita como hoje', () => {
@@ -70,19 +70,19 @@ describe('linhaResetLivre', () => {
       elementos: [],
       ramos: [{ id: 'b1', linha: 2, colunaInicio: 5, colunaFim: 5 }],
     }
-    expect(linhaResetLivre(rung)).toBe(1)
+    expect(linhaControleLivre(rung)).toBe(1)
   })
 })
 
 describe('planoDeRamoComCtu', () => {
-  function ctuComReset(linhaReset: number): ElementoCtu {
+  function ctuComReset(linhaControle: number): ElementoCtu {
     return {
       id: 'ctu1',
       tipo: 'ctu',
       celula: { linha: 0, coluna: COLUNA_TERMINAL },
-      linhaReset,
+      linhaControle,
       instancia: 'ctu0',
-      pv: PV_PADRAO,
+      preset: PV_PADRAO,
       saida: null,
     }
   }
@@ -119,7 +119,7 @@ describe('planoDeRamoComCtu', () => {
 })
 
 describe('criarCtu', () => {
-  it('caminho feliz: elemento e1, terminal, linhaReset 1, instancia ctu0, pv padrão, saida null', () => {
+  it('caminho feliz: elemento e1, terminal, linhaControle 1, instancia ctu0, pv padrão, saida null', () => {
     const original = congelarProfundo(diagramaVazio())
     const antes = JSON.parse(JSON.stringify(original))
 
@@ -132,9 +132,9 @@ describe('criarCtu', () => {
         id: 'e1',
         tipo: 'ctu',
         celula: { linha: 0, coluna: COLUNA_TERMINAL },
-        linhaReset: 1,
+        linhaControle: 1,
         instancia: 'ctu0',
-        pv: PV_PADRAO,
+        preset: PV_PADRAO,
         saida: null,
       },
     ])
@@ -150,7 +150,7 @@ describe('criarCtu', () => {
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
     const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctu.linhaReset).toBe(2)
+    expect(ctu.linhaControle).toBe(2)
   })
 
   it('instancia: segundo CTU do diagrama (em outro degrau) ganha ctu1', () => {
@@ -223,12 +223,12 @@ describe('atualizarCtu', () => {
     const original = congelarProfundo(diagramaComCtu())
     const antes = JSON.parse(JSON.stringify(original))
 
-    const resultado = atualizarCtu(original, 'e1', { pv: 25 })
+    const resultado = atualizarCtu(original, 'e1', { preset: 25 })
 
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
     const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctu.pv).toBe(25)
+    expect(ctu.preset).toBe(25)
     expect(original).toEqual(antes)
   })
 
@@ -238,12 +238,12 @@ describe('atualizarCtu', () => {
     expect(resultado.ok).toBe(true)
     if (!resultado.ok) throw new Error('esperava sucesso')
     const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctu.pv).toBe(PV_PADRAO)
+    expect(ctu.preset).toBe(PV_PADRAO)
   })
 
   it('recusa: pv abaixo de PV_MIN', () => {
     const diagrama = congelarProfundo(diagramaComCtu())
-    const resultado = atualizarCtu(diagrama, 'e1', { pv: 0 })
+    const resultado = atualizarCtu(diagrama, 'e1', { preset: 0 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
     expect(resultado.motivo).toContain(`${PV_MIN}`)
@@ -252,19 +252,19 @@ describe('atualizarCtu', () => {
 
   it('recusa: pv acima de PV_MAX', () => {
     const diagrama = congelarProfundo(diagramaComCtu())
-    const resultado = atualizarCtu(diagrama, 'e1', { pv: PV_MAX + 1 })
+    const resultado = atualizarCtu(diagrama, 'e1', { preset: PV_MAX + 1 })
     expect(resultado.ok).toBe(false)
   })
 
   it('recusa: pv não inteiro', () => {
     const diagrama = congelarProfundo(diagramaComCtu())
-    const resultado = atualizarCtu(diagrama, 'e1', { pv: 2.5 })
+    const resultado = atualizarCtu(diagrama, 'e1', { preset: 2.5 })
     expect(resultado.ok).toBe(false)
   })
 
   it('recusa: elemento inexistente', () => {
     const diagrama = congelarProfundo(diagramaComCtu())
-    const resultado = atualizarCtu(diagrama, 'e-fantasma', { pv: 5 })
+    const resultado = atualizarCtu(diagrama, 'e-fantasma', { preset: 5 })
     expect(resultado).toEqual({ ok: false, motivo: expect.stringContaining('inexistente') })
   })
 
@@ -273,15 +273,15 @@ describe('atualizarCtu', () => {
     if (!comContato.ok) throw new Error('esperava sucesso')
     const diagrama = congelarProfundo(comContato.diagrama)
 
-    const resultado = atualizarCtu(diagrama, 'e1', { pv: 5 })
+    const resultado = atualizarCtu(diagrama, 'e1', { preset: 5 })
     expect(resultado.ok).toBe(false)
     if (resultado.ok) throw new Error('esperava recusa')
-    expect(resultado.motivo).toContain('não é um contador CTU')
+    expect(resultado.motivo).toContain('bloco de função')
   })
 })
 
 describe('motivoPosicaoCtu', () => {
-  function rungComCtu(linhaReset: number): Rung {
+  function rungComCtu(linhaControle: number): Rung {
     return {
       id: 'r1',
       elementos: [
@@ -289,9 +289,9 @@ describe('motivoPosicaoCtu', () => {
           id: 'ctu1',
           tipo: 'ctu',
           celula: { linha: 0, coluna: COLUNA_TERMINAL },
-          linhaReset,
+          linhaControle,
           instancia: 'ctu0',
-          pv: PV_PADRAO,
+          preset: PV_PADRAO,
           saida: null,
         },
       ],
@@ -351,9 +351,9 @@ describe('motivoPosicaoCtu', () => {
 })
 
 describe('problemasDoCtu', () => {
-  function diagramaComCtu(pv: number): Diagrama {
+  function diagramaComCtu(preset: number): Diagrama {
     return {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [
         {
@@ -363,9 +363,9 @@ describe('problemasDoCtu', () => {
               id: 'e1',
               tipo: 'ctu',
               celula: { linha: 0, coluna: COLUNA_TERMINAL },
-              linhaReset: 1,
+              linhaControle: 1,
               instancia: 'ctu0',
-              pv,
+              preset,
               saida: null,
             },
           ],
@@ -379,18 +379,18 @@ describe('problemasDoCtu', () => {
     expect(problemasDoCtu(diagramaComCtu(PV_PADRAO))).toEqual([])
   })
 
-  it('pv fora do intervalo (só alcançável fora da edição normal): ctu_limite_invalido', () => {
+  it('pv fora do intervalo (só alcançável fora da edição normal): bloco_preset_invalido', () => {
     const problemas = problemasDoCtu(diagramaComCtu(0))
     expect(problemas).toHaveLength(1)
     expect(problemas[0]).toEqual(
-      expect.objectContaining({ codigo: 'ctu_limite_invalido', severidade: 'erro', rungId: 'r1', elementoId: 'e1' }),
+      expect.objectContaining({ codigo: 'bloco_preset_invalido', severidade: 'erro', rungId: 'r1', elementoId: 'e1' }),
     )
     expect(problemas[0].mensagem).toContain('ctu0')
   })
 
-  it('pv não inteiro: também ctu_limite_invalido', () => {
+  it('pv não inteiro: também bloco_preset_invalido', () => {
     const problemas = problemasDoCtu(diagramaComCtu(2.5))
-    expect(problemas.map((p) => p.codigo)).toEqual(['ctu_limite_invalido'])
+    expect(problemas.map((p) => p.codigo)).toEqual(['bloco_preset_invalido'])
   })
 
   it('degrau sem CTU: sem problema', () => {

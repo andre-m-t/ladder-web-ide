@@ -1150,7 +1150,7 @@ export default function App() {
             erroCompilacao={compilacao.fase === 'erro' ? compilacao.erro : null}
             aoRecusar={recusar}
             congelado={simulacao.ativo}
-            simulacao={simulacao.ativo ? { energizacao: simulacao.estado.energizacao } : null}
+            simulacao={simulacao.ativo ? { energizacao: simulacao.estado.energizacao, blocos: simulacao.estado.blocos } : null}
             pontosAmbiente={pontosAmbienteAberto}
           />
         </div>

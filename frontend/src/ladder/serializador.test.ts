@@ -10,7 +10,7 @@ import type { Elemento } from './modelo'
 /** Diagrama com um único degrau, a partir de elementos e ramos crus — a
  * forma mais direta de exercitar a topologia sem passar pela UI. */
 function diagramaDeUmDegrau(elementos: Elemento[], ramos: Ramo[], variaveis: Variavel[]): Diagrama {
-  return { versao: 1, variaveis, rungs: [{ id: 'r1', elementos, ramos }] }
+  return { versao: 2, variaveis, rungs: [{ id: 'r1', elementos, ramos }] }
 }
 
 function variavelInterna(nome: string): Variavel {
@@ -414,7 +414,7 @@ describe('bobinas', () => {
 describe('ordem dos degraus preservada', () => {
   it('SET no degrau 1 e RESET no degrau 2 aparecem nessa ordem no texto', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('liga'), variavelInterna('desliga'), variavelInterna('q')],
       rungs: [
         {
@@ -453,7 +453,7 @@ describe('ordem dos degraus preservada', () => {
 describe('declarações', () => {
   it('VAR de localizadas e VAR de internas em blocos separados', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.0' },
         { nome: 'interna', tipo: 'BOOL' },
@@ -480,7 +480,7 @@ describe('declarações', () => {
 
   it('bloco vazio (sem variável localizada, ou sem variável interna) é omitido', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('a'), variavelInterna('x')],
       rungs: [
         {
@@ -542,7 +542,7 @@ describe('recusas (D-5, revisão do RF-5)', () => {
 
   it('D-5c: "Motor" e "motor" diferem só em maiúsculas/minúsculas — recusado', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('Motor'), variavelInterna('motor')],
       rungs: [{ id: 'r1', elementos: [], ramos: [] }],
     }
@@ -558,14 +558,14 @@ describe('recusas (D-5, revisão do RF-5)', () => {
 
 describe('vazios (D-7)', () => {
   it('diagrama sem nenhum degrau: vazio, sem st', () => {
-    const diagrama: Diagrama = { versao: 1, variaveis: [], rungs: [] }
+    const diagrama: Diagrama = { versao: 2, variaveis: [], rungs: [] }
     const resultado = serializar(diagrama)
     expect(resultado).toEqual({ ok: false, vazio: true, motivo: 'nada a compilar: o diagrama não tem elementos' })
   })
 
   it('diagrama só com degraus vazios: vazio, sem st', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [
         { id: 'r1', elementos: [], ramos: [] },
@@ -580,7 +580,7 @@ describe('vazios (D-7)', () => {
 
   it('degrau vazio entre dois degraus com conteúdo: omitido do texto, sem aparecer no mapaLinhas', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('a'), variavelInterna('x')],
       rungs: [
         {
@@ -618,7 +618,7 @@ describe('vazios (D-7)', () => {
 describe('mapaLinhas', () => {
   it('linhaInicio/linhaFim batem com as linhas reais do texto (1-based)', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('a'), variavelInterna('x')],
       rungs: [
         {
@@ -670,7 +670,7 @@ describe('degrauDaLinha', () => {
 describe('determinismo', () => {
   it('duas chamadas com o mesmo diagrama produzem o mesmo texto', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' },
         { nome: 'b', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -695,7 +695,7 @@ describe('determinismo', () => {
 
   it('mesma grade, ids e ordem de arrays diferentes: mesmo texto', () => {
     const variantA: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' },
         { nome: 'b', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -714,7 +714,7 @@ describe('determinismo', () => {
       ],
     }
     const variantB: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' },
         { nome: 'b', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -765,7 +765,7 @@ describe('ASCII', () => {
 describe('CA-9: endereços no texto == endereços do diagrama', () => {
   it('o conjunto de %[IQ]X\\d+\\.\\d+ do texto é igual ao conjunto de endereços das variáveis', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' },
         { nome: 'b', tipo: 'BOOL', endereco: '%IX0.7' },
@@ -844,9 +844,9 @@ function elementoCtu(sobrescritas: Partial<ElementoCtu> = {}): ElementoCtu {
     id: 'ctu1',
     tipo: 'ctu',
     celula: { linha: 0, coluna: COLUNA_TERMINAL },
-    linhaReset: 1,
+    linhaControle: 1,
     instancia: 'ctu0',
-    pv: 12,
+    preset: 12,
     saida: 'atingiu',
     ...sobrescritas,
   }
@@ -862,7 +862,7 @@ function diagramaComCtu(elementosSemCtu: Elemento[], ramos: Ramo[], ctu: Element
  * linha no texto, ao contrário de `expressaoDoUnicoDegrau` (pensado para
  * `:=`/`IF` de bobina, não para uma chamada de function block com 3
  * parâmetros na mesma linha). */
-function chamadaDoUnicoCtu(diagrama: Diagrama): { cu: string; r: string; pv: string; instancia: string } {
+function chamadaDoUnicoCtu(diagrama: Diagrama): { cu: string; r: string; preset: string; instancia: string } {
   const resultado = serializar(diagrama)
   if (!resultado.ok) throw new Error(`esperava sucesso, recusou: ${resultado.motivo}`)
   const linha = resultado.st.split('\n').find((l) => /\(CU :=/.test(l))
@@ -870,7 +870,7 @@ function chamadaDoUnicoCtu(diagrama: Diagrama): { cu: string; r: string; pv: str
   const casado = linha.match(/^\s*(\S+)\(CU := (.*), R := (.*), PV := (.*)\);\s*$/)
   if (casado === null) throw new Error(`linha de CTU fora do formato esperado: ${linha}`)
   const [, instancia, cu, r, pv] = casado
-  return { instancia, cu, r, pv }
+  return { instancia, cu, r, preset: pv }
 }
 
 describe('CTU: CU (entrada de contagem)', () => {
@@ -884,7 +884,7 @@ describe('CTU: CU (entrada de contagem)', () => {
     const chamada = chamadaDoUnicoCtu(diagrama)
     expect(chamada.cu).toBe('a')
     expect(chamada.instancia).toBe('ctu0')
-    expect(chamada.pv).toBe('12')
+    expect(chamada.preset).toBe('12')
   })
 
   it('CU com ramo (OU): mesma expressão que alimentaria uma bobina hoje', () => {
@@ -902,7 +902,7 @@ describe('CTU: CU (entrada de contagem)', () => {
   })
 
   it('contatos da linha de reset nunca entram no CU, mesmo com o mesmo nome de coluna', () => {
-    // trilho: contato 'a' na coluna 0; linhaReset (1): contato 'c' na coluna 0.
+    // trilho: contato 'a' na coluna 0; linhaControle (1): contato 'c' na coluna 0.
     // Se `c` vazasse para o grafo de CU, a expressão teria 'a AND c' ou similar.
     const diagrama = diagramaComCtu(
       [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'a' }],
@@ -1018,7 +1018,7 @@ describe('CTU: saída (Q) e declaração', () => {
 
   it('sem variável interna, mas com CTU: o bloco VAR aparece mesmo assim', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' }, { nome: 'atingiu', tipo: 'BOOL', endereco: '%QX0.0' }],
       rungs: [
         {
@@ -1039,7 +1039,7 @@ describe('CTU: saída (Q) e declaração', () => {
 
   it('dois CTUs: cada instância declarada, na ordem dos degraus', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'a', tipo: 'BOOL' },
         { nome: 'b', tipo: 'BOOL' },
@@ -1126,7 +1126,7 @@ describe('CTU: recusas (revisão aditiva do RF-5/D-5)', () => {
 
   it('duas instâncias de CTU que diferem só em maiúsculas/minúsculas: recusado', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'a', tipo: 'BOOL' }, { nome: 'q1', tipo: 'BOOL' }, { nome: 'q2', tipo: 'BOOL' }],
       rungs: [
         {
@@ -1154,23 +1154,23 @@ describe('CTU: recusas (revisão aditiva do RF-5/D-5)', () => {
     expect(resultado.motivo).toContain('ctu0')
   })
 
-  it.each([1.5, -3.2])('pv não inteiro (%s): recusado', (pv) => {
-    const resultado = serializar(diagramaCtuValido({ pv }))
+  it.each([1.5, -3.2])('pv não inteiro (%s): recusado', (preset) => {
+    const resultado = serializar(diagramaCtuValido({ preset }))
     expect(resultado.ok).toBe(false)
     if (resultado.ok) return
     expect(resultado.motivo).toContain('PV')
   })
 
-  it.each([0, -1, 32768, 100000])('pv fora de 1..32767 (%s): recusado', (pv) => {
-    const resultado = serializar(diagramaCtuValido({ pv }))
+  it.each([0, -1, 32768, 100000])('pv fora de 1..32767 (%s): recusado', (preset) => {
+    const resultado = serializar(diagramaCtuValido({ preset }))
     expect(resultado.ok).toBe(false)
     if (resultado.ok) return
     expect(resultado.motivo).toContain('PV')
   })
 
   it('pv = 1 (limite inferior) e pv = 32767 (limite superior): aceitos', () => {
-    expect(serializar(diagramaCtuValido({ pv: 1 })).ok).toBe(true)
-    expect(serializar(diagramaCtuValido({ pv: 32767 })).ok).toBe(true)
+    expect(serializar(diagramaCtuValido({ preset: 1 })).ok).toBe(true)
+    expect(serializar(diagramaCtuValido({ preset: 32767 })).ok).toBe(true)
   })
 })
 

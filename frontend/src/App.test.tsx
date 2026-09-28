@@ -52,7 +52,7 @@ const HEALTH_OK = {
  * tarefa #13/#25. Reaproveitado pelo teste de contagem de problemas, pelo
  * teste da aba inicial do painel inferior e pelo teste de clique num problema. */
 const DIAGRAMA_COM_ERRO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
   rungs: [
     {
@@ -68,7 +68,7 @@ const DIAGRAMA_COM_ERRO: Diagrama = {
  * contato de `x`. Sem erros: variáveis declaradas, cada degrau termina numa
  * bobina, nenhuma posição inválida (herdado da tarefa #25). */
 const DIAGRAMA_SO_COM_AVISO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [{ nome: 'x', tipo: 'BOOL' }],
   rungs: [
     {
@@ -136,6 +136,7 @@ describe('App', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('mostra a IDE com o projeto Ladder "Sem título" por padrão, paleta e console visíveis', async () => {
@@ -149,11 +150,14 @@ describe('App', () => {
   })
 
   it('desabilita o botão Gravar e mostra o aviso quando o navegador não tem Web Serial', async () => {
+    const gravador = await import('./lib/gravador')
+    vi.spyOn(gravador, 'webSerialDisponivel').mockReturnValue(false)
+
     render(<App />)
 
     const botaoGravar = await screen.findByRole('button', { name: /gravar no esp32/i })
     expect(botaoGravar).toBeDisabled()
-    expect(screen.getByText(/não tem suporte à Web Serial/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Web Serial API/i)).toBeInTheDocument()
   })
 
   it('registra a carga inicial e uma linha por ferramenta (MATIEC, toolchain ESP32) a partir de /health, com versão', async () => {
@@ -540,7 +544,7 @@ describe('App', () => {
   // -- Persistência (herdado da tarefa #12/#25, revisado na #26) -----------
 
   it('migração: só ladderflow:diagrama salvo abre em projeto Ladder "Sem título" com aquele diagrama', async () => {
-    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 1, diagrama: IO_ESPELHO }))
+    window.localStorage.setItem(CHAVE_DIAGRAMA, JSON.stringify({ versao: 2, diagrama: IO_ESPELHO }))
 
     render(<App />)
 
@@ -784,6 +788,7 @@ describe('App — modo simulação (spec 004, tarefa #11)', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('CA-12: diagrama com erro de validação — "Simular" fica indisponível com o motivo visível e não entra em simulação', async () => {

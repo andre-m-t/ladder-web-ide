@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { BLINK, IO_ESPELHO, IO_ESPELHO_8, MINIMAL, PORTAO, RAMO_OU, SAIDAS_PARALELAS, SELO, SET_RESET } from './fixtures'
+import { BLINK, CTD_DESCE, IO_ESPELHO, IO_ESPELHO_8, MINIMAL, PORTAO, RAMO_OU, SAIDAS_PARALELAS, SELO, SET_RESET, TON_ATRASO, TOF_RETARDO } from './fixtures'
 
 // Caminho relativo ao próprio arquivo de teste — mesmo motivo de
 // `serializador.dourados.test.ts`: evita `node:path`/`node:url` (para não
@@ -42,6 +42,9 @@ describe('arquivos dourados (D-11) — diagrama TS -> JSON para o pytest', () =>
     ['blink', BLINK],
     ['portao', PORTAO],
     ['saidas_paralelas', SAIDAS_PARALELAS],
+    ['ton', TON_ATRASO],
+    ['tof', TOF_RETARDO],
+    ['ctd', CTD_DESCE],
   ] as const)('%s: o diagrama serializado em JSON bate com o arquivo dourado', async (nome, diagrama) => {
     const texto = JSON.stringify(diagrama, null, 2) + '\n'
     await expect(texto).toMatchFileSnapshot(caminhoDourado(nome))

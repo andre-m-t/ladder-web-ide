@@ -38,6 +38,7 @@
 
 #include "plc_glue.h"
 #include "plc_hal_stub.h"
+#include "plc_hal_stub.h"
 #include "plc_io_map.h"
 
 /* Numero maximo de variaveis localizadas que este programa consegue listar
@@ -228,6 +229,8 @@ int main(int argc, char **argv)
         } else {
             plc_glue_step_logic(tick++);
         }
+
+        plc_hal_stub_advance_us((int64_t)plc_glue_cycle_time_us());
 
         imprimir_saidas(ciclo, eletrico, (has_flip && eletrico) ? flip_gpio : -1);
     }

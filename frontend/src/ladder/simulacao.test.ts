@@ -19,7 +19,7 @@ function variavelInterna(nome: string): Variavel {
 }
 
 function diagramaDeUmDegrau(elementos: Elemento[], ramos: Ramo[], variaveis: Variavel[]): Diagrama {
-  return { versao: 1, variaveis, rungs: [{ id: 'r1', elementos, ramos }] }
+  return { versao: 2, variaveis, rungs: [{ id: 'r1', elementos, ramos }] }
 }
 
 /** Todas as combinações booleanas de `nomes`, uma por linha de tabela-verdade. */
@@ -330,7 +330,7 @@ describe('imagem de processo', () => {
 describe('escrita entre degraus no mesmo ciclo', () => {
   it('degrau 1 escreve uma variável que o degrau 2 lê, no mesmo executarCiclo', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [variavelInterna('a'), variavelInterna('meio'), variavelInterna('saida')],
       rungs: [
         {
@@ -381,7 +381,7 @@ function diagramaSetReset(ordem: 'set_depois_reset' | 'reset_depois_set'): Diagr
     ramos: [],
   }
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [variavelInterna('liga'), variavelInterna('desliga'), variavelInterna('q')],
     rungs: ordem === 'set_depois_reset' ? [rungSet, rungReset] : [rungReset, rungSet],
   }
@@ -425,18 +425,18 @@ describe('SET/RESET na mesma variável no mesmo ciclo', () => {
 
 // -- CTU (RF-4, plano D-4) -------------------------------------------------
 
-function diagramaCtu(pv: number): Diagrama {
+function diagramaCtu(preset: number): Diagrama {
   const ctu: ElementoCtu = {
     id: 'e2',
     tipo: 'ctu',
     celula: { linha: 0, coluna: COLUNA_TERMINAL },
-    linhaReset: 1,
+    linhaControle: 1,
     instancia: 'ctu0',
-    pv,
+    preset,
     saida: 'atingiu',
   }
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [
       { nome: 'cu', tipo: 'BOOL', endereco: '%IX0.0' },
       { nome: 'r', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -485,7 +485,7 @@ describe('CTU: borda de subida', () => {
     expect(estado.contadores.ctu0.contagem).toBe(2)
   })
 
-  it('contagem para no PV_MAX teórico -- aqui só confere que não ultrapassa pv com folga', () => {
+  it('contagem satura em PV (MATIEC: incremento só com CV < PV)', () => {
     const diagrama = diagramaCtu(2)
     let estado = criarEstado(diagrama)
     for (let i = 0; i < 5; i++) {
@@ -494,10 +494,7 @@ describe('CTU: borda de subida', () => {
       estado = acionar(diagrama, estado, 'cu', true)
       estado = executarCiclo(diagrama, estado)
     }
-    // 5 bordas de subida com pv=2: a contagem cresce a cada borda (sem teto
-    // de pv -- só `atingiu` satura em true); o teto real é PV_MAX (32767),
-    // não testado aqui por custo. Confere que a contagem acompanha as bordas.
-    expect(estado.contadores.ctu0.contagem).toBe(5)
+    expect(estado.contadores.ctu0.contagem).toBe(2)
     expect(estado.variaveis.atingiu).toBe(true)
   })
 })
@@ -594,7 +591,7 @@ describe('reiniciar', () => {
     expect(reiniciado).toEqual(criarEstado(BLINK))
     expect(reiniciado.ciclo).toBe(0)
     expect(Object.values(reiniciado.variaveis).every((v) => v === false)).toBe(true)
-    expect(reiniciado.contadores.ctu0).toEqual({ contagem: 0, cuAnterior: false })
+    expect(reiniciado.contadores.ctu0).toEqual({ familia: 'contador', contagem: 0, entradaAnterior: false })
   })
 })
 
@@ -646,7 +643,7 @@ describe('CA-11: cadência com 50 degraus', () => {
       ramos: [],
     }))
     const variaveis: Variavel[] = rungs.flatMap((_, i) => [variavelInterna(`a${i}`), variavelInterna(`b${i}`)])
-    const diagrama: Diagrama = { versao: 1, variaveis, rungs }
+    const diagrama: Diagrama = { versao: 2, variaveis, rungs }
 
     let estado = criarEstado(diagrama)
     const totalCiclos = 2000

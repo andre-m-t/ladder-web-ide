@@ -46,7 +46,7 @@ async function confirmarRemocaoDegrau(usuario: ReturnType<typeof userEvent.setup
  * criação de variável pela UI (tabela/painel) é responsabilidade da frente
  * que monta a IDE (`PainelVariaveis`), fora deste componente (plano §23). */
 function diagramaComVariaveis(variaveis: Variavel[]): Diagrama {
-  return { versao: 1, variaveis, rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
+  return { versao: 2, variaveis, rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
 }
 
 /** Normaliza ids de elemento para e1, e2, ... na ordem de varredura (rung,
@@ -175,7 +175,7 @@ describe('EditorLadder — CA-5 (refeita, tarefa #25): recusa não altera o diag
 
   it('segunda bobina sem ramo de saída: recusa (célula terminal da linha 0 ocupada)', () => {
     const diagramaComBobina: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
     }
@@ -336,7 +336,7 @@ describe('EditorLadder — prévia durante o arrasto (plano D-11/D-12)', () => {
 
   it('arrastar bobina sobre coluna 1 com a coluna 8 já ocupada mostra prévia inválida na coluna 8', () => {
     const diagramaComBobina: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
     }
@@ -694,7 +694,7 @@ describe('EditorLadder — sem cores fixas (D-13)', () => {
  * repetir a criação do ramo por arrasto. */
 function diagramaComRamo(): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [],
     rungs: [{ id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 2 }] }],
   }
@@ -1012,7 +1012,7 @@ describe('EditorLadder — CA-7: mover elemento entre degraus pelo teclado (tare
 describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13)', () => {
   it('CA-9: duas bobinas simples com a mesma variável mostram erro nas duas células', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'x', tipo: 'BOOL' }],
       rungs: [
         { id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: 'x' }], ramos: [] },
@@ -1030,7 +1030,7 @@ describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13
 
   it('um aviso passado à mão é visualmente distinto do erro (aria-label e ícone diferentes)', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'x', tipo: 'BOOL' }],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina_set', celula: { linha: 0, coluna: 7 }, variavel: 'x' }], ramos: [] }],
     }
@@ -1052,7 +1052,7 @@ describe('EditorLadder — problemas na grade, repassados por degrau (tarefa #13
 
   it('rung_incompleto (contato sem bobina) marca a calha do degrau com um ícone (role="img", aria-label com a mensagem), sem texto visível', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: null }], ramos: [] }],
     }
@@ -1086,7 +1086,7 @@ describe('EditorLadder — foco programático (contrato com quem monta a IDE)', 
   it('mudar foco.token leva o foco à célula do elemento pedido', async () => {
     const usuario = userEvent.setup()
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 3 }, variavel: null }], ramos: [] }],
     }
@@ -1109,7 +1109,7 @@ describe('EditorLadder — foco programático (contrato com quem monta a IDE)', 
   it('um segundo clique com token diferente refoca mesmo alvo (o efeito roda de novo)', async () => {
     const usuario = userEvent.setup()
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 3 }, variavel: null }], ramos: [] }],
     }
@@ -1171,7 +1171,7 @@ describe('EditorLadder — bobina sempre na coluna 8 (tarefa #25, celulaDeSoltur
 
   it('mover uma bobina já na coluna 8 para outra célula do mesmo degrau não muda nada: não é recusa, a posição continua igual', () => {
     const diagramaComBobina: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
     }
@@ -1194,7 +1194,7 @@ describe('EditorLadder — bobina sempre na coluna 8 (tarefa #25, celulaDeSoltur
 
   it('bobina com a coluna 8 já ocupada: soltar uma nova bobina em qualquer célula é recusado (aoRecusar), sem alterar o diagrama', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [{ id: 'e1', tipo: 'bobina', celula: { linha: 0, coluna: 7 }, variavel: null }], ramos: [] }],
     }
@@ -1209,7 +1209,7 @@ describe('EditorLadder — bobina sempre na coluna 8 (tarefa #25, celulaDeSoltur
 
   it('coluna terminal cheia nas três linhas com ramos de saída: nova bobina é recusada', () => {
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [
         {
@@ -1266,7 +1266,7 @@ describe('EditorLadder — botões da calha continuam acessíveis por nome (tare
  * (CA-10, tarefa #18). */
 function diagramaComDoisRamos(): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [],
     rungs: [
       {
@@ -1281,17 +1281,17 @@ function diagramaComDoisRamos(): Diagrama {
   }
 }
 
-/** Diagrama com um CTU já ocupando uma das duas linhas extras (`linhaReset:
+/** Diagrama com um CTU já ocupando uma das duas linhas extras (`linhaControle:
  * 1`) — usado para provar que um segundo ramo na mesma coluna da outra linha
  * já usada é recusado (CA-10, tarefa #18). */
 function diagramaComCtu(): Diagrama {
   return {
-    versao: 1,
+    versao: 2,
     variaveis: [],
     rungs: [
       {
         id: 'r1',
-        elementos: [{ id: 'e1', tipo: 'ctu', celula: { linha: 0, coluna: 7 }, linhaReset: 1, instancia: 'ctu0', pv: 10, saida: null }],
+        elementos: [{ id: 'e1', tipo: 'ctu', celula: { linha: 0, coluna: 7 }, linhaControle: 1, instancia: 'ctu0', preset: 10, saida: null }],
         ramos: [],
       },
     ],
@@ -1302,9 +1302,9 @@ describe('EditorLadder — CA-10: recusa no limite de linhas extras, ramos + res
   it('arrastar o Contador quando as duas linhas extras já têm ramo é recusado, com o motivo do limite de linhas', () => {
     const { aoMudar, aoRecusar } = renderEditor(diagramaComDoisRamos())
 
-    arrastar(screen.getByRole('button', { name: /^contador$/i }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
+    arrastar(screen.getByRole('button', { name: 'Contador ↑' }), screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' }))
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/sem linha livre para o rein[ií]cio do contador/i))
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/sem linha livre para rein[ií]cio do contador/i))
     expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/2 linha/i))
     expect(aoMudar).not.toHaveBeenCalled()
   })
@@ -1318,7 +1318,7 @@ describe('EditorLadder — CA-10: recusa no limite de linhas extras, ramos + res
 
     arrastar(screen.getByRole('button', { name: /^ramo$/i }), alvo)
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/linha de rein[ií]cio do contador/i))
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/linha de controle do bloco/i))
     expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/2 linha/i))
   })
 })
@@ -1341,16 +1341,16 @@ describe('EditorLadder — bobina SET, bobina RESET e Contador (CTU) pela UI (ta
     const usuario = userEvent.setup()
     const { aoMudar } = renderEditor(diagramaComVariaveis([{ nome: 'atingiu', tipo: 'BOOL' }]))
 
-    await arrastarEEscolher(usuario, /^contador$/i, 'Degrau 1, coluna 8, vazia', 'atingiu')
+    await arrastarEEscolher(usuario, 'Contador ↑', 'Degrau 1, coluna 8, vazia', 'atingiu')
 
     let final = ultimoDiagrama(aoMudar)
-    expect(final.rungs[0].elementos[0]).toMatchObject({ tipo: 'ctu', saida: 'atingiu', pv: 10, linhaReset: 1 })
+    expect(final.rungs[0].elementos[0]).toMatchObject({ tipo: 'ctu', saida: 'atingiu', preset: 10, linhaControle: 1 })
 
     // segundo clique no CTU (já marcado pelo drop) reabre o modal
-    const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, contador CTU atingiu$/ })
+    const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, Contador crescente atingiu$/ })
     await usuario.click(celulaCtu)
     const dialogo = screen.getByRole('dialog')
-    const campoLimite = within(dialogo).getByLabelText('Limite (PV)')
+    const campoLimite = within(dialogo).getByLabelText('PV (contagens)')
     await usuario.clear(campoLimite)
     await usuario.type(campoLimite, '20')
     await usuario.click(within(dialogo).getByRole('button', { name: 'Aplicar limite' }))
@@ -1358,7 +1358,7 @@ describe('EditorLadder — bobina SET, bobina RESET e Contador (CTU) pela UI (ta
     // "Aplicar limite" não fecha o modal
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     final = ultimoDiagrama(aoMudar)
-    expect(final.rungs[0].elementos[0]).toMatchObject({ tipo: 'ctu', pv: 20 })
+    expect(final.rungs[0].elementos[0]).toMatchObject({ tipo: 'ctu', preset: 20 })
 
     await usuario.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -1368,18 +1368,18 @@ describe('EditorLadder — bobina SET, bobina RESET e Contador (CTU) pela UI (ta
     const usuario = userEvent.setup()
     const { aoMudar, aoRecusar } = renderEditor(diagramaComVariaveis([{ nome: 'atingiu', tipo: 'BOOL' }]))
 
-    await arrastarEEscolher(usuario, /^contador$/i, 'Degrau 1, coluna 8, vazia', 'atingiu')
+    await arrastarEEscolher(usuario, 'Contador ↑', 'Degrau 1, coluna 8, vazia', 'atingiu')
     aoMudar.mockClear()
 
-    const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, contador CTU atingiu$/ })
+    const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, Contador crescente atingiu$/ })
     await usuario.click(celulaCtu)
     const dialogo = screen.getByRole('dialog')
-    const campoLimite = within(dialogo).getByLabelText('Limite (PV)')
+    const campoLimite = within(dialogo).getByLabelText('PV (contagens)')
     await usuario.clear(campoLimite)
     await usuario.type(campoLimite, '0')
     await usuario.click(within(dialogo).getByRole('button', { name: 'Aplicar limite' }))
 
-    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/limite do contador deve ser inteiro/i))
+    expect(aoRecusar).toHaveBeenCalledWith(expect.stringMatching(/PV deve ser inteiro/i))
     expect(aoMudar).not.toHaveBeenCalled()
   })
 })
@@ -1391,7 +1391,7 @@ describe('EditorLadder — CA-3: construir o BLINK inteiro pela UI (spec 003, ct
   // 2026-09-23: no host o teste já levava 18–19 s isolado; o botão "Nova
   // variável…" no modal (um papel `button` a mais por `getByRole`) passou dos
   // 20 s — timeout elevado para 40 s.
-  it('8 degraus com contatos, bobinas SET/RESET e o contador CTU resultam na fixture BLINK, sem problemas', async () => {
+  it('8 degraus com contatos, bobinas SET/RESET e o Contador crescente resultam na fixture BLINK, sem problemas', async () => {
     const usuario = userEvent.setup()
     const { aoMudar } = renderEditor(diagramaComVariaveis(BLINK.variaveis))
 
@@ -1401,19 +1401,19 @@ describe('EditorLadder — CA-3: construir o BLINK inteiro pela UI (spec 003, ct
 
     // R1: o CTU primeiro (cria a linha de reset), depois o contato de
     // contagem (trilho principal) e o de reinício (linha de reset).
-    await arrastarEEscolher(usuario, /^contador$/i, 'Degrau 1, coluna 8, vazia', 'atingiu')
+    await arrastarEEscolher(usuario, 'Contador ↑', 'Degrau 1, coluna 8, vazia', 'atingiu')
     {
-      const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, contador CTU atingiu$/ })
+      const celulaCtu = screen.getByRole('button', { name: /^Degrau 1, coluna 8, Contador crescente atingiu$/ })
       await usuario.click(celulaCtu)
       const dialogo = screen.getByRole('dialog')
-      const campoLimite = within(dialogo).getByLabelText('Limite (PV)')
+      const campoLimite = within(dialogo).getByLabelText('PV (contagens)')
       await usuario.clear(campoLimite)
       await usuario.type(campoLimite, '12')
       await usuario.click(within(dialogo).getByRole('button', { name: 'Aplicar limite' }))
       await usuario.keyboard('{Escape}')
     }
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, coluna 1, vazia', 'pulso')
-    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, reset do contador, coluna 1, vazia', 'reset_ctu')
+    await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 1, reinício do contador, coluna 1, vazia', 'reset_ctu')
 
     // R2: atingiu -> RESET pulso.
     await arrastarEEscolher(usuario, /^contato na$/i, 'Degrau 2, coluna 1, vazia', 'atingiu')
@@ -1461,7 +1461,7 @@ describe('EditorLadder — desempenho com 50 degraus preenchidos (plano §6, RNF
       ],
       ramos: [],
     }))
-    const diagramaGrande: Diagrama = { versao: 1, variaveis: [], rungs }
+    const diagramaGrande: Diagrama = { versao: 2, variaveis: [], rungs }
 
     const inicio = performance.now()
     render(<Harness inicial={diagramaGrande} espiao={vi.fn()} />)

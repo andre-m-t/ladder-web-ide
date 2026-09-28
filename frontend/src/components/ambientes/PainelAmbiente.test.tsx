@@ -86,7 +86,7 @@ describe('PainelAmbiente — contrato de E/S (revisão 2026-09-23)', () => {
   })
 
   it('sem aoDeclararVariavel, o ponto aparece como "não conectado"', () => {
-    const vazio: Diagrama = { versao: 1, variaveis: [], rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
+    const vazio: Diagrama = { versao: 2, variaveis: [], rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
     renderizar({ diagrama: vazio, aoDeclararVariavel: undefined, aoDeclararTodas: undefined })
     expect(screen.getAllByText('— não conectado')).toHaveLength(PONTOS_PORTAO.length)
   })

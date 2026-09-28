@@ -33,16 +33,13 @@ import {
   LINHAS_EXTRAS_MAX,
   ehBobina,
   ehContato,
-  ehCtu,
+  ehBloco,
   ehTerminal,
   variavelDoElemento,
 } from './modelo'
 import type { Celula, Diagrama, Elemento, Ramo, Rung } from './modelo'
 import { ehEntrada, enderecoValido } from './enderecos'
-// Ponto de extensão (D-7): regras específicas do CTU vivem em `ctu.ts`, nunca
-// duplicadas aqui — ver o cabeçalho de `ctu.ts` sobre o ciclo de módulos que
-// isso evita.
-import { motivoPosicaoCtu, problemasDoCtu } from './ctu'
+import { blocoDoRung, motivoPosicaoBloco, problemasDoBloco } from './blocos'
 
 // -- Códigos de problema -----------------------------------------------
 
@@ -55,11 +52,10 @@ export type CodigoProblema =
   | 'bobina_escreve_entrada'
   | 'bobina_duplicada'
   | 'set_reset_autodependente'
-  /** CTU (D-7, tarefa #16): `pv` fora de `[PV_MIN, PV_MAX]` (`ctu.ts`) num
-   * diagrama já montado. A edição normal já recusa isso em `atualizarCtu`
-   * antes de gravar; este código cobre o caso de diagrama vindo de fora dela
-   * (ex.: `localStorage` editado à mão). Produzido por `problemasDoCtu`. */
-  | 'ctu_limite_invalido'
+  /** Bloco FB (spec 006): `preset` fora da faixa do descritor. */
+  | 'bloco_preset_invalido'
+  /** @deprecated Alias histórico — use `bloco_preset_invalido`. */
+  | 'bloco_preset_invalido'
   /** Diagnóstico do `iec2c` sobre o ST serializado, levado ao degrau que gerou
    * a linha (spec 003, D-8/Q-3). Produzido pela IDE a partir de uma falha de
    * compilação — nunca por `validarDiagrama`. */
@@ -140,16 +136,16 @@ export function motivoPosicaoInvalida(
   // Ponto de extensão (D-7): o CTU decide sozinho a própria posição, e abre
   // uma exceção de contato na sua linha de reset — ver `motivoPosicaoCtu`.
   // `undefined` = nenhuma regra do CTU se aplica; segue a checagem genérica.
-  const motivoCtu = motivoPosicaoCtu(rung, tipo, celula, onde)
-  if (motivoCtu !== undefined) return motivoCtu
+  const motivoBloco = motivoPosicaoBloco(rung, tipo, celula, onde)
+  if (motivoBloco !== undefined) return motivoBloco
 
   if (ehBobina(tipo)) {
     if (coluna !== COLUNA_TERMINAL) {
       return `posição inválida: bobina só pode ficar na última coluna (coluna ${colunaTerminal1Based})`
     }
-    const ctu = rung.elementos.find(ehCtu)
-    if (ctu !== undefined && linha === ctu.linhaReset) {
-      return `posição inválida: ${onde} é a linha de reinício do contador '${ctu.instancia}' — só aceita contatos`
+    const bloco = blocoDoRung(rung)
+    if (bloco !== undefined && bloco.linhaControle !== null && linha === bloco.linhaControle) {
+      return `posição inválida: ${onde} é a linha de controle do bloco '${bloco.instancia}' — só aceita contatos`
     }
     if (linha > 0) {
       const principal = rung.elementos.some(
@@ -273,8 +269,8 @@ function validarElemento(indiceDegrau: number, rung: Rung, elemento: Elemento, d
   // ehTerminal (não só ehBobina) para que o CTU também caia nesta regra: sua
   // `saida` é escrita por ele como uma bobina escreve a própria variável (D-7).
   if (ehTerminal(elemento.tipo) && variavel.endereco !== undefined && ehEntrada(variavel.endereco)) {
-    const rotulo = ehCtu(elemento) ? 'contador' : 'bobina'
-    const rotuloPlural = ehCtu(elemento) ? 'contadores' : 'bobinas'
+    const rotulo = ehBloco(elemento) ? 'bloco' : 'bobina'
+    const rotuloPlural = ehBloco(elemento) ? 'blocos' : 'bobinas'
     problemas.push({
       codigo: 'bobina_escreve_entrada',
       severidade: 'erro',
@@ -320,7 +316,7 @@ function todosElementos(diagrama: Diagrama): Array<{ indiceDegrau: number; rung:
 function validarBobinasDuplicadas(diagrama: Diagrama): Problema[] {
   const problemas: Problema[] = []
   const escritasSimples = todosElementos(diagrama).filter(
-    ({ elemento }) => (elemento.tipo === 'bobina' || ehCtu(elemento)) && variavelDoElemento(elemento) !== null,
+    ({ elemento }) => (elemento.tipo === 'bobina' || ehBloco(elemento)) && variavelDoElemento(elemento) !== null,
   )
 
   const porVariavel = new Map<string, typeof escritasSimples>()
@@ -338,7 +334,7 @@ function validarBobinasDuplicadas(diagrama: Diagrama): Problema[] {
         .filter((outro) => outro.elemento.id !== item.elemento.id)
         .map((outro) => descreverCelula(outro.indiceDegrau, outro.elemento.celula))
         .join('; ')
-      const rotulo = ehCtu(item.elemento) ? 'contador' : 'bobina'
+      const rotulo = ehBloco(item.elemento) ? 'bloco' : 'bobina'
       problemas.push({
         codigo: 'bobina_duplicada',
         severidade: 'erro',
@@ -421,7 +417,7 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
     ...validarEnderecosDasVariaveis(diagrama),
     ...validarBobinasDuplicadas(diagrama),
     ...validarSetResetAutodependente(diagrama),
-    ...problemasDoCtu(diagrama), // ponto de extensão (D-7)
+    ...problemasDoBloco(diagrama),
   ]
 
   diagrama.rungs.forEach((rung, indiceDegrau) => {
@@ -435,7 +431,7 @@ export function validarDiagrama(diagrama: Diagrama): Problema[] {
         severidade: 'erro',
         rungId: rung.id,
         elementoId: null,
-        mensagem: `degrau ${indiceDegrau + 1} sem nenhuma bobina (nem contador CTU) — todo degrau precisa terminar numa bobina ou num contador CTU, na coluna ${COLUNA_TERMINAL + 1}`,
+        mensagem: `degrau ${indiceDegrau + 1} sem nenhuma bobina (nem bloco de função) — todo degrau precisa terminar numa bobina ou num bloco, na coluna ${COLUNA_TERMINAL + 1}`,
       })
     }
 

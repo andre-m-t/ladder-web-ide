@@ -4,13 +4,14 @@
  */
 import {
   COLUNA_TERMINAL,
-  ehCtu,
+  ehBloco,
   ehRamoDeSaida,
   type Celula,
   type Diagrama,
   type Elemento,
   type Rung,
 } from './modelo'
+import { descritorDe } from './blocos'
 
 const NS = 'http://www.plcopen.org/xml/tc6_0201'
 
@@ -29,14 +30,19 @@ function posicao(celula: Celula): string {
 }
 
 function nomeVariavel(elemento: Elemento): string {
-  if (ehCtu(elemento)) return elemento.saida ?? elemento.instancia
+  if (ehBloco(elemento)) return elemento.saida ?? elemento.instancia
   return elemento.variavel ?? '_anon'
 }
 
 function blocoElemento(elemento: Elemento, localId: number): string {
   const pos = posicao(elemento.celula)
-  if (ehCtu(elemento)) {
-    return `<block localId="${localId}" typeName="CTU" ${pos} width="48" height="48"><inputVariables><variable formalParameter="CU"/><variable formalParameter="R"/><variable formalParameter="PV"/></inputVariables><outputVariables><variable formalParameter="Q"/></outputVariables></block>`
+  if (ehBloco(elemento)) {
+    const d = descritorDe(elemento.tipo)
+    const params = [d.entradaPrincipal]
+    if (d.controle) params.push(d.controle.formal)
+    params.push(d.preset.formal)
+    const inputs = params.map((p) => `<variable formalParameter="${p}"/>`).join('')
+    return `<block localId="${localId}" typeName="${d.tipoST}" ${pos} width="48" height="48"><inputVariables>${inputs}</inputVariables><outputVariables><variable formalParameter="Q"/></outputVariables></block>`
   }
   const varName = esc(nomeVariavel(elemento))
   if (elemento.tipo === 'contato_na' || elemento.tipo === 'contato_nf') {
@@ -78,10 +84,10 @@ function ldDoRung(rung: Rung, ids: { next: () => number }): string {
     nos.push(id)
   }
 
-  const ctuLinha0 = rung.elementos.find((e) => ehCtu(e) && e.celula.linha === 0)
-  if (ctuLinha0) {
+  const blocoLinha0 = rung.elementos.find((e) => ehBloco(e) && e.celula.linha === 0)
+  if (blocoLinha0) {
     const id = ids.next()
-    partes.push(blocoElemento(ctuLinha0, id))
+    partes.push(blocoElemento(blocoLinha0, id))
     nos.push(id)
   }
 

@@ -117,7 +117,8 @@ natural de "forçar uma saída para ligada quando uma condição é verdadeira,
 sem apagá-la quando a condição deixa de valer". Esta é, em parte, a decisão da
 Questão Q em aberto sobre temporizadores e contadores no escopo do projeto:
 **o contador crescente entra no escopo do editor; temporizadores (ligar/
-desligar com atraso) continuam fora** — ver §7.
+desligar com atraso) continuam fora** — ver §7. *(Revisão aditiva 2026-09-28,
+spec 006: TON, TOF e CTD entram no escopo; CTU permanece como antes.)*
 
 - **RF-1.** O sistema deve apresentar o diagrama como uma grade de degraus
   (linhas) e posições válidas dentro de cada degrau (colunas), tornando
@@ -242,7 +243,9 @@ desligar com atraso) continuam fora** — ver §7.
   spec futura).
 - Qualquer forma de compilação a partir do diagrama.
 - Temporizadores (TON/TOF) e contador decrescente (CTD) — só o contador
-  crescente (CTU) entra nesta fase (ver §4).
+  crescente (CTU) entra nesta fase (ver §4). *(Revisão aditiva 2026-09-28,
+  spec 006: TON, TOF e CTD incluídos; `ElementoBloco` unificado, persistência
+  diagrama v2.)*
 - Persistência do diagrama além da sessão do navegador (RF-13) — nuvem, conta
   de usuário, ou arquivo local, ficam para spec futura caso venham a existir.
 - Importação de Structured Text existente para o formato do diagrama (ST →

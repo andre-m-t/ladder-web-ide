@@ -205,6 +205,57 @@ def test_blink_simulador_sem_divergencia_200_ciclos(
     assert not divergencias, f"{nome_padrao}: {formatar_relatorio(divergencias)}"
 
 
+def _entradas_ton_gate_alto(quantidade: int) -> list[dict[str, bool]]:
+    return [{"%IX0.0": True} for _ in range(quantidade)]
+
+
+def _entradas_tof_pulso() -> list[dict[str, bool]]:
+    entradas = [{"%IX0.0": True} for _ in range(3)]
+    entradas.extend({"%IX0.0": False} for _ in range(10))
+    return entradas
+
+
+def _entradas_ctd_basico() -> list[dict[str, bool]]:
+    # pulso %IX0.0, carregar %IX0.1 — três bordas de CD após LD inicial
+    sequencia: list[dict[str, bool]] = []
+    sequencia.append({"%IX0.0": False, "%IX0.1": True})
+    for _ in range(5):
+        sequencia.append({"%IX0.0": False, "%IX0.1": False})
+        sequencia.append({"%IX0.0": True, "%IX0.1": False})
+        sequencia.append({"%IX0.0": False, "%IX0.1": False})
+    return sequencia
+
+
+@host_runner_disponivel
+@pytest.mark.parametrize(
+    "nome,st_relativo,entradas",
+    [
+        ("ton", "serializados/ton.st", _entradas_ton_gate_alto(10)),
+        ("tof", "serializados/tof.st", _entradas_tof_pulso()),
+        ("ctd", "serializados/ctd.st", _entradas_ctd_basico()),
+    ],
+)
+def test_blocos_temporizadores_contadores_simulador_x_host(
+    nome: str, st_relativo: str, entradas: list[dict[str, bool]]
+) -> None:
+    """Spec 006: TON/TOF/CTD serializados — 0 divergências simulador × host."""
+    st = FIXTURES_ST_REFERENCIA_DIR / st_relativo
+    motivo_indisponivel: str | None = None
+    try:
+        saida_host = executor_host.executar(st, entradas).ciclos
+        saida_simulador = executor_simulador.executar(st, entradas).ciclos
+    except ExecutorIndisponivel as erro:
+        motivo_indisponivel = str(erro)
+        saida_host = []
+        saida_simulador = []
+
+    if motivo_indisponivel is not None:
+        pytest.fail(motivo_indisponivel, pytrace=False)
+
+    divergencias = comparar_execucoes(saida_host, saida_simulador)
+    assert not divergencias, f"{nome}: {formatar_relatorio(divergencias)}"
+
+
 def test_relatorio_de_divergencia_traz_ciclo_ponto_esperado_obtido() -> None:
     """CA-3 (RF-21): fumaca do formato de mensagem no contexto deste executor --
     a logica de comparacao em si ja e testada isoladamente em

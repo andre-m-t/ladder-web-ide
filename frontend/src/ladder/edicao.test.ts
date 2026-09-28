@@ -36,7 +36,7 @@ function congelarProfundo<T>(valor: T): T {
 describe('diagramaVazio', () => {
   it('um degrau vazio, id r1, sem variáveis', () => {
     expect(diagramaVazio()).toEqual({
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [], ramos: [] }],
     })
@@ -399,7 +399,7 @@ describe('declararVariavel', () => {
     const resultado = declararVariavel(diagrama, { nome: 'entrada' })
     expect(resultado).toEqual({
       ok: true,
-      diagrama: { versao: 1, variaveis: [{ nome: 'entrada', tipo: 'BOOL' }], rungs: [{ id: 'r1', elementos: [], ramos: [] }] },
+      diagrama: { versao: 2, variaveis: [{ nome: 'entrada', tipo: 'BOOL' }], rungs: [{ id: 'r1', elementos: [], ramos: [] }] },
     })
   })
 
@@ -585,7 +585,7 @@ describe('moverElemento', () => {
 
   it('move entre degraus: remove da origem, insere no destino, mantém id e vínculo', () => {
     const doisRungs: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'x', tipo: 'BOOL' }],
       rungs: [
         {
@@ -612,7 +612,7 @@ describe('moverElemento', () => {
 
   it('recusa de posição inválida ao mover entre degraus cita o índice do degrau destino', () => {
     const doisRungs: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [
         {
@@ -638,7 +638,7 @@ describe('moverElemento', () => {
 describe('contatos e ramos: inserirElemento/moverElemento respeitam o intervalo do ramo', () => {
   function diagramaComRamo(): Diagrama {
     const base: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [],
       rungs: [{ id: 'r1', elementos: [], ramos: [{ id: 'b1', linha: 1, colunaInicio: 1, colunaFim: 3 }] }],
     }
@@ -1198,9 +1198,9 @@ describe('inserirElemento — CTU (tarefa #16, D-7): delega a criarCtu', () => {
         id: 'e1',
         tipo: 'ctu',
         celula: { linha: 0, coluna: COLUNA_TERMINAL },
-        linhaReset: 1,
+        linhaControle: 1,
         instancia: 'ctu0',
-        pv: PV_PADRAO,
+        preset: PV_PADRAO,
         saida: null,
       },
     ])
@@ -1273,7 +1273,7 @@ describe('removerElemento — CTU leva os contatos da linha de reset junto (CA-7
 })
 
 describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair abaixo dela (D-7, correção pós-Chromium)', () => {
-  it('CTU com linhaReset 1 e nada mais no degrau: o ramo pega a linha 1 (a do reset), e o reset desce para a 2 — sem mutar a entrada', () => {
+  it('CTU com linhaControle 1 e nada mais no degrau: o ramo pega a linha 1 (a do reset), e o reset desce para a 2 — sem mutar a entrada', () => {
     const comCtu = inserirElemento(diagramaVazio(), 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
     if (!comCtu.ok) throw new Error('esperava sucesso')
     const original = congelarProfundo(comCtu.diagrama)
@@ -1286,7 +1286,7 @@ describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair 
     // o ramo fica na linha 1 (não cruza mais a linha de reset, que agora é a 2)
     expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
     const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctu.linhaReset).toBe(2)
+    expect(ctu.linhaControle).toBe(2)
     expect(original).toEqual(antes) // entrada intacta
   })
 
@@ -1304,7 +1304,7 @@ describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair 
     if (!resultado.ok) throw new Error('esperava sucesso')
     expect(resultado.diagrama.rungs[0].ramos).toEqual([{ id: 'b1', linha: 1, colunaInicio: 0, colunaFim: 0 }])
     const ctu = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctu.linhaReset).toBe(2)
+    expect(ctu.linhaControle).toBe(2)
     // o contato que estava em (1,3) — na linha de reset antiga — segue com o
     // reset para a linha 2, na mesma coluna
     const contato = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'contato_na')
@@ -1335,7 +1335,7 @@ describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair 
     const original = congelarProfundo(diagrama)
     const antes = JSON.parse(JSON.stringify(original))
     const ctuAntes = original.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctuAntes.linhaReset).toBe(1) // não dava para reservar a linha 2 (já tinha ramo)
+    expect(ctuAntes.linhaControle).toBe(1) // não dava para reservar a linha 2 (já tinha ramo)
 
     const resultado = criarRamo(original, 'r1', 0) // coluna 0 não colide com b2 (coluna 5)
 
@@ -1348,7 +1348,7 @@ describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair 
     expect(ramos.find((r) => r.id === 'b2')).toEqual({ id: 'b2', linha: 2, colunaInicio: 5, colunaFim: 5 })
     expect(ramos.some((r) => r.linha === 2 && r.colunaInicio === 0)).toBe(true)
     const ctuDepois = resultado.diagrama.rungs[0].elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctuDepois.linhaReset).toBe(1) // sem troca
+    expect(ctuDepois.linhaControle).toBe(1) // sem troca
     expect(original).toEqual(antes)
   })
 
@@ -1356,7 +1356,7 @@ describe('criarRamo — CTU: troca de lugar com a linha de reset em vez de cair 
     let diagrama = diagramaVazio()
     const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
     if (!comCtu.ok) throw new Error('esperava sucesso')
-    diagrama = comCtu.diagrama // linhaReset = 1
+    diagrama = comCtu.diagrama // linhaControle = 1
 
     for (let i = 0; i < LINHAS_EXTRAS_MAX - 1; i++) {
       const r = criarRamo(diagrama, 'r1', 0)
@@ -1385,7 +1385,7 @@ describe('moverElemento — CTU (D-7)', () => {
     expect(resultado.motivo).toContain('posição inválida')
   })
 
-  it('para outro degrau: recalcula linhaReset pela linha livre do destino e leva os contatos de reset junto', () => {
+  it('para outro degrau: recalcula linhaControle pela linha livre do destino e leva os contatos de reset junto', () => {
     let diagrama = diagramaVazio()
     const comDegrau2 = inserirDegrau(diagrama, 1)
     if (!comDegrau2.ok) throw new Error('esperava sucesso')
@@ -1393,7 +1393,7 @@ describe('moverElemento — CTU (D-7)', () => {
 
     const comCtu = inserirElemento(diagrama, 'r1', 'ctu', { linha: 0, coluna: COLUNA_TERMINAL })
     if (!comCtu.ok) throw new Error('esperava sucesso')
-    diagrama = comCtu.diagrama // ctu em r1, linhaReset 1
+    diagrama = comCtu.diagrama // ctu em r1, linhaControle 1
 
     const comContatoReset = inserirElemento(diagrama, 'r1', 'contato_na', { linha: 1, coluna: 3 })
     if (!comContatoReset.ok) throw new Error('esperava sucesso')
@@ -1414,7 +1414,7 @@ describe('moverElemento — CTU (D-7)', () => {
     if (!resultado.ok) throw new Error('esperava sucesso')
     const rungDestino = resultado.diagrama.rungs.find((r) => r.id === 'r2') as Rung
     const ctuMovido = rungDestino.elementos.find((e) => e.tipo === 'ctu') as ElementoCtu
-    expect(ctuMovido.linhaReset).toBe(2) // linha 1 do destino já tinha o ramo b1
+    expect(ctuMovido.linhaControle).toBe(2) // linha 1 do destino já tinha o ramo b1
     const contatoMovido = rungDestino.elementos.find((e) => e.tipo === 'contato_na')
     expect(contatoMovido?.celula).toEqual({ linha: 2, coluna: 3 })
 

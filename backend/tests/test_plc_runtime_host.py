@@ -28,6 +28,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 BLINK_ST = FIXTURES_DIR / "blink.st"
 IO_ESPELHO_ST = FIXTURES_DIR / "io_espelho.st"
 MINIMAL_ST = FIXTURES_DIR / "minimal.st"
+TON_ST = FIXTURES_DIR / "serializados" / "ton.st"
 
 
 def _toolchain_disponivel() -> bool:
@@ -222,6 +223,20 @@ def test_blink_alterna_na_contagem_esperada(plc_host_runner: Path, tmp_path: Pat
     assert linhas[26] == "1"
     assert linhas[49] == "1"
     assert linhas[50] == "0"
+
+
+@toolchain_disponivel
+def test_ton_q_sobe_apos_pt_com_relogio_avancando(plc_host_runner: Path, tmp_path: Path) -> None:
+    """PT=T#100ms com varredura T#20ms: %QX0.0 (atraso) sobe no ciclo 5 com gate
+    mantido em 1. Falha se o relógio do stub host permanecer congelado."""
+    entradas = ["%IX0.0=1"] * 8
+    resultado = _rodar(plc_host_runner, [str(TON_ST)], entradas, tmp_path)
+    assert resultado.returncode == 0, resultado.stderr
+
+    linhas = {int(c["ciclo"]): c["%QX0.0"] for c in map(_parsear, _linhas_saida(resultado))}
+    assert linhas[4] == "0"
+    assert linhas[5] == "0"
+    assert linhas[6] == "1"
 
 
 # --------------------------------------------------------------------------

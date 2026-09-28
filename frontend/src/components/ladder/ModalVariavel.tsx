@@ -15,8 +15,8 @@ import { Plus } from 'lucide-react'
 import type { PontoAmbiente } from '../../ambientes/contrato'
 import { sugerirNomeVariavel } from '../../ambientes/vinculo'
 import { classeDaVariavel, type ClasseVariavel } from '../../ladder/enderecos'
-import { PV_MAX, PV_MIN } from '../../ladder/ctu'
-import { ehBobina, ehContato, ehCtu, variavelDoElemento, type Elemento, type TipoBobina, type TipoContato, type Variavel } from '../../ladder/modelo'
+import { descritorDe } from '../../ladder/blocos'
+import { ehBobina, ehBloco, ehContato, variavelDoElemento, type Elemento, type TipoBobina, type TipoContato, type Variavel } from '../../ladder/modelo'
 import ModalNovaVariavel from './ModalNovaVariavel'
 import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
 
@@ -80,10 +80,11 @@ export default function ModalVariavel({
   const dialogRef = useRef<HTMLDivElement>(null)
   const selectRef = useRef<HTMLSelectElement>(null)
   const [criando, setCriando] = useState(false)
-  const ehElementoBobina = ehBobina(elemento.tipo) || elemento.tipo === 'ctu'
-  const motivoDesabilitada = ehCtu(elemento) ? 'entradas não podem ser escritas pelo contador' : 'entradas não podem ser escritas por bobina'
+  const ehElementoBobina = ehBobina(elemento.tipo) || ehBloco(elemento)
+  const motivoDesabilitada = ehBloco(elemento) ? 'entradas não podem ser escritas pelo bloco' : 'entradas não podem ser escritas por bobina'
   const vinculoAtual = variavelDoElemento(elemento)
-  const [pv, setPv] = useState(() => (ehCtu(elemento) ? String(elemento.pv) : ''))
+  const descBloco = ehBloco(elemento) ? descritorDe(elemento.tipo) : null
+  const [preset, setPreset] = useState(() => (ehBloco(elemento) ? String(elemento.preset) : ''))
 
   useEffect(() => {
     dialogRef.current?.querySelector<HTMLElement>('select, button')?.focus()
@@ -110,7 +111,7 @@ export default function ModalVariavel({
   }
 
   function confirmarLimite() {
-    const numero = Number(pv)
+    const numero = Number(preset)
     if (Number.isNaN(numero)) return
     aoAlterarLimite?.(numero)
   }
@@ -199,18 +200,20 @@ export default function ModalVariavel({
           </div>
         )}
 
-        {ehCtu(elemento) && (
+        {descBloco !== null && (
           <div className="mt-3 flex flex-col gap-1 border-t border-ide-borda pt-3">
-            <label htmlFor={idLimite} className="text-xs font-medium text-ide-texto">Limite (PV)</label>
+            <label htmlFor={idLimite} className="text-xs font-medium text-ide-texto">
+              {descBloco.preset.formal} ({descBloco.preset.unidade === 'ms' ? 'ms' : 'contagens'})
+            </label>
             <div className="flex gap-2">
               <input
                 id={idLimite}
                 type="number"
-                min={PV_MIN}
-                max={PV_MAX}
-                step={1}
-                value={pv}
-                onChange={(evento) => setPv(evento.target.value)}
+                min={descBloco.preset.min}
+                max={descBloco.preset.max}
+                step={descBloco.preset.passo}
+                value={preset}
+                onChange={(evento) => setPreset(evento.target.value)}
                 onKeyDown={(evento) => {
                   if (evento.key === 'Enter') {
                     evento.preventDefault()

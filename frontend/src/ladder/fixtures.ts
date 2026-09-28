@@ -10,7 +10,7 @@ import { COLUNA_TERMINAL, type Diagrama } from './modelo'
 
 /** `minimal.st`: `saida := NOT entrada;`, variáveis internas (sem endereço). */
 export const MINIMAL: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'entrada', tipo: 'BOOL' },
     { nome: 'saida', tipo: 'BOOL' },
@@ -29,7 +29,7 @@ export const MINIMAL: Diagrama = {
 
 /** `io_espelho.st`: `saida := entrada;`, com `%IX0.1` → `%QX0.1`. */
 export const IO_ESPELHO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.1' },
     { nome: 'saida', tipo: 'BOOL', endereco: '%QX0.1' },
@@ -64,7 +64,7 @@ export const IO_ESPELHO: Diagrama = {
  * io_espelho_8.toml`.
  */
 export const IO_ESPELHO_8: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'entrada0', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'entrada1', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -157,7 +157,7 @@ export const IO_ESPELHO_8: Diagrama = {
  * bobina `q`. Semântica de "ou" clássica de dois contatos em paralelo.
  */
 export const RAMO_OU: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'a', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'b', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -183,7 +183,7 @@ export const RAMO_OU: Diagrama = {
  * `validarDiagrama` não acusa `set_reset_autodependente` aqui.
  */
 export const SET_RESET: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'liga', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'desliga', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -219,7 +219,7 @@ export const SET_RESET: Diagrama = {
  * degrau, que `validarDiagrama` aceita sem problema.
  */
 export const SELO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'partida', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'parada', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -256,7 +256,7 @@ export const SELO: Diagrama = {
  * Oito degraus (diagrama ASCII do `RESULTADO.md`):
  *
  *   R1 |--[ pulso ]---------+--[CTU ctu0 PV=12]--( atingiu )
- *      |--[ reset_ctu ]-----+   (CU no 1º caminho, R no 2º, linhaReset=1)
+ *      |--[ reset_ctu ]-----+   (CU no 1º caminho, R no 2º, linhaControle=1)
  *   R2 |--[ atingiu ]------------------------(R pulso )
  *   R3 |--[/ pulso ]-------------------------( pulso )
  *   R4 |--[ led ]----------------------------( led_estava_aceso )
@@ -271,7 +271,7 @@ export const SELO: Diagrama = {
  * variante K não depende de um).
  */
 export const BLINK: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'botao', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'led', tipo: 'BOOL', endereco: '%QX0.0' },
@@ -282,7 +282,7 @@ export const BLINK: Diagrama = {
   ],
   rungs: [
     {
-      // R1: CTU -- CU = pulso (trilho, linha 0), R = reset_ctu (linhaReset 1, sem ramo).
+      // R1: CTU -- CU = pulso (trilho, linha 0), R = reset_ctu (linhaControle 1, sem ramo).
       id: 'r1',
       elementos: [
         { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
@@ -291,9 +291,9 @@ export const BLINK: Diagrama = {
           id: 'e3',
           tipo: 'ctu',
           celula: { linha: 0, coluna: COLUNA_TERMINAL },
-          linhaReset: 1,
+          linhaControle: 1,
           instancia: 'ctu0',
-          pv: 12,
+          preset: 12,
           saida: 'atingiu',
         },
       ],
@@ -395,7 +395,7 @@ export const BLINK: Diagrama = {
  *   **NA**, mantendo o de `fc_inferior` em NF.
  */
 export const PORTAO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'abrir', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'fechar', tipo: 'BOOL', endereco: '%IX0.1' },
@@ -457,11 +457,9 @@ export const PORTAO: Diagrama = {
   ],
 }
 
-/**
- * `saidas_paralelas.st`: uma condição aciona duas bobinas no mesmo degrau (revisão 2026-09-22).
- */
+/** `saidas_paralelas.st`: uma condição aciona duas bobinas no mesmo degrau (revisão 2026-09-22). */
 export const SAIDAS_PARALELAS: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [
     { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.0' },
     { nome: 'saida_a', tipo: 'BOOL', endereco: '%QX0.0' },
@@ -476,6 +474,89 @@ export const SAIDAS_PARALELAS: Diagrama = {
         { id: 'e3', tipo: 'bobina', celula: { linha: 1, coluna: COLUNA_TERMINAL }, variavel: 'saida_b' },
       ],
       ramos: [{ id: 'b1', linha: 1, colunaInicio: COLUNA_TERMINAL, colunaFim: COLUNA_TERMINAL }],
+    },
+  ],
+}
+
+/** TON mínimo: entrada `gate`, PT=100ms (5 ciclos), saída `atraso`. */
+export const TON_ATRASO: Diagrama = {
+  versao: 2,
+  variaveis: [
+    { nome: 'gate', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'atraso', tipo: 'BOOL', endereco: '%QX0.0' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'gate' },
+        {
+          id: 'e2',
+          tipo: 'ton',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaControle: null,
+          instancia: 'ton0',
+          preset: 100,
+          saida: 'atraso',
+        },
+      ],
+      ramos: [],
+    },
+  ],
+}
+
+/** TOF mínimo: mantém `saida` após `gate` cair, PT=100ms. */
+export const TOF_RETARDO: Diagrama = {
+  versao: 2,
+  variaveis: [
+    { nome: 'gate', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'saida', tipo: 'BOOL', endereco: '%QX0.0' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'gate' },
+        {
+          id: 'e2',
+          tipo: 'tof',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaControle: null,
+          instancia: 'tof0',
+          preset: 100,
+          saida: 'saida',
+        },
+      ],
+      ramos: [],
+    },
+  ],
+}
+
+/** CTD mínimo: CD=`pulso`, LD=`carregar`, PV=3, saída `vazio`. */
+export const CTD_DESCE: Diagrama = {
+  versao: 2,
+  variaveis: [
+    { nome: 'pulso', tipo: 'BOOL', endereco: '%IX0.0' },
+    { nome: 'carregar', tipo: 'BOOL', endereco: '%IX0.1' },
+    { nome: 'vazio', tipo: 'BOOL', endereco: '%QX0.0' },
+  ],
+  rungs: [
+    {
+      id: 'r1',
+      elementos: [
+        { id: 'e1', tipo: 'contato_na', celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
+        { id: 'e2', tipo: 'contato_na', celula: { linha: 1, coluna: 0 }, variavel: 'carregar' },
+        {
+          id: 'e3',
+          tipo: 'ctd',
+          celula: { linha: 0, coluna: COLUNA_TERMINAL },
+          linhaControle: 1,
+          instancia: 'ctd0',
+          preset: 3,
+          saida: 'vazio',
+        },
+      ],
+      ramos: [],
     },
   ],
 }

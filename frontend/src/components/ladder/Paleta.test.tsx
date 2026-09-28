@@ -21,7 +21,7 @@ describe('Paleta — itens arrastáveis', () => {
   it('cada item é um "item arrastável" (aria-roledescription), não um botão de ação', () => {
     render(<Paleta {...propsBase()} />)
 
-    for (const nome of [/contato na/i, /contato nf/i, /^bobina$/i, /bobina set/i, /bobina reset/i, /^ramo$/i, /contador/i]) {
+    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador ↑', 'Contador ↓', 'TON', 'TOF']) {
       const item = screen.getByRole('button', { name: nome })
       expect(item).toHaveAttribute('aria-roledescription', 'item arrastável')
     }
@@ -93,7 +93,7 @@ describe('Paleta — SET, RESET e Contador (tarefa #18)', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Bobina RESET' }), { pointerId: 2, clientX: 5, clientY: 5 })
     expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('bobina_reset', expect.anything())
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Contador' }), { pointerId: 3, clientX: 5, clientY: 5 })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Contador ↑' }), { pointerId: 3, clientX: 5, clientY: 5 })
     expect(aoIniciarArrastoPonteiro).toHaveBeenCalledWith('ctu', expect.anything())
   })
 
@@ -102,7 +102,7 @@ describe('Paleta — SET, RESET e Contador (tarefa #18)', () => {
     const aoIniciarArrastoTeclado = vi.fn()
     render(<Paleta {...propsBase()} aoIniciarArrastoTeclado={aoIniciarArrastoTeclado} />)
 
-    screen.getByRole('button', { name: 'Contador' }).focus()
+    screen.getByRole('button', { name: 'Contador ↑' }).focus()
     await usuario.keyboard(' ')
 
     expect(aoIniciarArrastoTeclado).toHaveBeenCalledWith('ctu')
@@ -235,7 +235,7 @@ describe('Paleta — congelado durante a simulação (spec 004, RF-15, D-20)', (
   it('congelado: cada item vira cursor-not-allowed, opacity-50 e aria-disabled', () => {
     render(<Paleta {...propsBase()} congelado={true} />)
 
-    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador']) {
+    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador ↑', 'Contador ↓', 'TON', 'TOF']) {
       const item = screen.getByRole('button', { name: nome })
       expect(item.className).toContain('cursor-not-allowed')
       expect(item.className).toContain('opacity-50')
@@ -267,7 +267,7 @@ describe('Paleta — congelado durante a simulação (spec 004, RF-15, D-20)', (
   it('congelado: o item some do Tab (tabIndex -1) — sem gesto possível, não há o que recusar', () => {
     render(<Paleta {...propsBase()} congelado={true} />)
 
-    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador']) {
+    for (const nome of ['Contato NA', 'Contato NF', 'Bobina', 'Bobina SET', 'Bobina RESET', 'Ramo', 'Contador ↑', 'Contador ↓', 'TON', 'TOF']) {
       expect(screen.getByRole('button', { name: nome })).toHaveAttribute('tabIndex', '-1')
     }
   })

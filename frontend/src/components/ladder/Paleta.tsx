@@ -82,7 +82,17 @@ import { GitFork, Trash2 } from 'lucide-react'
 import type { KeyboardEvent, PointerEvent } from 'react'
 
 /** Elementos que a paleta oferece para arrastar. */
-export type TipoPaleta = 'contato_na' | 'contato_nf' | 'bobina' | 'bobina_set' | 'bobina_reset' | 'ramo' | 'ctu'
+export type TipoPaleta =
+  | 'contato_na'
+  | 'contato_nf'
+  | 'bobina'
+  | 'bobina_set'
+  | 'bobina_reset'
+  | 'ramo'
+  | 'ctu'
+  | 'ctd'
+  | 'ton'
+  | 'tof'
 
 export interface PaletaProps {
   /** Há um elemento ou ramo marcado na grade (habilita a lixeira como botão de ação). */
@@ -123,7 +133,10 @@ const ITENS: Array<{ tipo: TipoPaleta; rotulo: string; glifo?: string }> = [
   { tipo: 'bobina_set', rotulo: 'Bobina SET', glifo: '-(S)-' },
   { tipo: 'bobina_reset', rotulo: 'Bobina RESET', glifo: '-(R)-' },
   { tipo: 'ramo', rotulo: 'Ramo' },
-  { tipo: 'ctu', rotulo: 'Contador', glifo: 'CTU' },
+  { tipo: 'ctu', rotulo: 'Contador ↑', glifo: 'CTU' },
+  { tipo: 'ctd', rotulo: 'Contador ↓', glifo: 'CTD' },
+  { tipo: 'ton', rotulo: 'TON', glifo: 'TON' },
+  { tipo: 'tof', rotulo: 'TOF', glifo: 'TOF' },
 ]
 
 const ID_AJUDA_LIXEIRA = 'paleta-lixeira-ajuda'

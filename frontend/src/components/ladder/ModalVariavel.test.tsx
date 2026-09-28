@@ -16,9 +16,9 @@ function elementoCtu(overrides: Partial<ElementoCtu> = {}): ElementoCtu {
     id: 'e1',
     tipo: 'ctu',
     celula: { linha: 0, coluna: 7 },
-    linhaReset: 1,
+    linhaControle: 1,
     instancia: 'ctu0',
-    pv: 12,
+    preset: 12,
     saida: null,
     ...overrides,
   }
@@ -177,19 +177,19 @@ describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
     expect(aoEscolher).toHaveBeenCalledWith('atingiu')
   })
 
-  it('mostra o campo "Limite (PV)" com o valor atual, min/max do núcleo', () => {
-    render(<ModalVariavel elemento={elementoCtu({ pv: 7 })} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
+  it('mostra o campo "PV (contagens)" com o valor atual, min/max do núcleo', () => {
+    render(<ModalVariavel elemento={elementoCtu({ preset: 7 })} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    const campo = screen.getByLabelText('Limite (PV)') as HTMLInputElement
+    const campo = screen.getByLabelText('PV (contagens)') as HTMLInputElement
     expect(campo).toHaveValue(7)
     expect(campo).toHaveAttribute('min', String(PV_MIN))
     expect(campo).toHaveAttribute('max', String(PV_MAX))
   })
 
-  it('não mostra o campo "Limite (PV)" para um elemento que não é CTU', () => {
+  it('não mostra o campo "PV (contagens)" para um elemento que não é CTU', () => {
     render(<ModalVariavel elemento={elemento('bobina')} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} />)
 
-    expect(screen.queryByLabelText('Limite (PV)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('PV (contagens)')).not.toBeInTheDocument()
   })
 
   it('"Aplicar limite" chama aoAlterarLimite com o número digitado, sem fechar o modal', async () => {
@@ -206,7 +206,7 @@ describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
       />,
     )
 
-    const campo = screen.getByLabelText('Limite (PV)')
+    const campo = screen.getByLabelText('PV (contagens)')
     await usuario.clear(campo)
     await usuario.type(campo, '20')
     await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))
@@ -223,7 +223,7 @@ describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
       <ModalVariavel elemento={elementoCtu()} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} aoAlterarLimite={aoAlterarLimite} />,
     )
 
-    const campo = screen.getByLabelText('Limite (PV)')
+    const campo = screen.getByLabelText('PV (contagens)')
     await usuario.clear(campo)
     await usuario.type(campo, '5{Enter}')
 
@@ -237,7 +237,7 @@ describe('ModalVariavel — CTU: saída e limite (tarefa #18)', () => {
       <ModalVariavel elemento={elementoCtu()} variaveis={[]} aoEscolher={vi.fn()} aoFechar={vi.fn()} aoAlterarLimite={aoAlterarLimite} />,
     )
 
-    const campo = screen.getByLabelText('Limite (PV)')
+    const campo = screen.getByLabelText('PV (contagens)')
     await usuario.clear(campo)
     await usuario.type(campo, String(PV_MAX + 1))
     await usuario.click(screen.getByRole('button', { name: 'Aplicar limite' }))

@@ -14,7 +14,7 @@ import PainelVariaveis from './PainelVariaveis'
  * só para testar a recusa de `removerVariavel` (núcleo) quando a variável
  * está em uso. */
 const DIAGRAMA_COM_VINCULO: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [{ nome: 'entrada', tipo: 'BOOL' }],
   rungs: [
     {
@@ -26,7 +26,7 @@ const DIAGRAMA_COM_VINCULO: Diagrama = {
 }
 
 const DIAGRAMA_COM_X: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [{ nome: 'x', tipo: 'BOOL' }],
   rungs: [{ id: 'r1', elementos: [], ramos: [] }],
 }
@@ -35,7 +35,7 @@ const DIAGRAMA_COM_X: Diagrama = {
  * que a contagem de uso de `removerVariavel` (núcleo) considera o CTU via
  * `variavelDoElemento`, não só `elemento.variavel` (tarefa #18). */
 const DIAGRAMA_COM_CTU: Diagrama = {
-  versao: 1,
+  versao: 2,
   variaveis: [{ nome: 'atingiu', tipo: 'BOOL' }],
   rungs: [
     {
@@ -45,9 +45,9 @@ const DIAGRAMA_COM_CTU: Diagrama = {
           id: 'e1',
           tipo: 'ctu',
           celula: { linha: 0, coluna: 7 },
-          linhaReset: 1,
+          linhaControle: 1,
           instancia: 'ctu0',
-          pv: 10,
+          preset: 10,
           saida: 'atingiu',
         },
       ],
@@ -154,7 +154,7 @@ describe('PainelVariaveis — editar e remover via núcleo', () => {
   it('edita o pino de entrada para saída (o núcleo decide, não a UI)', async () => {
     const usuario = userEvent.setup()
     const diagramaComEntrada: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'x', tipo: 'BOOL', endereco: ENTRADAS_LOCALIZADAS[0] }],
       rungs: [{ id: 'r1', elementos: [], ramos: [] }],
     }
@@ -225,7 +225,7 @@ describe('PainelVariaveis — passagem cega de valores/aoAcionar/ciclo (spec 004
     const usuario = userEvent.setup()
     const aoAcionar = vi.fn()
     const diagrama: Diagrama = {
-      versao: 1,
+      versao: 2,
       variaveis: [{ nome: 'botao', tipo: 'BOOL', endereco: ENTRADAS_LOCALIZADAS[0] }],
       rungs: [{ id: 'r1', elementos: [], ramos: [] }],
     }

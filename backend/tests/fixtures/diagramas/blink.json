@@ -1,5 +1,5 @@
 {
-  "versao": 1,
+  "versao": 2,
   "variaveis": [
     {
       "nome": "botao",
@@ -57,9 +57,9 @@
             "linha": 0,
             "coluna": 7
           },
-          "linhaReset": 1,
+          "linhaControle": 1,
           "instancia": "ctu0",
-          "pv": 12,
+          "preset": 12,
           "saida": "atingiu"
         }
       ],

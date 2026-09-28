@@ -39,8 +39,8 @@
  * `Simbolos.tsx#BobinaSet/BobinaReset`, na mesma célula terminal de uma
  * bobina comum — nenhuma mudança de geometria aqui. O CTU ocupa a célula
  * terminal da linha 0 (como uma bobina) mas desenha, via `SimboloCtu.tsx`
- * (D-7), uma caixa que desce até a sua `linhaReset` — a única linha extra do
- * degrau sem `Ramo` (o núcleo garante isso, `ctu.ts#linhaResetLivre`). Essa
+ * (D-7), uma caixa que desce até a sua `linhaControle` — a única linha extra do
+ * degrau sem `Ramo` (o núcleo garante isso, `ctu.ts#linhaControleLivre`). Essa
  * linha ganha um traço próprio do trilho esquerdo até a caixa (sem os
  * conectores de `tracoRamo`: não é um ramo, é o caminho de reinício) e
  * células de contato focáveis/soltáveis iguais às de um ramo, exceto pelo
@@ -127,22 +127,24 @@ import { CircleAlert, Plus, Trash2, TriangleAlert } from 'lucide-react'
 import {
   COLUNAS_POR_DEGRAU,
   COLUNA_TERMINAL,
-  ehCtu,
+  ehBloco,
   ehRamoDeSaida,
+  ehTipoBloco,
   variavelDoElemento,
   type Celula,
   type Elemento,
   type Ramo,
   type Rung,
+  type TipoBloco,
   type TipoBobina,
   type TipoContato,
   type Variavel,
 } from '../../ladder/modelo'
-import { PV_PADRAO } from '../../ladder/ctu'
+import { blocoDoRung as blocoDoRungFn, descritorDe, PT_PADRAO, PV_PADRAO } from '../../ladder/blocos'
 import type { Problema } from '../../ladder/validacao'
-import type { EnergizacaoDegrau } from '../../ladder/simulacao'
+import type { EnergizacaoDegrau, EstadoBlocoSim } from '../../ladder/simulacao'
 import { Bobina, BobinaReset, BobinaSet, ContatoNA, ContatoNF } from './Simbolos'
-import SimboloCtu from './SimboloCtu'
+import SimboloBloco from './SimboloBloco'
 
 /** Resumo de um ou mais `Problema` para uma célula ou para o degrau inteiro
  * (tarefa #13): severidade mais grave presente (erro tem precedência sobre
@@ -179,13 +181,13 @@ function problemaDoRung(problemas: Problema[] | undefined): ResumoProblema | nul
  * para destacar o próprio elemento de origem quando o alvo do arrasto é a
  * lixeira. `ramo-criar` (D-14) é a prévia de soltar "Ramo" da paleta: não
  * tem `celula` própria — o núcleo (`criarRamo`) decide a linha, então o
- * ramo inteiro é a prévia, desenhada como um ramo fantasma. `linhaReset`
+ * ramo inteiro é a prévia, desenhada como um ramo fantasma. `linhaControle`
  * (tarefa #18) só é preenchido quando `elemento === 'ctu'`: o núcleo
- * (`ctu.ts#linhaResetLivre`) já escolheu essa linha ao calcular a prévia sem
+ * (`ctu.ts#linhaControleLivre`) já escolheu essa linha ao calcular a prévia sem
  * aplicar (`EditorLadder`), e é o que permite desenhar a caixa do CTU
  * fantasma com a altura certa antes de soltar. */
 export type Previa =
-  | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo']; linhaReset?: number }
+  | { celula: Celula; tipo: 'inserir'; elemento: Elemento['tipo']; linhaControle?: number }
   | { celula: Celula; tipo: 'remover' }
   | { celula: Celula; tipo: 'invalida'; motivo: string }
   | { tipo: 'ramo-criar'; ramo: { linha: number; colunaInicio: number; colunaFim: number } }
@@ -259,6 +261,8 @@ export interface GradeDegrauProps {
    * de simulação — nesse caso o desenho é exatamente o de hoje. Ver nota no
    * cabeçalho do arquivo. */
   energizacao?: EnergizacaoDegrau | null
+  /** Estado interno dos blocos FB (CV/ET ao vivo durante simulação). */
+  blocosSim?: Record<string, EstadoBlocoSim> | null
   /** Simulação ativa (spec 004, RF-15, D-20): cursor de recusa na célula e na alça. */
   congelado?: boolean
 }
@@ -359,7 +363,8 @@ function estiloTraco(
   return { classe: 'stroke-ide-fio', largura: 2 }
 }
 
-function rotuloTipo(tipo: TipoContato | TipoBobina | 'ctu'): string {
+function rotuloTipo(tipo: TipoContato | TipoBobina | TipoBloco): string {
+  if (ehTipoBloco(tipo)) return descritorDe(tipo).rotulo
   switch (tipo) {
     case 'contato_na':
       return 'contato NA'
@@ -371,8 +376,6 @@ function rotuloTipo(tipo: TipoContato | TipoBobina | 'ctu'): string {
       return 'bobina SET'
     case 'bobina_reset':
       return 'bobina RESET'
-    case 'ctu':
-      return 'contador CTU'
   }
 }
 
@@ -389,7 +392,7 @@ function rotuloCelula(
   coluna: number,
   elemento: Elemento | undefined,
   problema?: ResumoProblema | null,
-  ehLinhaReset?: boolean,
+  rotuloLinhaControle?: string | null,
   /** `undefined` fora de simulação — nenhum sufixo. `true`/`false` em
    * simulação — sufixo ", energizado"/", desenergizado" (spec 004, tarefa
    * #10). */
@@ -398,8 +401,8 @@ function rotuloCelula(
   const base =
     linha === 0
       ? `Degrau ${indiceDegrau + 1}, coluna ${coluna + 1}`
-      : ehLinhaReset
-        ? `Degrau ${indiceDegrau + 1}, reset do contador, coluna ${coluna + 1}`
+      : rotuloLinhaControle
+        ? `Degrau ${indiceDegrau + 1}, ${rotuloLinhaControle}, coluna ${coluna + 1}`
         : `Degrau ${indiceDegrau + 1}, ramo ${linha}, coluna ${coluna + 1}`
   const conteudo = !elemento ? `${base}, vazia` : `${base}, ${rotuloTipo(elemento.tipo)} ${variavelDoElemento(elemento) ?? 'sem variável'}`
   const comProblema = !problema ? conteudo : `${conteudo}, ${problema.severidade}: ${problema.mensagem}`
@@ -469,6 +472,13 @@ function colunaSobPonteiro(clientX: number, svgLeft: number, larguraCelula: numb
   return Math.max(0, Math.min(COLUNAS_POR_DEGRAU - 1, coluna))
 }
 
+function valorInternoDoBloco(instancia: string, blocos?: Record<string, EstadoBlocoSim> | null): number | undefined {
+  if (blocos === undefined || blocos === null) return undefined
+  const estado = blocos[instancia]
+  if (estado === undefined) return undefined
+  return estado.familia === 'contador' ? estado.contagem : estado.etMs
+}
+
 export default function GradeDegrau({
   rung,
   indice,
@@ -492,6 +502,7 @@ export default function GradeDegrau({
   aoInserirDegrauAbaixo,
   aoRemoverDegrau,
   energizacao,
+  blocosSim,
   congelado,
 }: GradeDegrauProps) {
   const problemaRung = problemaDoRung(problemas)
@@ -550,15 +561,16 @@ export default function GradeDegrau({
   // por uma prévia de inserir/mover um CTU ainda não aplicada) também conta
   // para a maior linha em uso — a altura do degrau precisa caber a caixa
   // inteira, não só o trilho principal.
-  const ctuDoRung = rung.elementos.find(ehCtu)
-  const linhaResetPrevia = previa?.tipo === 'inserir' && previa.elemento === 'ctu' ? previa.linhaReset : undefined
+  const bloco = blocoDoRungFn(rung)
+  const linhaControlePrevia =
+    previa?.tipo === 'inserir' && ehTipoBloco(previa.elemento) ? previa.linhaControle : undefined
   const linhasEmUso = rung.ramos.map((r) => r.linha)
   const maiorLinha = Math.max(
     0,
     ...linhasEmUso,
     ...(previaRamoCriar ? [previaRamoCriar.linha] : []),
-    ctuDoRung?.linhaReset ?? 0,
-    linhaResetPrevia ?? 0,
+    bloco?.linhaControle ?? 0,
+    linhaControlePrevia ?? 0,
   )
 
   const largura = MARGEM_ESQUERDA + MARGEM_DIREITA + COLUNAS_POR_DEGRAU * larguraCelula
@@ -590,7 +602,7 @@ export default function GradeDegrau({
     coluna: number,
     ehTerminal: boolean,
     ramoId?: string,
-    ehLinhaReset?: boolean,
+    ehLinhaControle?: boolean,
   ) {
     const celula: Celula = { linha, coluna }
     const elemento = encontrarElemento(rung, celula)
@@ -617,12 +629,15 @@ export default function GradeDegrau({
         ? (energizacao.elementos[elemento.id] ?? false)
         : celulaEnergizada(energizacao, linha, coluna)
 
+    const rotuloCtrl =
+      ehLinhaControle && bloco !== undefined ? descritorDe(bloco.tipo).controle?.rotuloLinha ?? null : null
+
     return (
       <g
         key={`${linha}:${coluna}`}
         tabIndex={0}
         role="button"
-        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui, ehLinhaReset, estadoEnergizado)}
+        aria-label={rotuloCelula(indice, linha, coluna, elemento, problemaAqui, rotuloCtrl, estadoEnergizado)}
         aria-selected={ativo}
         aria-invalid={recusada ? 'true' : undefined}
         data-terminal={ehTerminal ? 'true' : undefined}
@@ -704,21 +719,27 @@ export default function GradeDegrau({
             energizado={estadoEnergizado}
           />
         )}
-        {elemento?.tipo === 'ctu' && (
-          <SimboloCtu
+        {elemento !== undefined && ehBloco(elemento) && (
+          <SimboloBloco
             cx={centroX}
             yTopo={yDaLinha(0) - ALTURA_LINHA / 2}
-            yBase={yDaLinha(elemento.linhaReset) + ALTURA_LINHA / 2}
+            yBase={
+              elemento.linhaControle !== null
+                ? yDaLinha(elemento.linhaControle) + ALTURA_LINHA / 2
+                : yDaLinha(0) + ALTURA_LINHA / 2
+            }
             largura={larguraCelula}
-            yEntradaCu={yDaLinha(0)}
-            yEntradaR={yDaLinha(elemento.linhaReset)}
+            yEntradaPrincipal={yDaLinha(0)}
+            yEntradaControle={elemento.linhaControle !== null ? yDaLinha(elemento.linhaControle) : undefined}
+            tipo={elemento.tipo}
             instancia={elemento.instancia}
-            pv={elemento.pv}
+            preset={elemento.preset}
             saida={elemento.saida}
             endereco={endereco}
             selecionado={ativo}
             perigo={ehRemocaoAqui}
-            cuEnergizado={estadoEnergizado}
+            entradaEnergizada={estadoEnergizado}
+            valorInterno={valorInternoDoBloco(elemento.instancia, blocosSim)}
           />
         )}
         {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'contato_na' && (
@@ -736,16 +757,25 @@ export default function GradeDegrau({
         {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'bobina_reset' && (
           <BobinaReset cx={centroX} cy={y} variavel={null} selecionado={false} fantasma />
         )}
-        {!elemento && previaAqui?.tipo === 'inserir' && previaAqui.elemento === 'ctu' && (
-          <SimboloCtu
+        {!elemento && previaAqui?.tipo === 'inserir' && ehTipoBloco(previaAqui.elemento) && (
+          <SimboloBloco
             cx={centroX}
             yTopo={yDaLinha(0) - ALTURA_LINHA / 2}
-            yBase={yDaLinha(previaAqui.linhaReset ?? 1) + ALTURA_LINHA / 2}
+            yBase={
+              (previaAqui.linhaControle ?? null) !== null
+                ? yDaLinha(previaAqui.linhaControle ?? 1) + ALTURA_LINHA / 2
+                : yDaLinha(0) + ALTURA_LINHA / 2
+            }
             largura={larguraCelula}
-            yEntradaCu={yDaLinha(0)}
-            yEntradaR={yDaLinha(previaAqui.linhaReset ?? 1)}
+            yEntradaPrincipal={yDaLinha(0)}
+            yEntradaControle={
+              previaAqui.linhaControle !== undefined && previaAqui.linhaControle !== null
+                ? yDaLinha(previaAqui.linhaControle)
+                : undefined
+            }
+            tipo={previaAqui.elemento}
             instancia="?"
-            pv={PV_PADRAO}
+            preset={previaAqui.elemento === 'ton' || previaAqui.elemento === 'tof' ? PT_PADRAO : PV_PADRAO}
             saida={null}
             selecionado={false}
             fantasma
@@ -968,16 +998,17 @@ export default function GradeDegrau({
            * entrada R do bloco de função. Também vira um segmento por coluna
            * (mesma razão da linha 0), lido de `energizacao.celulas` na linha
            * de reset. */}
-          {ctuDoRung &&
+          {bloco?.linhaControle !== null &&
+            bloco?.linhaControle !== undefined &&
             Array.from({ length: COLUNA_TERMINAL }, (_, coluna) => {
-              const seg = estiloTraco(celulaEnergizada(energizacao, ctuDoRung.linhaReset, coluna))
+              const seg = estiloTraco(celulaEnergizada(energizacao, bloco.linhaControle as number, coluna))
               return (
                 <line
                   key={`fio-reset-${coluna}`}
                   x1={xDaColuna(coluna)}
-                  y1={yDaLinha(ctuDoRung.linhaReset)}
+                  y1={yDaLinha(bloco.linhaControle as number)}
                   x2={xDaColuna(coluna) + larguraCelula}
-                  y2={yDaLinha(ctuDoRung.linhaReset)}
+                  y2={yDaLinha(bloco.linhaControle as number)}
                   strokeWidth={seg.largura}
                   aria-hidden="true"
                   className={seg.classe}
@@ -1013,8 +1044,11 @@ export default function GradeDegrau({
            * fora (ocupada pelo corpo do CTU, desenhado na célula (0,
            * COLUNA_TERMINAL) acima, não aqui: sem célula própria, não é
            * soltável). */}
-          {ctuDoRung &&
-            Array.from({ length: COLUNA_TERMINAL }, (_, coluna) => celulaGrade(ctuDoRung.linhaReset, coluna, false, undefined, true))}
+          {bloco?.linhaControle !== null &&
+            bloco?.linhaControle !== undefined &&
+            Array.from({ length: COLUNA_TERMINAL }, (_, coluna) =>
+              celulaGrade(bloco.linhaControle as number, coluna, false, undefined, true),
+            )}
 
           {rung.ramos
             .filter((ramo) => !ehRamoDeSaida(ramo))

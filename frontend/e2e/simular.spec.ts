@@ -96,7 +96,7 @@ async function abrirProjetoSemeado(page: Page, titulo: string, diagrama: typeof 
   await page.evaluate(() => window.localStorage.clear())
   await page.evaluate(
     ({ chave, projeto }) => window.localStorage.setItem(chave, JSON.stringify(projeto)),
-    { chave: CHAVE_PROJETO, projeto: { versao: 1 as const, titulo, linguagem: 'ld' as const, diagrama } },
+    { chave: CHAVE_PROJETO, projeto: { versao: 2 as const, titulo, linguagem: 'ld' as const, diagrama } },
   )
   await page.reload()
 }

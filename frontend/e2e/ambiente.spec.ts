@@ -14,7 +14,7 @@ test('ambiente: modal, janela, simulação e fechar pelo x', async ({ page }) =>
       localStorage.setItem(
         chave,
         JSON.stringify({
-          versao: 1,
+          versao: 2,
           titulo: 'Portão e2e',
           linguagem: 'ld',
           diagrama,

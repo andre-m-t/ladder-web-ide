@@ -39,7 +39,7 @@ describe('conteudoProjetoJson', () => {
       versao: 1,
       titulo: 'Sem título',
       linguagem: 'ld',
-      diagrama: { versao: 1, rungs: [], variaveis: [] },
+      diagrama: { versao: 2, rungs: [], variaveis: [] },
     }
 
     const conteudo = conteudoProjetoJson(projeto)

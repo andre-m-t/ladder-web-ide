@@ -19,7 +19,7 @@
  *      `preventDefault` no `pointerdown`, então precisa ser um arrasto de
  *      verdade, com passos intermediários, não um clique/drop sintético) —
  *      confirma "Problemas 0", recarrega e checa que o mesmo diagrama
- *      continua nas mesmas células, com o envelope `{ versao: 1, linguagem:
+ *      continua nas mesmas células, com o envelope `{ versao: 2, linguagem:
  *      'ld', diagrama }` em `localStorage['ladderflow:projeto']`.
  *   2. "Novo projeto", em seguida, a partir desse projeto com conteúdo:
  *      confirma o descarte, cria um projeto "Semáforo" em Texto Estruturado
@@ -237,7 +237,7 @@ test.describe('Migração de ladderflow:diagrama (formato anterior à tarefa #26
     // forma da fixture IO_ESPELHO): contato NA em "entrada" (%IX0.1) na
     // coluna 1, bobina em "saida" (%QX0.1) na coluna terminal (índice 7 = coluna 8).
     const diagramaAntigo = {
-      versao: 1,
+      versao: 2,
       variaveis: [
         { nome: 'entrada', tipo: 'BOOL', endereco: '%IX0.1' },
         { nome: 'saida', tipo: 'BOOL', endereco: '%QX0.1' },
@@ -255,7 +255,7 @@ test.describe('Migração de ladderflow:diagrama (formato anterior à tarefa #26
     }
 
     await page.evaluate(
-      ({ chave, diagrama }) => window.localStorage.setItem(chave, JSON.stringify({ versao: 1, diagrama })),
+      ({ chave, diagrama }) => window.localStorage.setItem(chave, JSON.stringify({ versao: 2, diagrama })),
       { chave: CHAVE_DIAGRAMA, diagrama: diagramaAntigo },
     )
 

@@ -32,7 +32,7 @@ describe('vinculo endereço', () => {
   })
 })
 
-const VAZIO: Diagrama = { versao: 1, variaveis: [], rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
+const VAZIO: Diagrama = { versao: 2, variaveis: [], rungs: [{ id: 'r1', elementos: [], ramos: [] }] }
 
 function ponto(rotulo: string, extra: Partial<PontoAmbiente> = {}): PontoAmbiente {
   return { endereco: '%IX0.0', direcao: 'entrada', papel: 'sensor', rotulo, ...extra }

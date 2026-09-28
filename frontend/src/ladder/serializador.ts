@@ -36,16 +36,17 @@ import {
   COLUNA_TERMINAL,
   ehBobina,
   ehContato,
-  ehCtu,
+  ehBloco,
   ehRamoDeSaida,
   ehTerminal,
   variavelDoElemento,
   type Diagrama,
   type Elemento,
-  type ElementoCtu,
+  type ElementoBloco,
   type Rung,
   type TipoBobina,
 } from './modelo'
+import { DESCRITORES, descritorDe } from './blocos'
 
 // -- Contrato (plano §5) --------------------------------------------------
 
@@ -124,39 +125,44 @@ function validarNomesDeVariaveis(diagrama: Diagrama): string | null {
  * do programa gerado, colisão (case-insensitive) com o nome de uma variável
  * ou de outra instância, ou `pv` que não seja inteiro em 1..32767. Devolve o
  * motivo em português, ou `null` se todas as instâncias são aceitáveis. Não
- * valida `linhaReset` em si — a estrutura do diagrama (posição do CTU, forma
+ * valida `linhaControle` em si — a estrutura do diagrama (posição do CTU, forma
  * da linha de reset) é responsabilidade de `validarDiagrama` (D-6, Q-2), não
  * deste arquivo.
  */
-function validarInstanciasCtu(diagrama: Diagrama): string | null {
+function validarInstanciasBloco(diagrama: Diagrama): string | null {
   const nomesDeVariaveis = new Set(diagrama.variaveis.map((v) => v.nome.toLowerCase()))
   const instanciasVistas = new Map<string, string>()
 
   for (let indiceDegrau = 0; indiceDegrau < diagrama.rungs.length; indiceDegrau++) {
     const rung = diagrama.rungs[indiceDegrau]
     for (const elemento of rung.elementos) {
-      if (!ehCtu(elemento)) continue
+      if (!ehBloco(elemento)) continue
       const instancia = elemento.instancia
       const chave = instancia.toLowerCase()
       const localizacao = `degrau ${indiceDegrau + 1}, elemento '${elemento.id}'`
+      const desc = descritorDe(elemento.tipo)
 
       if (PALAVRAS_RESERVADAS_IEC.has(instancia.toUpperCase())) {
-        return `instância de CTU inválida para o texto gerado: '${instancia}' é palavra reservada da IEC 61131-3 (${localizacao})`
+        return `instância de ${desc.rotuloCurto} inválida para o texto gerado: '${instancia}' é palavra reservada da IEC 61131-3 (${localizacao})`
       }
       if (NOMES_FIXOS.has(chave)) {
-        return `instância de CTU inválida para o texto gerado: '${instancia}' coincide com um nome fixo do programa gerado (prog0, Config0, Res0, task0 ou instance0) (${localizacao})`
+        return `instância de ${desc.rotuloCurto} inválida para o texto gerado: '${instancia}' coincide com um nome fixo do programa gerado (prog0, Config0, Res0, task0 ou instance0) (${localizacao})`
       }
       if (nomesDeVariaveis.has(chave)) {
-        return `instância de CTU '${instancia}' colide com o nome de uma variável — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
+        return `instância '${instancia}' colide com o nome de uma variável — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
       }
       const existente = instanciasVistas.get(chave)
       if (existente !== undefined) {
-        return `instâncias de CTU '${existente}' e '${instancia}' colidem — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
+        return `instâncias '${existente}' e '${instancia}' colidem — identificadores IEC 61131-3 não distinguem maiúsculas/minúsculas (${localizacao})`
       }
       instanciasVistas.set(chave, instancia)
 
-      if (!Number.isInteger(elemento.pv) || elemento.pv < 1 || elemento.pv > 32767) {
-        return `valor programado (PV) do CTU '${instancia}' inválido: ${elemento.pv} — precisa ser um número inteiro entre 1 e 32767 (${localizacao})`
+      const { min, max, passo } = desc.preset
+      if (!Number.isInteger(elemento.preset) || elemento.preset < min || elemento.preset > max) {
+        return `${desc.preset.formal} do bloco '${instancia}' inválido: ${elemento.preset} — precisa ser inteiro entre ${min} e ${max} (${localizacao})`
+      }
+      if (passo > 1 && elemento.preset % passo !== 0) {
+        return `${desc.preset.formal} do bloco '${instancia}' inválido: ${elemento.preset} — precisa ser múltiplo de ${passo} (${localizacao})`
       }
     }
   }
@@ -178,6 +184,9 @@ function motivoTipoDesconhecido(tipo: Elemento['tipo']): string | null {
     case 'bobina_set':
     case 'bobina_reset':
     case 'ctu':
+    case 'ctd':
+    case 'ton':
+    case 'tof':
       return null
     default: {
       const tipoForjado: never = tipo
@@ -455,7 +464,7 @@ function emitirBobina(tipo: TipoBobina, nome: string, expressao: string): string
 
 /**
  * Expressão de `R` (reinício) do CTU: série (AND, em ordem de coluna) dos
- * contatos de `linhaReset`, colunas `0..COLUNA_TERMINAL-1`, a partir do
+ * contatos de `linhaControle`, colunas `0..COLUNA_TERMINAL-1`, a partir do
  * trilho esquerdo — NA → nome, NF → `NOT` nome, célula vazia conduz (é
  * neutra no AND, como em qualquer série). Não usa `construirArestas`: essa
  * linha não é um ramo (não está em `rung.ramos`), então nunca entra no
@@ -468,11 +477,11 @@ function emitirBobina(tipo: TipoBobina, nome: string, expressao: string): string
  * desenhou o degrau inteiro só com a bobina; aqui a linha de reset pode
  * simplesmente não ter sido usada.
  */
-function calcularExpressaoDeReset(rung: Rung, linhaReset: number): string {
+function calcularExpressaoDeControle(rung: Rung, linhaControle: number): string {
   const termos: Termo[] = []
   for (let coluna = 0; coluna < COLUNA_TERMINAL; coluna++) {
     const elemento = rung.elementos.find(
-      (e) => e.celula.linha === linhaReset && e.celula.coluna === coluna && ehContato(e.tipo),
+      (e) => e.celula.linha === linhaControle && e.celula.coluna === coluna && ehContato(e.tipo),
     )
     if (elemento === undefined) continue
     termos.push(criarVar(variavelDoElemento(elemento) as string, elemento.tipo === 'contato_nf'))
@@ -481,16 +490,25 @@ function calcularExpressaoDeReset(rung: Rung, linhaReset: number): string {
   return renderizarTermo(criarE(termos))
 }
 
-/** Linhas ST de um CTU já com a expressão de `CU` calculada (revisão
- * aditiva do D-2): a chamada da instância, seguida da leitura de `Q` para a
- * variável de saída — mesmo par de linhas de `variante K` (spike
- * `spikes/modelo/preset25/`), na mesma ordem. */
-function emitirCtu(rung: Rung, ctu: ElementoCtu, expressaoCU: string): string[] {
-  const expressaoReset = calcularExpressaoDeReset(rung, ctu.linhaReset)
-  return [
-    `  ${ctu.instancia}(CU := ${expressaoCU}, R := ${expressaoReset}, PV := ${ctu.pv});`,
-    `  ${ctu.saida} := ${ctu.instancia}.Q;`,
-  ]
+function formatarTempoMs(ms: number): string {
+  return `T#${ms}ms`
+}
+
+function emitirBloco(rung: Rung, bloco: ElementoBloco, expressaoPrincipal: string): string[] {
+  const desc = descritorDe(bloco.tipo)
+  const args: string[] = [`${desc.entradaPrincipal} := ${expressaoPrincipal}`]
+
+  if (desc.controle !== null && bloco.linhaControle !== null) {
+    args.push(`${desc.controle.formal} := ${calcularExpressaoDeControle(rung, bloco.linhaControle)}`)
+  }
+
+  if (desc.preset.formal === 'PT') {
+    args.push(`${desc.preset.formal} := ${formatarTempoMs(bloco.preset)}`)
+  } else {
+    args.push(`${desc.preset.formal} := ${bloco.preset}`)
+  }
+
+  return [`  ${bloco.instancia}(${args.join(', ')});`, `  ${bloco.saida} := ${bloco.instancia}.Q;`]
 }
 
 // -- Montagem do degrau (D-7, D-8) ----------------------------------------
@@ -535,8 +553,8 @@ function emitirDegrau(rung: Rung, indiceDegrau: number): { ok: true; valor: Degr
   const termo = calcularExpressaoDoDegrau(rung)
   const expressao = renderizarTermo(termo)
   let linhasDoTerminal: string[]
-  if (ehCtu(elementoPrincipal)) {
-    linhasDoTerminal = emitirCtu(rung, elementoPrincipal, expressao)
+  if (ehBloco(elementoPrincipal)) {
+    linhasDoTerminal = emitirBloco(rung, elementoPrincipal, expressao)
   } else {
     linhasDoTerminal = bobinasNaColunaTerminal(rung).flatMap((bobina) =>
       emitirBobina(bobina.tipo as TipoBobina, variavelDoElemento(bobina) as string, expressao),
@@ -554,11 +572,13 @@ function emitirDegrau(rung: Rung, indiceDegrau: number): { ok: true; valor: Degr
  * não a ordem de inserção dos elementos dentro de cada um (só um terminal
  * CTU por degrau é uma invariante estrutural, não algo que este arquivo
  * precise impor). */
-function instanciasDeCtu(diagrama: Diagrama): string[] {
-  const instancias: string[] = []
+function instanciasDeBloco(diagrama: Diagrama): Array<{ instancia: string; tipoST: string }> {
+  const instancias: Array<{ instancia: string; tipoST: string }> = []
   for (const rung of diagrama.rungs) {
     for (const elemento of rung.elementos) {
-      if (ehCtu(elemento)) instancias.push(elemento.instancia)
+      if (ehBloco(elemento)) {
+        instancias.push({ instancia: elemento.instancia, tipoST: DESCRITORES[elemento.tipo].tipoST })
+      }
     }
   }
   return instancias
@@ -567,7 +587,7 @@ function instanciasDeCtu(diagrama: Diagrama): string[] {
 function linhasDeDeclaracao(diagrama: Diagrama): string[] {
   const localizadas = diagrama.variaveis.filter((v) => v.endereco !== undefined)
   const internas = diagrama.variaveis.filter((v) => v.endereco === undefined)
-  const instancias = instanciasDeCtu(diagrama)
+  const instancias = instanciasDeBloco(diagrama)
   const linhas: string[] = []
 
   if (localizadas.length > 0) {
@@ -578,7 +598,7 @@ function linhasDeDeclaracao(diagrama: Diagrama): string[] {
   if (internas.length > 0 || instancias.length > 0) {
     linhas.push('  VAR')
     for (const v of internas) linhas.push(`    ${v.nome} : BOOL;`)
-    for (const instancia of instancias) linhas.push(`    ${instancia} : CTU;`)
+    for (const { instancia, tipoST } of instancias) linhas.push(`    ${instancia} : ${tipoST};`)
     linhas.push('  END_VAR')
   }
 
@@ -613,8 +633,8 @@ export function serializar(diagrama: Diagrama): ResultadoSerializacao {
   const motivoNomes = validarNomesDeVariaveis(diagrama)
   if (motivoNomes !== null) return { ok: false, motivo: motivoNomes }
 
-  const motivoCtus = validarInstanciasCtu(diagrama)
-  if (motivoCtus !== null) return { ok: false, motivo: motivoCtus }
+  const motivoBlocos = validarInstanciasBloco(diagrama)
+  if (motivoBlocos !== null) return { ok: false, motivo: motivoBlocos }
 
   for (let indiceDegrau = 0; indiceDegrau < diagrama.rungs.length; indiceDegrau++) {
     const rung = diagrama.rungs[indiceDegrau]

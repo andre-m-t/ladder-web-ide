@@ -52,10 +52,10 @@
  * `ehTerminal` em `modelo.ts`) — nenhum código novo aqui além dos registros
  * de nome (`NOME_TIPO_PALETA`) e do símbolo certo no fantasma
  * (`GhostArrasto`). O CTU também é terminal (mira sempre a coluna 8, como
- * bobina) mas precisa de uma informação extra na prévia — a `linhaReset` que
- * o núcleo escolheria (`ctu.ts#linhaResetLivre`), sem a qual `GradeDegrau`
+ * bobina) mas precisa de uma informação extra na prévia — a `linhaControle` que
+ * o núcleo escolheria (`ctu.ts#linhaControleLivre`), sem a qual `GradeDegrau`
  * não sabe até onde desenhar a caixa fantasma — calculada comparando o
- * diagrama antes/depois da operação (`linhaResetPrevista`), nunca reimplementada
+ * diagrama antes/depois da operação (`linhaControlePrevista`), nunca reimplementada
  * aqui. O modal ganha o campo do limite (PV): `aoAlterarLimiteNoModal` chama
  * `ctu.ts#atualizarCtu` e usa o mesmo caminho de recusa (`aoRecusar`) das
  * demais jogadas.
@@ -109,9 +109,9 @@ import {
 } from '../../ladder/edicao'
 import type { ResultadoEdicao } from '../../ladder/edicao'
 import type { PontoAmbiente } from '../../ambientes/contrato'
-import { atualizarCtu } from '../../ladder/ctu'
-import { COLUNAS_POR_DEGRAU, ehCtu, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
-import type { EnergizacaoDegrau } from '../../ladder/simulacao'
+import { atualizarBloco } from '../../ladder/blocos'
+import { COLUNAS_POR_DEGRAU, ehBloco, ehTipoBloco, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
+import type { EnergizacaoDegrau, EstadoBlocoSim } from '../../ladder/simulacao'
 import { descreverCelula, type Problema } from '../../ladder/validacao'
 import GradeDegrau, { type PontaAlcaRamo, type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalConfirmarRemocaoDegrau from './ModalConfirmarRemocaoDegrau'
@@ -147,7 +147,7 @@ export interface EditorLadderProps {
   congelado?: boolean
   /** Energização por degrau, calculada pelo motor de simulação (RF-6, RF-14,
    * plano §5.4) — `null`/ausente é o comportamento de hoje (sem simulação). */
-  simulacao?: { energizacao: Record<string, EnergizacaoDegrau> } | null
+  simulacao?: { energizacao: Record<string, EnergizacaoDegrau>; blocos: Record<string, EstadoBlocoSim> } | null
   /** Pontos do ambiente aberto (spec 005, revisão 2026-09-23): no modal do
    * elemento, rotulam os pinos e sugerem o nome da variável nova. */
   pontosAmbiente?: readonly PontoAmbiente[]
@@ -199,6 +199,9 @@ const NOME_TIPO: Record<Elemento['tipo'], string> = {
   bobina_set: 'bobina SET',
   bobina_reset: 'bobina RESET',
   ctu: 'contador CTU',
+  ctd: 'contador CTD',
+  ton: 'temporizador TON',
+  tof: 'temporizador TOF',
 }
 
 const NOME_TIPO_PALETA: Record<TipoPaleta, string> = {
@@ -209,6 +212,9 @@ const NOME_TIPO_PALETA: Record<TipoPaleta, string> = {
   bobina_reset: 'bobina RESET',
   ramo: 'ramo',
   ctu: 'contador CTU',
+  ctd: 'contador CTD',
+  ton: 'temporizador TON',
+  tof: 'temporizador TOF',
 }
 
 function elementoNaCelula(diagrama: Diagrama, rungId: string, celula: Celula): Elemento | undefined {
@@ -256,22 +262,28 @@ function ramoAdicionado(antes: Diagrama, depois: Diagrama, rungId: string): Ramo
   return rungDepois.ramos.find((r) => !rungAntes.ramos.some((a) => a.id === r.id))
 }
 
-/** `linhaReset` que o núcleo escolheu (ou manteve) para o CTU em `rungId` de
+/** `linhaControle` que o núcleo escolheu (ou manteve) para o CTU em `rungId` de
  * `depois` (tarefa #18, mesmo espírito de `ramoAdicionado`): com
  * `elementoId` conhecido (mover um CTU já existente), busca direto por id;
  * sem ele (inserir um CTU novo da paleta, cujo id só existe depois de
  * `criarCtu`), acha o elemento CTU de `rungId` que não existia em `antes`.
  * `undefined` quando não há CTU nenhum a mostrar (ex.: jogada inválida). */
-function linhaResetPrevista(antes: Diagrama, depois: Diagrama, rungId: string, elementoId?: string): number | undefined {
+function linhaControlePrevista(
+  antes: Diagrama,
+  depois: Diagrama,
+  rungId: string,
+  elementoId?: string,
+): number | null | undefined {
   const rungDepois = depois.rungs.find((r) => r.id === rungId)
   if (rungDepois === undefined) return undefined
+  const ler = (elemento: Elemento | undefined) =>
+    elemento !== undefined && ehBloco(elemento) ? elemento.linhaControle : undefined
   if (elementoId !== undefined) {
-    const elemento = rungDepois.elementos.find((e) => e.id === elementoId)
-    return elemento !== undefined && ehCtu(elemento) ? elemento.linhaReset : undefined
+    return ler(rungDepois.elementos.find((e) => e.id === elementoId))
   }
   const idsAntes = new Set(antes.rungs.find((r) => r.id === rungId)?.elementos.map((e) => e.id) ?? [])
-  const novo = rungDepois.elementos.find((e) => !idsAntes.has(e.id) && ehCtu(e))
-  return novo !== undefined && ehCtu(novo) ? novo.linhaReset : undefined
+  const novo = rungDepois.elementos.find((e) => !idsAntes.has(e.id) && ehBloco(e))
+  return ler(novo)
 }
 
 /** Nome de exibição da origem do arrasto, para o anúncio de `aria-live`. */
@@ -304,8 +316,8 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
     const alvo = celulaDeSoltura(origem.tipo, celula, rung)
     const resultado = inserirElemento(diagrama, rungId, origem.tipo, alvo)
     if (resultado.ok) {
-      const linhaReset = origem.tipo === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId) : undefined
-      return { celula: alvo, tipo: 'inserir', elemento: origem.tipo, linhaReset }
+      const linhaControle = ehTipoBloco(origem.tipo) ? linhaControlePrevista(diagrama, resultado.diagrama, rungId) : undefined
+      return { celula: alvo, tipo: 'inserir', elemento: origem.tipo, linhaControle: linhaControle ?? undefined }
     }
     return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
   }
@@ -315,8 +327,8 @@ function calcularPreviaArrasto(diagrama: Diagrama, origem: OrigemArrasto, rungId
   const alvo = celulaDeSoltura(tipoOrigem, celula, rungMover, origem.elementoId)
   const resultado = moverElemento(diagrama, origem.elementoId, rungId, alvo)
   if (resultado.ok) {
-    const linhaReset = tipoOrigem === 'ctu' ? linhaResetPrevista(diagrama, resultado.diagrama, rungId, origem.elementoId) : undefined
-    return { celula: alvo, tipo: 'inserir', elemento: tipoOrigem, linhaReset }
+    const linhaControle = ehTipoBloco(tipoOrigem) ? linhaControlePrevista(diagrama, resultado.diagrama, rungId, origem.elementoId) : undefined
+    return { celula: alvo, tipo: 'inserir', elemento: tipoOrigem, linhaControle: linhaControle ?? undefined }
   }
   return { celula: alvo, tipo: 'invalida', motivo: resultado.motivo }
 }
@@ -1213,7 +1225,7 @@ export default function EditorLadder({
     if (congelado) return
     if (!modal) return
     const achado = encontrarElementoPorId(diagrama, modal.elementoId)
-    const resultado = atualizarCtu(diagrama, modal.elementoId, { pv })
+    const resultado = atualizarBloco(diagrama, modal.elementoId, { preset: pv })
     if (resultado.ok) {
       aoMudar(resultado.diagrama)
       setRecusa(null)
@@ -1321,6 +1333,7 @@ export default function EditorLadder({
               aoInserirDegrauAbaixo={() => aoInserirDegrauAbaixoDe(rung.id)}
               aoRemoverDegrau={() => aoRemoverDegrauHandler(rung.id)}
               energizacao={simulacao?.energizacao[rung.id] ?? null}
+              blocosSim={simulacao?.blocos ?? null}
               congelado={congelado}
             />
           )

@@ -201,7 +201,9 @@ contato NA, contato NF, bobina simples, bobina SET, bobina RESET, ramo
 paralelo (OU) e contador crescente (CTU) — é o que essas fixtures exigem.
 
 **Impacto:** temporizadores (TON/TOF) e contador decrescente (CTD) ficam fora
-do editor, do serializador e do simulador. As linguagens gráficas FBD e SFC e
+do editor, do serializador e do simulador. *(Revisão aditiva 2026-09-28, spec
+006: TON, TOF e CTD passam a integrar o subconjunto; este parágrafo descreve o
+estado anterior.)* As linguagens gráficas FBD e SFC e
 a linguagem textual IL (Instruction List) da norma não são suportadas em
 nenhuma camada — o projeto cobre Ladder e Structured Text.
 

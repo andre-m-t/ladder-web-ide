@@ -410,9 +410,9 @@ describe('GradeDegrau — CTU (tarefa #18, D-19)', () => {
         id: 'e3',
         tipo: 'ctu' as const,
         celula: { linha: 0, coluna: 7 },
-        linhaReset: 1,
+        linhaControle: 1,
         instancia: 'ctu0',
-        pv: 12,
+        preset: 12,
         saida: 'atingiu',
       },
     ],
@@ -422,20 +422,20 @@ describe('GradeDegrau — CTU (tarefa #18, D-19)', () => {
   it('a célula terminal (linha 0, coluna 8) mostra a caixa do CTU: rótulo, instância, PV e saída', () => {
     render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} />)
 
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu' })
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, Contador crescente atingiu' })
     expect(celula.textContent).toContain('CTU')
     expect(celula.textContent).toContain('ctu0')
     expect(celula.textContent).toContain('PV=12')
     expect(celula.textContent).toContain('Q → atingiu')
   })
 
-  it('a linha de reset tem células focáveis com o rótulo "reset do contador", exceto na coluna terminal', () => {
+  it('a linha de reset tem células focáveis com o rótulo "reinício do contador", exceto na coluna terminal', () => {
     render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} />)
 
-    expect(screen.getByRole('button', { name: 'Degrau 1, reset do contador, coluna 1, contato NA reset_ctu' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Degrau 1, reset do contador, coluna 2, vazia' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, reinício do contador, coluna 1, contato NA reset_ctu' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Degrau 1, reinício do contador, coluna 2, vazia' })).toBeInTheDocument()
     // coluna 8 (terminal) da linha de reset não existe como célula própria — é a caixa do CTU.
-    expect(screen.queryByRole('button', { name: /reset do contador, coluna 8/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /reinício do contador, coluna 8/i })).not.toBeInTheDocument()
   })
 
   it('desenha um traço reto do trilho esquerdo até a caixa, na altura da linha de reset (sem conectores de ramo)', () => {
@@ -459,9 +459,9 @@ describe('GradeDegrau — CTU (tarefa #18, D-19)', () => {
     expect(alturaComCtu).toBeGreaterThan(alturaSemCtu)
   })
 
-  it('prévia de inserir um CTU novo desenha a caixa fantasma na coluna terminal, usando a linhaReset informada', () => {
+  it('prévia de inserir um CTU novo desenha a caixa fantasma na coluna terminal, usando a linhaControle informada', () => {
     const rungVazio = { id: 'r1', elementos: [], ramos: [] }
-    const previa: Previa = { celula: { linha: 0, coluna: 7 }, tipo: 'inserir', elemento: 'ctu', linhaReset: 1 }
+    const previa: Previa = { celula: { linha: 0, coluna: 7 }, tipo: 'inserir', elemento: 'ctu', linhaControle: 1 }
     render(<GradeDegrau rung={rungVazio} indice={0} {...propsBase()} previa={previa} />)
 
     const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, vazia' })
@@ -859,7 +859,7 @@ describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/C
       elementos: [
         { id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
         { id: 'e2', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
-        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaReset: 1, instancia: 'ctu0', pv: 12, saida: 'atingiu' },
+        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaControle: 1, instancia: 'ctu0', preset: 12, saida: 'atingiu' },
       ],
       ramos: [],
     }
@@ -870,7 +870,7 @@ describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/C
     }
     render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} energizacao={cuEnergizado} />)
 
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu, energizado' })
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, Contador crescente atingiu, energizado' })
     // o traço de CU (uma <line> extra dentro do símbolo do CTU) fica energizado...
     const linhaCu = celula.querySelector('line')
     expect(linhaCu?.getAttribute('class')).toContain('stroke-ide-energizado')
@@ -886,7 +886,7 @@ describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/C
       elementos: [
         { id: 'e1', tipo: 'contato_na' as const, celula: { linha: 0, coluna: 0 }, variavel: 'pulso' },
         { id: 'e2', tipo: 'contato_na' as const, celula: { linha: 1, coluna: 0 }, variavel: 'reset_ctu' },
-        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaReset: 1, instancia: 'ctu0', pv: 12, saida: 'atingiu' },
+        { id: 'e3', tipo: 'ctu' as const, celula: { linha: 0, coluna: 7 }, linhaControle: 1, instancia: 'ctu0', preset: 12, saida: 'atingiu' },
       ],
       ramos: [],
     }
@@ -897,7 +897,7 @@ describe('GradeDegrau — energização (spec 004, tarefa #10, RF-6/RF-14/CA-4/C
     }
     render(<GradeDegrau rung={rungComCtu} indice={0} {...propsBase()} energizacao={cuDesenergizado} />)
 
-    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, contador CTU atingiu, desenergizado' })
+    const celula = screen.getByRole('button', { name: 'Degrau 1, coluna 8, Contador crescente atingiu, desenergizado' })
     const linhaCu = celula.querySelector('line')
     expect(linhaCu?.getAttribute('class')).not.toContain('stroke-ide-energizado')
   })

@@ -1,5 +1,5 @@
 /**
- * Modelo de dados da grade Ladder (spec 002, plano D-2 e §5).
+ * Modelo de dados da grade Ladder (spec 002, plano D-2 e §5; spec 006 — blocos FB).
  *
  * Independente de renderização: nada aqui conhece React ou SVG. É o contrato
  * que o editor desenha e que o serializador (F8) e o simulador (F9) vão
@@ -7,8 +7,9 @@
  * do plano. Código autoral do projeto.
  *
  * A grade de um degrau é endereçada por (linha, coluna): a linha 0 é o trilho
- * principal; linhas > 0 só existem dentro de um ramo paralelo. Terminais
- * (bobinas) ocupam a última coluna da linha 0; contatos, as anteriores.
+ * principal; linhas > 0 só existem dentro de um ramo paralelo ou numa linha de
+ * controle de bloco (R/LD). Terminais (bobinas e blocos FB) ocupam a última
+ * coluna da linha 0; contatos, as anteriores.
  */
 
 /** Colunas de todo degrau (Q-3 da spec 002). A última é a dos terminais. */
@@ -40,26 +41,29 @@ export type ElementoSimples = {
   variavel: string | null
 }
 
+/** Blocos de função IEC na coluna terminal (spec 006). */
+export type TipoBloco = 'ctu' | 'ctd' | 'ton' | 'tof'
+
 /**
- * Contador crescente (Q-5/Q-7 da spec 002, plano D-2/D-7). Terminal, como a
- * bobina: ocupa a última coluna da linha 0, cujo caminho de contatos é a
- * entrada de contagem (CU). `linhaReset` é a linha extra cujos contatos, a
- * partir do trilho esquerdo, formam o caminho de reinício (R) — essa linha
- * não tem ramo nem outro terminal. `saida` recebe "atingiu o limite" (Q) e
- * é lida por outros degraus como contato; a contagem corrente não é exposta.
- * `instancia` é gerada na criação e não é editável. Regras em `ctu.ts`.
+ * Bloco de função na grade (CTU, CTD, TON, TOF — spec 006).
+ * A entrada principal (CU/CD/IN) vem do caminho de contatos na linha 0.
+ * `linhaControle`: linha extra para R (CTU) ou LD (CTD); `null` nos temporizadores.
+ * `preset`: PV em contagens (contadores) ou PT em ms (temporizadores).
  */
-export interface ElementoCtu {
+export interface ElementoBloco {
   id: string
-  tipo: 'ctu'
+  tipo: TipoBloco
   celula: Celula
-  linhaReset: number
+  linhaControle: number | null
   instancia: string
-  pv: number
+  preset: number
   saida: string | null
 }
 
-export type Elemento = ElementoSimples | ElementoCtu
+/** @deprecated Use `ElementoBloco` com `tipo: 'ctu'`. Mantido só para leitura de tipos legados em testes. */
+export type ElementoCtu = ElementoBloco & { tipo: 'ctu' }
+
+export type Elemento = ElementoSimples | ElementoBloco
 
 /** Ramo paralelo à linha 0, que sai dela em `colunaInicio` e volta em `colunaFim`. */
 export interface Ramo {
@@ -76,7 +80,7 @@ export interface Rung {
 }
 
 export interface Diagrama {
-  versao: 1
+  versao: 2
   variaveis: Variavel[]
   rungs: Rung[]
 }
@@ -89,20 +93,27 @@ export function ehBobina(tipo: Elemento['tipo']): tipo is TipoBobina {
   return tipo === 'bobina' || tipo === 'bobina_set' || tipo === 'bobina_reset'
 }
 
-/** Terminal = elemento da última coluna do trilho principal (bobinas e CTU). */
-export function ehTerminal(tipo: Elemento['tipo']): tipo is TipoBobina | 'ctu' {
-  return ehBobina(tipo) || tipo === 'ctu'
+export function ehTipoBloco(tipo: Elemento['tipo']): tipo is TipoBloco {
+  return tipo === 'ctu' || tipo === 'ctd' || tipo === 'ton' || tipo === 'tof'
 }
 
-export function ehCtu(elemento: Elemento): elemento is ElementoCtu {
+/** Terminal = bobina ou bloco FB na última coluna do trilho principal. */
+export function ehTerminal(tipo: Elemento['tipo']): tipo is TipoBobina | TipoBloco {
+  return ehBobina(tipo) || ehTipoBloco(tipo)
+}
+
+export function ehBloco(elemento: Elemento): elemento is ElementoBloco {
+  return ehTipoBloco(elemento.tipo)
+}
+
+/** @deprecated Preferir `ehBloco`. */
+export function ehCtu(elemento: Elemento): elemento is ElementoBloco & { tipo: 'ctu' } {
   return elemento.tipo === 'ctu'
 }
 
-/** Variável que o elemento lê ou escreve: `variavel` do contato/bobina ou
- * `saida` do CTU. Único ponto em que o resto do código precisa ignorar a
- * diferença de forma entre os dois. */
+/** Variável que o elemento lê ou escreve: `variavel` do contato/bobina ou `saida` do bloco. */
 export function variavelDoElemento(elemento: Elemento): string | null {
-  return ehCtu(elemento) ? elemento.saida : elemento.variavel
+  return ehBloco(elemento) ? elemento.saida : elemento.variavel
 }
 
 /** Coluna reservada aos terminais. */
