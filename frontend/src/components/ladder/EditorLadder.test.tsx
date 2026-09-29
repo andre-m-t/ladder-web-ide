@@ -111,7 +111,12 @@ function celulaPorPrefixo(prefixo: string): HTMLElement {
  * sem abrir o modal), clica de novo — segundo clique, no item já marcado —
  * para abrir `ModalVariavel`, e escolhe a variável.
  */
-async function arrastarEEscolher(usuario: ReturnType<typeof userEvent.setup>, rotuloItem: RegExp, rotuloCelulaVazia: string, nomeVariavel: string | null) {
+async function arrastarEEscolher(
+  usuario: ReturnType<typeof userEvent.setup>,
+  rotuloItem: string | RegExp,
+  rotuloCelulaVazia: string,
+  nomeVariavel: string | null,
+) {
   arrastar(screen.getByRole('button', { name: rotuloItem }), screen.getByRole('button', { name: rotuloCelulaVazia }))
 
   const celula = celulaPorPrefixo(prefixoCelula(rotuloCelulaVazia))
@@ -1544,7 +1549,7 @@ describe('EditorLadder — congelado (spec 004, tarefa #11, RF-15/CA-8)', () => 
       r1: { nos: { '0:0': true }, celulas: { '0:0': true }, elementos: { e1: true } },
     }
     expect(() =>
-      render(<EditorLadder diagrama={MINIMAL} aoMudar={vi.fn()} simulacao={{ energizacao }} />),
+      render(<EditorLadder diagrama={MINIMAL} aoMudar={vi.fn()} simulacao={{ energizacao, blocos: {} }} />),
     ).not.toThrow()
   })
 })

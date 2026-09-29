@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-28 (manifest.json ESP Web Tools no zip de firmware) · **Branch ativa:** `main`
+**Última atualização:** 2026-09-29 (build de produção: tipo `SimulacaoDiagrama`) · **Branch ativa:** `main`
 
 ## Legenda
 
@@ -678,7 +678,7 @@ O software do TCC está **completo até onde é possível sem ESP32 físico**: F
 1. **Decidir a Q-9** (marcha lenta) usando a ferramenta.
 2. **Coleta sistemática de métricas (F10).** O instrumento está completo: dois executores independentes. Métricas sem hardware podem ser fechadas — cobertura IEC e comparação com OpenPLC seguem ⬜.
 3. **Demonstração ao orientador** e **Dia do Hardware** quando houver ESP32 (`docs/validacao/dia-do-hardware.md`).
-4. Pendências menores: desenho de ramos cruzados (limitação declarada §1); `tsc` em `edicao.test.ts` (pré-existente).
+4. Pendências menores: desenho de ramos cruzados (limitação declarada §1).
 
 ## Bloqueado aguardando hardware
 
@@ -750,3 +750,4 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-28 | Botão Parar NF no portão (orientador) | Planta: `%IX0.2` verdadeiro em repouso e falso ao pressionar; cena `PARAR (NF)`; fixture `PORTAO` com contato NA em `parar`; dourados e `portao.toml` atualizados; revisão aditiva spec 005 |
 | 2026-09-28 | manifest.json no zip de firmware | `conteudoManifestEspWebTools` + entrada no ZIP; `gravacao.txt`/README com ESP Web Tools; teste vitest; revisão aditiva Q-1 spec 003 |
 | 2026-09-24 | Pacote INPI pronto para o hash | Caminho curto, motivado pela preparação do formulário do NIT. `--verificar` passou no commit `2e3f66c` com a árvore limpa. Três achados: (1) o script gerava **SHA-256** e o Manual do RPC recomenda **SHA-512** — o formulário preenchido pelo mesmo orientador em depósito anterior (`Formulario_INPI_CLP_Pedro-Robson.pdf`) declara `SHA512` com resumo de 128 caracteres, confirmado por contagem; script passou a gerar `.zip.sha512` e a imprimir o algoritmo a transcrever; (2) `frontend/src/ladder/fixtures.ts` vinha no pacote por não casar com `--exclude "*.test.ts"`, embora só testes e specs e2e o importem — excluído, pacote de 97 → **96 arquivos**; (3) `REQUIRED_FILES` tem 49 arquivos, não os 35 registrados aqui desde 2026-09-21. Nome `THIRD_PARTY.md` mantido por decisão do autor. `--verificar` reexecutado: exit 0, auditoria ok, nenhum arquivo de teste no pacote |
+| 2026-09-29 | Build de produção do frontend | Caminho curto. O `npm run build` do `Dockerfile.prod` caía no `tsc`: depois da spec 006, `App` e `EditorLadder` passam `blocos` na simulação, mas `AreaEditor` ainda tipava só a energização; o helper `arrastarEEscolher` aceitava só `RegExp` e três testes do CTU passam o rótulo em string. Tipo único `SimulacaoDiagrama`; `tsc --noEmit` limpo (a pendência antiga de `edicao.test.ts` também já não existe). O aviso de portas 8010/3010 no `deploy.sh` é o stack que já está no ar, não a causa da falha |

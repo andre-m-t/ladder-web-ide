@@ -97,6 +97,14 @@ export interface EstadoSimulacao {
   energizacao: Record<string, EnergizacaoDegrau>
 }
 
+/** Fatia de `EstadoSimulacao` que o editor pinta: energização de cada degrau
+ * e o estado interno dos blocos (CV/ET ao vivo). Um único tipo para `App`,
+ * `AreaEditor` e `EditorLadder`, para o contrato não divergir de novo. */
+export interface SimulacaoDiagrama {
+  energizacao: Record<string, EnergizacaoDegrau>
+  blocos: Record<string, EstadoBlocoSim>
+}
+
 /** Recusa de acionamento, no mesmo formato das operações de `edicao.ts`. */
 export type ResultadoAcionamento =
   | { ok: true; estado: EstadoSimulacao }

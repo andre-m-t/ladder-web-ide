@@ -85,10 +85,10 @@
  * seu.
  *
  * `simulacao` (RF-6, RF-14): quando presente, traz a energização de cada
- * degrau (`EnergizacaoDegrau`, `ladder/simulacao.ts`) calculada pelo núcleo
- * de simulação — este componente só repassa `simulacao.energizacao[rung.id]`
- * a cada `GradeDegrau`, pela prop `energizacao` (contrato do plano §5.4,
- * frente D); não interpreta o conteúdo.
+ * degrau e o estado interno dos blocos (`SimulacaoDiagrama`,
+ * `ladder/simulacao.ts`) calculados pelo núcleo de simulação — este
+ * componente só repassa `simulacao.energizacao[rung.id]` e
+ * `simulacao.blocos` a cada `GradeDegrau`; não interpreta o conteúdo.
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { GitBranch, Plus } from 'lucide-react'
@@ -111,7 +111,7 @@ import type { ResultadoEdicao } from '../../ladder/edicao'
 import type { PontoAmbiente } from '../../ambientes/contrato'
 import { atualizarBloco } from '../../ladder/blocos'
 import { COLUNAS_POR_DEGRAU, ehBloco, ehTipoBloco, type Celula, type Diagrama, type Elemento, type Ramo } from '../../ladder/modelo'
-import type { EnergizacaoDegrau, EstadoBlocoSim } from '../../ladder/simulacao'
+import type { SimulacaoDiagrama } from '../../ladder/simulacao'
 import { descreverCelula, type Problema } from '../../ladder/validacao'
 import GradeDegrau, { type PontaAlcaRamo, type Previa, type PreviaAlca } from './GradeDegrau'
 import ModalConfirmarRemocaoDegrau from './ModalConfirmarRemocaoDegrau'
@@ -145,9 +145,10 @@ export interface EditorLadderProps {
   /** Simulação ativa (spec 004, RF-15, D-9): nenhuma edição, nenhum arrasto,
    * nenhuma paleta ativa, nenhuma remoção — ver o comentário do arquivo. */
   congelado?: boolean
-  /** Energização por degrau, calculada pelo motor de simulação (RF-6, RF-14,
-   * plano §5.4) — `null`/ausente é o comportamento de hoje (sem simulação). */
-  simulacao?: { energizacao: Record<string, EnergizacaoDegrau>; blocos: Record<string, EstadoBlocoSim> } | null
+  /** Energização por degrau e estado dos blocos, calculados pelo motor de
+   * simulação (RF-6, RF-14, plano §5.4) — `null`/ausente é o comportamento
+   * de hoje (sem simulação). */
+  simulacao?: SimulacaoDiagrama | null
   /** Pontos do ambiente aberto (spec 005, revisão 2026-09-23): no modal do
    * elemento, rotulam os pinos e sugerem o nome da variável nova. */
   pontosAmbiente?: readonly PontoAmbiente[]
