@@ -55,6 +55,33 @@ function nomeArquivoImagem(chave: string): string {
   return NOME_ARQUIVO_IMAGEM[chave] ?? `${chave}.bin`
 }
 
+/** Versão do manifesto ESP Web Tools — alinhada a `frontend/package.json`. */
+const VERSAO_FIRMWARE_MANIFEST = '0.1.0'
+
+function chipFamilyEspWebTools(chip: string): string {
+  if (chip === 'esp32') return 'ESP32'
+  return chip.toUpperCase()
+}
+
+/** `manifest.json` no formato [ESP Web Tools](https://esphome.github.io/esp-web-tools/). */
+export function conteudoManifestEspWebTools(pacote: Pacote): string {
+  const manifest = {
+    name: 'LadderFlow',
+    version: VERSAO_FIRMWARE_MANIFEST,
+    new_install_prompt_erase: true,
+    builds: [
+      {
+        chipFamily: chipFamilyEspWebTools(pacote.chip),
+        parts: pacote.images.map((imagem) => ({
+          path: nomeArquivoImagem(imagem.name),
+          offset: imagem.offset,
+        })),
+      },
+    ],
+  }
+  return JSON.stringify(manifest, null, 2) + '\n'
+}
+
 function base64ParaBytes(b64: string): Uint8Array {
   const bin = atob(b64)
   const out = new Uint8Array(bin.length)
@@ -128,6 +155,12 @@ export function conteudoGravacaoTxt(pacote: Pacote): string {
 
   linhas.push(
     '',
+    'ESP Web Tools (instalador web do ESPHome e similares):',
+    '  O arquivo manifest.json deste zip segue o formato do ESP Web Tools.',
+    '  Os caminhos em "parts" são relativos ao manifest.json — publique a pasta',
+    '  descompactada inteira em um servidor HTTP (ou use uma página que aponte',
+    '  para esse manifest.json). O instalador não lê um zip local diretamente.',
+    '',
     'Exemplo com esptool (ajuste a porta serial):',
     '',
     `esptool.py --chip ${pacote.chip} -p PORTA write_flash -z \\`,
@@ -139,13 +172,14 @@ export function conteudoGravacaoTxt(pacote: Pacote): string {
   return linhas.join('\n')
 }
 
-/** Monta um ZIP (método STORE, sem compressão) com as imagens e `gravacao.txt`. */
+/** Monta um ZIP (método STORE, sem compressão) com as imagens, `manifest.json` e `gravacao.txt`. */
 export function montarZipFirmware(pacote: Pacote): Blob {
   const entradas: { nome: string; dados: Uint8Array }[] = [
     ...pacote.images.map((imagem) => ({
       nome: nomeArquivoImagem(imagem.name),
       dados: base64ParaBytes(imagem.data_base64),
     })),
+    { nome: 'manifest.json', dados: new TextEncoder().encode(conteudoManifestEspWebTools(pacote)) },
     { nome: 'gravacao.txt', dados: new TextEncoder().encode(conteudoGravacaoTxt(pacote)) },
   ]
 

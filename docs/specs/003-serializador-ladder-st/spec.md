@@ -380,6 +380,14 @@ data, decisão e justificativa; não apague o enunciado.
 > compilada antes do download.») e só então dispara o download; se já houver
 > sucesso de compilação para a mesma fonte, reutiliza o pacote sem compilar de
 > novo. O ZIP é montado no cliente (`lib/download.ts`), sem endpoint novo.
+>
+> **Revisão aditiva da Q-1 (2026-09-28), manifesto ESP Web Tools.** O zip passa
+> a incluir também `manifest.json` no formato do [ESP Web Tools](https://esphome.github.io/esp-web-tools/)
+> (instalador web usado pelo ESPHome — não é arquivo YAML de configuração).
+> `builds[0].parts` aponta para os três `.bin` do zip com `offset` decimal,
+> vindos do pacote de compilação. Não inclui `boot_app0.bin` (o build IDF do
+> LadderFlow não produz essa imagem). `gravacao.txt` e o README explicam que a
+> pasta descompactada precisa ser publicada junta para o instalador web.
 
 ### Q-2 — Serializar um diagrama com problema de severidade "erro"
 - **Enunciado:** quando o diagrama de origem tem ao menos um problema de

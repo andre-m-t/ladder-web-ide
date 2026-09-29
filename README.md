@@ -182,7 +182,7 @@ Para compilar ou baixar firmware, use o **stack completo** com Docker ou aponte 
 
 **Gravação do firmware fora da IDE**
 
-O menu **Baixar → Firmware ESP32 (.zip)** entrega as mesmas três imagens usadas na gravação pela Web Serial, com um arquivo `gravacao.txt` (endereços e exemplo de comando `esptool`). Isso permite gravar com ferramentas como `esptool`, Flash Download Tool ou fluxos web de terceiros. **Gravar esse pacote em um ESP32 físico ainda não foi validado neste projeto** — ver [`docs/limitacoes-declaradas.md`](docs/limitacoes-declaradas.md).
+O menu **Baixar → Firmware ESP32 (.zip)** entrega as mesmas três imagens usadas na gravação pela Web Serial, um `manifest.json` no formato do [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (instalador web usado pelo ESPHome) e um `gravacao.txt` (endereços e exemplo de comando `esptool`). Para o instalador web, descompacte o zip e publique a pasta inteira — os caminhos do manifesto são relativos a ele. Também é possível gravar com `esptool` ou a Flash Download Tool da Espressif. **Gravar esse pacote em um ESP32 físico ainda não foi validado neste projeto** — ver [`docs/limitacoes-declaradas.md`](docs/limitacoes-declaradas.md).
 
 ### Testes do back-end
 

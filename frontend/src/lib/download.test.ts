@@ -5,6 +5,7 @@ import type { Projeto } from '../projeto/projeto'
 import {
   baixarTexto,
   conteudoGravacaoTxt,
+  conteudoManifestEspWebTools,
   conteudoProjetoJson,
   montarZipFirmware,
   nomeDeArquivo,
@@ -105,8 +106,25 @@ describe('conteudoGravacaoTxt', () => {
   })
 })
 
+describe('conteudoManifestEspWebTools', () => {
+  it('lista parts com offsets decimais e chipFamily ESP32', () => {
+    const manifest = JSON.parse(conteudoManifestEspWebTools(PACOTE_ZIP)) as {
+      name: string
+      builds: { chipFamily: string; parts: { path: string; offset: number }[] }[]
+    }
+    expect(manifest.name).toBe('LadderFlow')
+    expect(manifest.builds).toHaveLength(1)
+    expect(manifest.builds[0].chipFamily).toBe('ESP32')
+    expect(manifest.builds[0].parts).toEqual([
+      { path: 'bootloader.bin', offset: 4096 },
+      { path: 'partition-table.bin', offset: 32768 },
+      { path: 'ladderflow_plc.bin', offset: 65536 },
+    ])
+  })
+})
+
 describe('montarZipFirmware', () => {
-  it('produz um ZIP válido com as três imagens e gravacao.txt', async () => {
+  it('produz um ZIP válido com as três imagens, manifest.json e gravacao.txt', async () => {
     const zip = montarZipFirmware(PACOTE_ZIP)
     expect(zip.type).toBe('application/zip')
 
@@ -114,7 +132,13 @@ describe('montarZipFirmware', () => {
     expect(bytes[0]).toBe(0x50)
     expect(bytes[1]).toBe(0x4b)
 
-    const nomes = ['bootloader.bin', 'partition-table.bin', 'ladderflow_plc.bin', 'gravacao.txt']
+    const nomes = [
+      'bootloader.bin',
+      'partition-table.bin',
+      'ladderflow_plc.bin',
+      'manifest.json',
+      'gravacao.txt',
+    ]
     for (const nome of nomes) {
       const marcador = new TextEncoder().encode(nome)
       let encontrado = false

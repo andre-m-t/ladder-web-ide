@@ -13,7 +13,7 @@ O que atualizar, ao fim de cada rodada:
 
 Nunca deixe este arquivo afirmar algo que já se sabe falso: um estado desatualizado é pior que nenhum, porque é lido como verdade.
 
-**Última atualização:** 2026-09-28 (botão Parar NF no portão) · **Branch ativa:** `main`
+**Última atualização:** 2026-09-28 (manifest.json ESP Web Tools no zip de firmware) · **Branch ativa:** `main`
 
 ## Legenda
 
@@ -748,4 +748,5 @@ Não há ESP32 físico disponível. Nada abaixo é executável até haver um; n�
 | 2026-09-28 | Spec 006 — TON, TOF, CTD | `ElementoBloco` + `blocos.ts`, diagrama persistência v2; simulador MATIEC (20 ms/ciclo); serializador/dourados `ton`/`tof`/`ctd`; relógio `plc_hal_stub_advance_us` no host; diferencial sim×host; `SimboloBloco`, paleta, CV/ET ao vivo; docs 006 + revisões aditivas; manifesto INPI; vitest 921+/923, pytest `not slow` 94 passed, `--verificar` ok |
 | 2026-09-28 | README + firmware .zip (orientador) | `README.md`: clone `andre-m-t/ladder-web-ide`, passo a passo Linux/Windows (Docker e só front-end), comportamento sem backend; menu Baixar → Firmware ESP32 (.zip) com compilação sob demanda e reutilização de pacote; `lib/download.ts` (ZIP STORE + `gravacao.txt`); revisão aditiva Q-1 spec 003 |
 | 2026-09-28 | Botão Parar NF no portão (orientador) | Planta: `%IX0.2` verdadeiro em repouso e falso ao pressionar; cena `PARAR (NF)`; fixture `PORTAO` com contato NA em `parar`; dourados e `portao.toml` atualizados; revisão aditiva spec 005 |
+| 2026-09-28 | manifest.json no zip de firmware | `conteudoManifestEspWebTools` + entrada no ZIP; `gravacao.txt`/README com ESP Web Tools; teste vitest; revisão aditiva Q-1 spec 003 |
 | 2026-09-24 | Pacote INPI pronto para o hash | Caminho curto, motivado pela preparação do formulário do NIT. `--verificar` passou no commit `2e3f66c` com a árvore limpa. Três achados: (1) o script gerava **SHA-256** e o Manual do RPC recomenda **SHA-512** — o formulário preenchido pelo mesmo orientador em depósito anterior (`Formulario_INPI_CLP_Pedro-Robson.pdf`) declara `SHA512` com resumo de 128 caracteres, confirmado por contagem; script passou a gerar `.zip.sha512` e a imprimir o algoritmo a transcrever; (2) `frontend/src/ladder/fixtures.ts` vinha no pacote por não casar com `--exclude "*.test.ts"`, embora só testes e specs e2e o importem — excluído, pacote de 97 → **96 arquivos**; (3) `REQUIRED_FILES` tem 49 arquivos, não os 35 registrados aqui desde 2026-09-21. Nome `THIRD_PARTY.md` mantido por decisão do autor. `--verificar` reexecutado: exit 0, auditoria ok, nenhum arquivo de teste no pacote |
