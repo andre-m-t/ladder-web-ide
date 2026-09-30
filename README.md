@@ -182,7 +182,7 @@ Para compilar ou baixar firmware, use o **stack completo** com Docker ou aponte 
 
 **Gravação do firmware fora da IDE**
 
-O menu **Baixar → Firmware ESP32 (.zip)** entrega as mesmas três imagens usadas na gravação pela Web Serial, um `manifest.json` no formato do [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (instalador web usado pelo ESPHome) e um `gravacao.txt` (endereços e exemplo de comando `esptool`). Para o instalador web, descompacte o zip e publique a pasta inteira — os caminhos do manifesto são relativos a ele. Também é possível gravar com `esptool` ou a Flash Download Tool da Espressif. **Gravar esse pacote em um ESP32 físico ainda não foi validado neste projeto** — ver [`docs/limitacoes-declaradas.md`](docs/limitacoes-declaradas.md).
+O menu **Baixar → Firmware ESP32 (.zip)** entrega as mesmas três imagens usadas na gravação pela Web Serial, um `manifest.json` no formato do [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (instalador web usado pelo ESPHome) e um `gravacao.txt` (endereços e exemplo de comando `esptool`). Para o instalador web, descompacte o zip e publique a pasta inteira — os caminhos do manifesto são relativos a ele. Também é possível gravar com `esptool` ou a Flash Download Tool da Espressif. **Gravar esse pacote em um ESP32 físico ainda não foi validado neste projeto.** A lista de limitações conhecidas está em `docs/limitacoes-declaradas.md`, no repositório do projeto.
 
 ### Testes do back-end
 
@@ -207,8 +207,8 @@ docker compose run --rm backend pytest -v -m "not slow"    # sem testes que gera
 └── .env.example
 ```
 
-O desenvolvimento segue o método de *Spec-Driven Development* descrito em
-[`docs/README.md`](docs/README.md).
+O desenvolvimento segue o método de *Spec-Driven Development*, descrito em
+`docs/README.md` no repositório do projeto.
 
 ## Escopo e limitações
 
@@ -220,7 +220,7 @@ O desenvolvimento segue o método de *Spec-Driven Development* descrito em
 A lista completa e detalhada de limitações conhecidas — cobertura parcial da
 norma, comportamentos deliberados do editor e do simulador, e o que depende
 exclusivamente de hardware ainda não disponível — está em
-[`docs/limitacoes-declaradas.md`](docs/limitacoes-declaradas.md).
+`docs/limitacoes-declaradas.md`, no repositório do projeto.
 
 ## Licença e propriedade intelectual
 
