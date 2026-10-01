@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Cabecalhos do MATIEC (LGPL-2.1+), vindos da imagem do container. */
+/* Cabecalhos do MATIEC (LGPL; ver THIRD_PARTY.md), vindos da imagem do container. */
 #include "iec_std_lib.h"
 
 #include "plc_hal.h"

@@ -71,11 +71,12 @@ do mesmo fonte.
   gera obra derivada. Nenhuma consequência sobre o código autoral do
   LadderFlow nem sobre a plataforma.
 - **Cabeçalhos do MATIEC compilados dentro do firmware** — há linkagem real. O
-  trabalho combinado é o `.bin` que o **usuário final** produz a partir do
-  próprio programa Ladder. A consequência recai sobre a distribuição desse
-  binário, não sobre a plataforma LadderFlow nem sobre o pacote depositado no
-  INPI. Os cabeçalhos não são copiados para o repositório nem para o pacote de
-  depósito.
+  trabalho combinado é o `.bin` gerado pelo serviço de compilação a partir do
+  programa Ladder do usuário e entregue a ele por download ou gravação. A
+  distribuição desse binário está sujeita às condições da LGPL-3.0 (aviso,
+  texto da licença e meios de religação), a serem observadas por quem operar o
+  serviço. Isso não afeta o código autoral nem o pacote depositado no INPI. Os
+  cabeçalhos não são copiados para o repositório nem para o pacote de depósito.
 
 O firmware gerado é um trabalho combinado: o código autoral do LadderFlow (o
 projeto ESP-IDF em `backend/firmware/`), o C produzido pelo MATIEC a partir do
